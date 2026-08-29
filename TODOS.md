@@ -216,3 +216,65 @@ hata cikardi:
   Faz D'den beri `/panel/gelistirici/vitrin`); Turkce karakterler
   Fraunces'ta dogru geliyor, saat secici durumlari ve form hata durumu calisiyor
 - Butun metin/zemin ciftleri WCAG AA uzerinde, degerler belgede tablo halinde
+
+---
+
+## Faz D — kimlik ve kiraci (KISMI: cekirdek bitti, arayuz kalmadi)
+
+**Bu fazda kapanan:** sema (kullanici, personel), kiraci izolasyon katmani,
+IDOR guardrail'inin eslint kuraliyla geri getirilmesi, CSRF origin kontrolu,
+kimlik katmani ve proxy, isletme kayit akisi, vitrinin panel altina tasinmasi.
+
+**HENUZ KAPANMADI:** giris/kayit ekranlari ve /panel iskeleti. Bu yuzden faz
+kapali degil.
+
+### Kararlar
+
+- **IDOR guardrail'i geri geldi.** Drizzle'a gecerken kaybettigimiz warden
+  kapisinin yerine eslint `no-restricted-imports`: `src/app` altindan
+  `@/lib/db` import etmek yasak. Kapsam route handler'lardan GENIS tutuldu -
+  sunucu bilesenleri de sorgu yapabiliyor ve risk birebir ayni. Kural kasitli
+  bir ihlalle dogrulandi.
+
+- **Kimlik Supabase'den, yetki bizden.** `auth()` JWT'den yalnizca `sub`
+  aliyor, rol ve `isletmeId`'yi kendi `kullanici` tablomuzdan okuyor. Custom
+  Access Token Hook bilerek kullanilmadi: claim'e yazmak istek basina bir
+  sorgu tasarruf ettirirdi ama rol degisince bayat claim sorunu ve ikinci bir
+  migration yuzeyi getirirdi.
+
+- **`getClaims()`, `getSession()` degil.** getSession cookie'den geleni
+  DOGRULAMADAN donduruyor; Supabase kendi dokumaninda ona guvenilmemesi
+  gerektigini yaziyor. getClaims imzayi dogruluyor ve asimetrik anahtarlarda
+  bunu yerelde WebCrypto ile yapiyor - JWKS onbellekli, istek basina ag turu yok.
+
+- **Next 16'da `middleware.ts` DEGIL `proxy.ts`.** Export adi da `proxy`.
+  Egitim verisinden yazilsa yanlis olurdu; `AGENTS.md` uyarisi uzerine paketin
+  kendi dokumani okundu (`node_modules/next/dist/docs`).
+
+- **Proxy YETKILENDIRME YAPMIYOR.** OpenNext Node middleware'i desteklemedigi
+  icin edge'de kosuyor, yani veritabani yok. Yalnizca token yeniliyor (sunucu
+  bilesenleri cookie yazamiyor) ve oturum cookie'si hic olmayani ucuzca
+  kesiyor. Cookie'nin varligi kimlik kaniti DEGIL; gercek yetki her zaman
+  sunucuda `auth()` ile.
+
+- **Turkce slug icin harf tablosu, NFD degil.** Noktasiz i ve noktali I tek
+  kod noktasi, ayrilabilir aksanlari yok - NFD onlari cozemiyor. NFD adimi
+  yine de duruyor, Turkce olmayan aksanli adlar icin.
+
+- **`x-forwarded-proto` okunuyor.** TLS Cloudflare'de sonlaniyor, uygulamaya
+  istek duz http geliyor ama tarayicinin gonderdigi Origin https. Yalnizca
+  `req.url`'e guvenilseydi her mesru mutasyon 403 yerdi.
+
+### Bilinen durum
+
+- **`/panel/gelistirici/vitrin` su an tarayicidan acilamiyor.** Yeni yol
+  proxy'nin KORUMALI listesine dustu ve `/giris` henuz yok, yani oturumsuz
+  ziyaret var olmayan bir sayfaya yonleniyor. Giris ekrani gelince cozulecek.
+- Supabase'de hesabi olup bizde `kullanici` kaydi olmayan bir kisi (kayit
+  yarida kalirsa) oturum acmis sayilmiyor. Retry akisi henuz yazilmadi.
+
+### Dogrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` - **32 test gecti** (4 dosya, gercek Postgres)
+- Guardrail kasitli ihlalle dogrulandi
