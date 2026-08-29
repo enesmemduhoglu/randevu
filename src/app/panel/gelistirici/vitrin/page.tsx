@@ -18,8 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Bilesen vitrini: Faz C'nin gozle dogrulanabilir ciktisi. Token'lar, tipografi
 // ve bilesen durumlari tek sayfada duruyor ki bir sey bozuldugunda burada
-// gorulsun. Uretimde kimseye gosterilmeyecek; Faz D'de panel gelince
-// /panel/gelistirici altina tasinacak.
+// gorulsun. Halka acik bir sayfa degil, gelistirici araci: Faz D'de panel
+// gelince /vitrin'den /panel/gelistirici/vitrin altina tasindi.
 
 function Bolum({
   baslik,

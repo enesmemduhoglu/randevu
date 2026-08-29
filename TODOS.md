@@ -203,14 +203,16 @@ hata cikardi:
 
 ### Bilerek kapsam disi
 
-- Vitrin `/vitrin` altinda acikta duruyor. Faz D'de panel gelince
-  `/panel/gelistirici` altina tasinacak.
+- ~~Vitrin `/vitrin` altinda acikta duruyor.~~ **Faz D'de kapandi:** sayfa
+  `/panel/gelistirici/vitrin` altina tasindi. Vitrin bir gelistirici araci,
+  halka acik bir sayfa degil.
 - Randevu akisinin kendisi (adim adim ekranlar) Faz F-G'de.
 
 ### Dogrulama
 
 - `npm run tip`, `npm run lint` temiz; `npm test` 2 test gecti
 - `npm run cf:kur` basarili; bundle **1054 KiB gzip** (3 MiB sinirinin altinda)
-- **Elle:** `/vitrin` tarayicida acik ve koyu temada goruldu; Turkce karakterler
+- **Elle:** vitrin tarayicida acik ve koyu temada goruldu (o sirada `/vitrin`,
+  Faz D'den beri `/panel/gelistirici/vitrin`); Turkce karakterler
   Fraunces'ta dogru geliyor, saat secici durumlari ve form hata durumu calisiyor
 - Butun metin/zemin ciftleri WCAG AA uzerinde, degerler belgede tablo halinde
