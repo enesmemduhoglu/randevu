@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "randevu",
+  "main": ".open-next/worker.js",
+  // workerd 1.20260828.1 ile hizali; ileri bir tarih verilirse calistirici reddeder.
+  "compatibility_date": "2026-08-28",
+  // nodejs_compat: Prisma ve pg node: API'lerine ihtiyac duyuyor.
+  // global_fetch_strictly_public: OpenNext'in gerektirdigi bayrak.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Kaynak: Supabase Supavisor SESSION MODE (port 5432). Direct baglanti
+  // (db.<ref>.supabase.co) yalnizca IPv6 cozdugu icin kullanilamiyor; 6543
+  // transaction mode ise Prisma'nin named prepared statement'larini kiriyor.
+  // Sorgu onbellegi KAPALI: musaitlik sorgusu yazma kararini besliyor, bayat
+  // veri dolu bir slotu bos gosterirdi.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "4b107f2d175a45e9b7a783d678be55c5",
+      // Yerelde binding'i taklit eden Postgres. Gizli bir sey degil: yalnizca
+      // gelistirme konteynerine bakiyor. Bu deger olmadan `next build` ve
+      // `wrangler dev` binding'i cozemeyip patliyor.
+      "localConnectionString": "postgresql://postgres:postgres@localhost:5455/randevu_dev"
+    }
+  ]
+}

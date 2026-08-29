@@ -40,13 +40,19 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/src/generated/prisma
 
 # ornek env dosyasi depoda dursun
 !.env.example
 
-# Prisma'nin urettigi agent skill'leri: gercek icerik .agents/skills altinda
-# durur ve depoda izlenir. .claude/skills ve .windsurf/skills ise oraya bakan
-# MUTLAK YOLLU junction'lar - commit edilirse baska makinede kirilirlar.
-/.claude/skills/
-/.windsurf/
+
+# OpenNext / Cloudflare
+/.open-next/
+.dev.vars
+.wrangler/
+
+# ornek dev.vars depoda dursun
+!.dev.vars.example
+
+# wrangler types uretiyor (15k satir, %55'i PR gurultusuydu).
+# postinstall her kurulumda yeniliyor, depoda durmasi gereksiz.
+cloudflare-env.d.ts
