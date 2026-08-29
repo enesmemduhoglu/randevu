@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 
 import { veritabaniniOlustur } from "./scripts/db-hazirla";
 
@@ -16,11 +16,15 @@ export default async function setup(): Promise<void> {
 
   await veritabaniniOlustur(testUrl);
 
-  // migrate deploy, migrate dev'in aksine sema uretmez - yalnizca var olan
+  // execSync (execFileSync degil): Windows'ta npx bir .cmd oldugu icin kabuk
+  // sart, ama execFileSync'e shell:true vermek DEP0190 uyarisi uretiyor -
+  // argumanlar kacirilmadan birlestiriliyor. execSync zaten tek bir komut
+  // dizesi bekliyor ve buradaki dize sabit.
+  //
+  // migrate deploy, migrate dev'in aksine sema uretmez; yalnizca var olan
   // migration'lari uygular. Testin sema uretmesi istenmez.
-  execFileSync("npx", ["prisma", "migrate", "deploy"], {
+  execSync("npx prisma migrate deploy", {
     env: { ...process.env, DATABASE_URL: testUrl },
     stdio: "inherit",
-    shell: true, // Windows'ta npx bir .cmd
   });
 }

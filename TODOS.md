@@ -50,7 +50,20 @@ Prisma 7.10.0 (CLI + client + adapter-pg), gercek Postgres'e kosan Vitest duzeni
 
 ### Elle yapilmasi gerekenler
 
-- [ ] **Docker Desktop acilmali.** Testler ve migration gercek Postgres istiyor;
-      `warden` SessionStart hook'u `randevu-test-pg` konteynerini (port 5455)
-      kendisi ayaga kaldiriyor ama daemon kapaliyken hicbir sey yapamiyor.
-- [ ] Docker acildiktan sonra: `npm run db:hazirla && npm run db:goc -- --name ilk`
+- [x] Docker Desktop acildi, `randevu-test-pg` konteyneri (port 5455) ayakta.
+- [x] `randevu_dev` ve `randevu_test` olusturuldu, ilk migration uygulandi
+      (`20260829125614_ilk`).
+
+### Dogrulama
+
+- `npm run tip` temiz
+- `npm run lint` temiz
+- `npm run build` basarili
+- `npm test` - 2 test gecti (gercek Postgres'e karsi)
+
+### Bilinen gurultu
+
+- `npm run db:hazirla` calisirken Node bir modul-tipi uyarisi basiyor: paket
+  `type: module` degil ama betik ESM. Zararsiz. Duzeltmenin iki yolu da
+  (`type: module` eklemek ya da `.mts`'e gecip vitest import'unu bozmak)
+  uyarinin maliyetinden buyuk; bilincli olarak birakildi.
