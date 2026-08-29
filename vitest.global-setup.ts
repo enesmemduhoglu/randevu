@@ -1,5 +1,8 @@
 import "dotenv/config";
-import { execSync } from "node:child_process";
+
+import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
+import postgres from "postgres";
 
 import { veritabaniniOlustur } from "./scripts/db-hazirla";
 
@@ -16,15 +19,12 @@ export default async function setup(): Promise<void> {
 
   await veritabaniniOlustur(testUrl);
 
-  // execSync (execFileSync degil): Windows'ta npx bir .cmd oldugu icin kabuk
-  // sart, ama execFileSync'e shell:true vermek DEP0190 uyarisi uretiyor -
-  // argumanlar kacirilmadan birlestiriliyor. execSync zaten tek bir komut
-  // dizesi bekliyor ve buradaki dize sabit.
-  //
-  // migrate deploy, migrate dev'in aksine sema uretmez; yalnizca var olan
-  // migration'lari uygular. Testin sema uretmesi istenmez.
-  execSync("npx prisma migrate deploy", {
-    env: { ...process.env, DATABASE_URL: testUrl },
-    stdio: "inherit",
-  });
+  // Migration programatik kosuyor, alt surec olarak degil: Windows'ta npx
+  // kabuk gerektiriyordu ve her kosuma ~1sn ekliyordu.
+  const sql = postgres(testUrl, { max: 1 });
+  try {
+    await migrate(drizzle(sql), { migrationsFolder: "./drizzle" });
+  } finally {
+    await sql.end();
+  }
 }
