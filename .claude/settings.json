@@ -1,0 +1,7 @@
+{
+  "env": {
+    "WARDEN_TEST_PG_NAME": "randevu-test-pg",
+    "WARDEN_TEST_PG_PORT": "5455",
+    "WARDEN_TEST_PG_DB": "randevu_test"
+  }
+}
