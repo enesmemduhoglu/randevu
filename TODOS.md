@@ -153,3 +153,64 @@ kurallari (dogrudan `resend.emails.send`, `checkOrigin`) etkilenmedi.
 - [ ] Deploy karari ve custom domain baglantisi.
 - [ ] Supabase access token kullanici tarafindan silindi - yeni bir islem
       gerekirse yenisi lazim.
+
+---
+
+## Faz C — tasarim dili ve bilesen katmani
+
+**Kapandi:** marka sesi ve Turkce metin dili, uc katmanli token sistemi,
+shadcn/ui bilesen seti, wordmark ve favicon, bilesen vitrini, tasarim sistemi
+belgesi.
+
+### Kararlar
+
+- **Semantic token'lar Ingilizce kaldi.** Primitive ve component katmani Turkce
+  (`--renk-terracotta-500`, `--saat-secili-zemin`) ama `--background`,
+  `--primary`, `--border` shadcn/ui'nin sozlesmesi. Turkcelestirmek, depoya
+  eklenen HER bileseni elle duzenlemek demekti - her yeni bilesende tekrar eden
+  bir maliyet. Ucuncu taraf arayuzu oldugu gibi birakildi.
+
+- **OKLCH secildi.** Acik ve koyu tema arasinda ton kaymasi olmadan parlaklik
+  ayarlanabiliyor: `terracotta-600` koyu zeminde okunmuyordu, tek yapilan `L`
+  degerini bir basamak acmak oldu.
+
+- **Kirmizi, terracotta'dan uzak tutuldu** (ton 20'ye karsi 43). Bu uründe
+  "Iptal et" ile birincil eylem cogu zaman yan yana duruyor.
+
+- **Randevu durumlarinda iptal kirmizi degil.** Iptal bir hata degil, normal bir
+  sonuc; kirmizi yalnizca "gelmedi" icin.
+
+- **Terminoloji sozlugu baglayici** (`docs/marka.md`). "Slot", "rezervasyon",
+  "kullanici" arayuzden cikti - hedef kitle yazilimci degil.
+
+- **Takvim bileseni bilerek eklenmedi.** Randevu akisinin gun secici ihtiyaci
+  Faz F'de netlesecek; hazir takvimi simdiden secmek erken karar olurdu.
+
+### Vitrinin yakaladigi iki hata
+
+Vitrin sayfasi "gorsel dogrulama" diye planlanmisti ve ilk bakista iki gercek
+hata cikardi:
+
+1. **Saat secici renksiz cikiyordu.** `bg-[--token]` Tailwind v4'te sinif
+   uretmiyor ve **hata da vermiyor**. Token `@theme inline` blokuna verilmeli.
+   Durum rozetleri calisiyordu cunku onlar zaten oradaydi. Tuzak
+   `docs/tasarim-sistemi.md`'ye yazildi.
+
+2. **Dort kontrast cifti AA esiginin altindaydi.** En onemlisi
+   `muted-foreground` 3.92:1 idi - butun yardim metni ve aciklamalar onu
+   kullaniyor. Olculdu (oklch -> sRGB -> bagil parlaklik), tonlar
+   koyulastirildi. Simdi hepsi 4.5:1 uzerinde.
+
+### Bilerek kapsam disi
+
+- Vitrin `/vitrin` altinda acikta duruyor. Faz D'de panel gelince
+  `/panel/gelistirici` altina tasinacak.
+- Randevu akisinin kendisi (adim adim ekranlar) Faz F-G'de.
+
+### Dogrulama
+
+- `npm run tip`, `npm run lint` temiz; `npm test` 2 test gecti
+- `npm run cf:kur` basarili; bundle **1054 KiB gzip** (3 MiB sinirinin altinda)
+- **Elle:** `/vitrin` tarayicida acik ve koyu temada goruldu; Turkce karakterler
+  Fraunces'ta dogru geliyor, saat secici durumlari ve form hata durumu calisiyor
+- Butun metin/zemin ciftleri WCAG AA uzerinde, degerler belgede tablo halinde
