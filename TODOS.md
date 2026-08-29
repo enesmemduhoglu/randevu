@@ -278,3 +278,16 @@ kapali degil.
 - `npm run tip`, `npm run lint` temiz
 - `npm test` - **32 test gecti** (4 dosya, gercek Postgres)
 - Guardrail kasitli ihlalle dogrulandi
+
+### Elle yapilmasi gerekenler (Faz D)
+
+- [ ] **PR #3 merge edilince prod'a migration uygula:**
+      `npm run db:uygula:prod -- --onayla`
+      Goc yalnizca EKLEME (rol enum'i + kullanici + personel tablolari), mevcut
+      isletme tablosuna dokunmuyor, veri kaybi yok. Geri alma: iki `drop table`
+      ve bir `drop type`.
+- [ ] **Supabase panelinde Confirm email KAPALI tutulmali.** Yerlesik SMTP
+      saatte 2 mail ile sinirli; acik birakilirsa kayit akisi ilk gun tikanir.
+      Domain + Resend custom SMTP baglanana kadar (Faz I) boyle kalacak.
+- [ ] Giris/kayit ekranlari ve /panel iskeleti - Faz D'nin kalan yarisi.
+      Bunlar gelene kadar /panel/gelistirici/vitrin tarayicidan acilamiyor.
