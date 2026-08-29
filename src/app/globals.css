@@ -59,6 +59,7 @@
   --renk-amber-100: oklch(0.955 0.045 85);
   --renk-amber-500: oklch(0.75 0.14 78);
   --renk-amber-700: oklch(0.56 0.115 72);
+  --renk-amber-800: oklch(0.5 0.105 70);
 
   /* Kirmizi — yikici eylem. Terracotta'dan bilerek UZAK tutuldu: ton 20'ye
      karsi 43 ve doygunluk belirgin daha yuksek. Iptal et dugmesi birincil
@@ -91,7 +92,10 @@
   --secondary: var(--renk-tas-100);
   --secondary-foreground: var(--renk-tas-800);
   --muted: var(--renk-tas-100);
-  --muted-foreground: var(--renk-tas-500);
+  /* tas-500 zeminle 3.92:1 veriyordu, AA esigi 4.5. Yardim metinlerinin ve
+     aciklamalarin tamami bu token uzerinden gidiyor, yani en cok okunan
+     ikincil metin buydu. Olculdu, bir basamak koyulastirildi: 6.24:1. */
+  --muted-foreground: var(--renk-tas-600);
 
   /* accent = hover ve vurgulama zemini. Bilerek NOTR: marka rengi degil,
      yoksa her hover marka vurgusuna donerdi. */
@@ -123,13 +127,16 @@
   /* Randevu durumlari — takvimde ve listede tek kaynak.
      Iptal KIRMIZI DEGIL: iptal bir hata degil, normal bir sonuc. Kirmizi
      yalnizca musterinin gelmedigi durum icin. */
-  --durum-bekliyor: var(--renk-amber-700);
+  /* Tonlar olculerek secildi, hepsi zeminine karsi en az 4.5:1.
+     Tamamlandi ve iptal ikisi de notr; koyuluk farkiyla ayriliyorlar
+     (tamamlandi kesinlesmis bir sonuc, iptal daha soluk). */
+  --durum-bekliyor: var(--renk-amber-800);
   --durum-bekliyor-zemin: var(--renk-amber-100);
   --durum-onayli: var(--renk-teal-700);
   --durum-onayli-zemin: var(--renk-teal-100);
-  --durum-tamamlandi: var(--renk-tas-600);
+  --durum-tamamlandi: var(--renk-tas-700);
   --durum-tamamlandi-zemin: var(--renk-tas-200);
-  --durum-iptal: var(--renk-tas-500);
+  --durum-iptal: var(--renk-tas-600);
   --durum-iptal-zemin: var(--renk-tas-100);
   --durum-gelmedi: var(--renk-kirmizi-700);
   --durum-gelmedi-zemin: var(--renk-kirmizi-100);
@@ -207,7 +214,9 @@
 .dark {
   --saat-bos-kenar: var(--renk-tas-700);
   --saat-dolu-zemin: var(--renk-tas-800);
-  --saat-dolu-metin: var(--renk-tas-500);
+  /* Dolu saat devre disi ama OKUNABILIR olmali: musteri hangi saatin
+     kapali oldugunu gorecek. tas-500 3.40:1 veriyordu, tas-400 5.69:1. */
+  --saat-dolu-metin: var(--renk-tas-400);
 }
 
 @theme inline {
@@ -259,6 +268,18 @@
   --color-durum-iptal-zemin: var(--durum-iptal-zemin);
   --color-durum-gelmedi: var(--durum-gelmedi);
   --color-durum-gelmedi-zemin: var(--durum-gelmedi-zemin);
+
+  /* Saat secici -> bg-saat-secili-zemin, min-h-saat gibi siniflar.
+     Token'i @theme'e vermeden bg-[--token] yazmak Tailwind v4'te sinif
+     uretmiyor; bu vitrinde sessizce renksiz dugmeler olarak ortaya cikti. */
+  --color-saat-bos-zemin: var(--saat-bos-zemin);
+  --color-saat-bos-metin: var(--saat-bos-metin);
+  --color-saat-bos-kenar: var(--saat-bos-kenar);
+  --color-saat-secili-zemin: var(--saat-secili-zemin);
+  --color-saat-secili-metin: var(--saat-secili-metin);
+  --color-saat-dolu-zemin: var(--saat-dolu-zemin);
+  --color-saat-dolu-metin: var(--saat-dolu-metin);
+  --spacing-saat: var(--saat-min-yukseklik);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
