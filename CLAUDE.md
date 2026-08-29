@@ -3,7 +3,7 @@
 # Randevu — depo sozlesmesi
 
 Kucuk isletmeler icin cok kiracili randevu SaaS'i. Next.js 16 App Router,
-Prisma 7 + Postgres, Cloudflare Workers uzerinde yayinlanir.
+Drizzle + Postgres (Supabase), Cloudflare Workers uzerinde yayinlanir.
 
 Ayrintili plan: `docs/plan.md`. Karar gunlugu: `TODOS.md` - bir tasarim kararini
 sorgulamadan once oraya bak, is bitirdiginde oraya yaz.
@@ -11,33 +11,37 @@ sorgulamadan once oraya bak, is bitirdiginde oraya yaz.
 ## Dil
 
 Kod yorumlari, commit mesajlari, PR aciklamalari ve UI metinleri **Turkce**.
-Model ve alan adlari da Turkce (`Isletme`, `saatDilimi`, `olusturmaTarihi`).
+Tablo ve alan adlari da Turkce (`isletme`, `saat_dilimi`, `olusturma_tarihi`).
 Yorumlar "ne yaptigini" degil **"neden boyle yaptigini"** anlatir.
 
 ## Degismezler
 
-Ilk dordunu `warden` kapisi (PreToolUse hook) deterministik olarak durdurur ya da
-uyarir; gerisi bu belgeye bagli.
-
 **1. Route handler'da ham `db.*` yok.** Kiraciya bagli her sorgu
 `src/lib/scoped-db.ts` uzerinden gider; o her sorguya oturumun `isletmeId`
-filtresini enjekte eder. Yeni bir sorgu tipi gerekiyorsa route'a ham Prisma
+filtresini enjekte eder. Yeni bir sorgu tipi gerekiyorsa route'a ham Drizzle
 yazma, `scoped-db.ts`'e metot ekle. Muaf dosyalar: `src/lib/db.ts`,
 `src/lib/scoped-db.ts`, `src/lib/auth.ts`.
+
+> **Dikkat: bu kural artik otomatik zorlanmiyor.** `warden` degismez kapisi
+> Prisma'nin `db.model.method(` bicimini ariyor; Drizzle'in
+> `db.select().from()` bicimini yakalamiyor. Faz D'de `scoped-db.ts` gelince
+> ESLint `no-restricted-imports` kuraliyla deterministik hale getirilecek:
+> `src/app/**/route.ts` icinden `@/lib/db` import etmek yasak olacak.
+> O kural yazilana kadar bu degismez **incelemeye bagli**.
 
 **2. Mutasyon route'unda `checkOrigin`.** POST/PUT/PATCH/DELETE'te CSRF ikinci
 katmani. `SameSite=Lax` tek basina yetmez: `multipart/form-data` kabul eden
 yollar CORS'un "basit istek" sinifina girer. Paylasilan sirla gelen makine
-yollari (Cron) muaftir.
+yollari (Cron) muaftir. *(warden kapisi uyarir.)*
 
 **3. Karar degistiren yollarda kosullu UPDATE.** Once-oku-sonra-yaz yapma;
-beklenen durumu `where`'e koy ve `count === 0` ise 409 don. Ayni anda gelen
-ikinci karar boylece kaybeder.
+beklenen durumu `where`'e koy ve etkilenen satir sayisi 0 ise 409 don. Ayni
+anda gelen ikinci karar boylece kaybeder.
 
 **4. E-posta yalnizca `src/lib/email.ts > gonder()`, SMS yalnizca
 `src/lib/sms.ts > gonder()`.** `resend.emails.send`'i dogrudan cagirma: SDK API
 hatasinda throw etmez, `{ data, error }` doner ve donusu okumayan cagri
-reddedilen gonderimi iz birakmadan yutar.
+reddedilen gonderimi iz birakmadan yutar. *(warden kapisi bloklar.)*
 
 **5. Sirlar log'a ve hata metinlerine girmez.** Token, anahtar ve baglanti
 dizesi hicbir `console.*` ya da kullaniciya donen hata govdesinde tasinmaz.
@@ -55,30 +59,40 @@ kullaniciya erken geri bildirim icindir, **garanti degildir**; kisit ihlali
 yakalanip 409'a cevrilir.
 
 **9. `auth.users`'a foreign key yok.** Supabase Auth yalnizca kimlik saglar;
-`Kullanici.authUserId` duz bir uuid string olarak durur. Boylece Prisma tum
-semaya tek basina sahip olur ve testler kendi JWT'lerini imzalayabilir.
+`kullanici.auth_user_id` duz bir uuid string olarak durur. Boylece migration'lar
+tum semaya tek basina sahip olur ve testler kendi JWT'lerini imzalayabilir.
 
 **10. Renk degeri kodda sabit yazilmaz.** Bilesenler semantic token kullanir,
 e-posta sablonlari `src/lib/marka.ts`'ten okur.
 
 **11. Cookie'lerin `Domain` niteligi koke genisletilmez.** Oturum cookie'si
-yalnizca `randevu.enesmemduhoglu.tech` host'una bagli kalir; `.enesmemduhoglu.tech`
-yazmak oturumu kokteki baska projeyle paylasmak demektir.
+yalnizca `randevu.enesmemduhoglu.tech` host'una bagli kalir;
+`.enesmemduhoglu.tech` yazmak oturumu kokteki baska projeyle paylasmak demektir.
 
 ## Komutlar
 
 ```bash
-npm run db:hazirla   # .env'deki veritabanlarini olusturur (Docker Postgres ayakta olmali)
-npm run db:goc       # prisma migrate dev - sema degisiminde
-npm run db:uret      # prisma generate
-npm run tip          # tsc --noEmit
-npm test             # vitest run - gercek Postgres'e kosar
-npm run build        # next build
+npm run db:hazirla       # .env'deki veritabanlarini olusturur (Docker Postgres ayakta olmali)
+npm run db:goc           # drizzle-kit generate - sema degisiminde SQL uretir
+npm run db:uygula        # drizzle-kit migrate - yerel veritabanina uygular
+npm run db:uygula:prod -- --onayla   # PROD'a (Supabase) uygular
+npm run tip              # tsc --noEmit
+npm run lint             # eslint
+npm test                 # vitest run - gercek Postgres'e kosar
+npm run build            # next build
+npm run cf:kur           # opennextjs-cloudflare build
+npm run cf:onizle        # build + yerel workerd'de calistir
+npm run cf:yayinla       # build + Cloudflare'e deploy
+npm run cf:tip           # wrangler types
 ```
 
-Test veritabani Docker konteynerinde: `randevu-test-pg`, port **5455**.
-`warden`'in SessionStart hook'u konteyneri ayaga kaldirir; **Docker Desktop acik
-olmali**. Ayni konteynerde iki veritabani var: `randevu_dev` ve `randevu_test`.
+Test veritabani Docker konteynerinde: `randevu-test-pg`, port **5455**,
+`postgres:17-alpine` (prod Supabase de 17). Ayni konteynerde iki veritabani:
+`randevu_dev` ve `randevu_test`.
+
+**Windows notu:** `cf:kur` symlink olusturuyor; Windows'ta **Gelistirici Modu
+acik olmali**, yoksa build EPERM ile duser. Ayrica `wrangler dev` calisirken
+`.open-next` dizini kilitli kalir - build'den once surecleri kapat.
 
 ## Test kurallari
 
