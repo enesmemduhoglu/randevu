@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
 
+import { TemaSaglayici } from "@/components/tema-saglayici";
+
 import "./globals.css";
 
 // latin-ext SART: Turkce'nin g-breve, dotless-i, s-cedilla ve buyuk I-nokta
@@ -30,11 +32,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
+    // suppressHydrationWarning: next-themes tema sinifini istemcide <html>'e
+    // yaziyor, sunucu ciktisiyla kacinilmaz olarak farkli oluyor.
     <html
       lang="tr"
+      suppressHydrationWarning
       className={`${inter.variable} ${fraunces.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <TemaSaglayici>{children}</TemaSaglayici>
+      </body>
     </html>
   );
 }
