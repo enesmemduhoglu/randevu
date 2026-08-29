@@ -56,3 +56,8 @@ next-env.d.ts
 # wrangler types uretiyor (15k satir, %55'i PR gurultusuydu).
 # postinstall her kurulumda yeniliyor, depoda durmasi gereksiz.
 cloudflare-env.d.ts
+
+# Claude Code'un makineye ozel yerel ayarlari. settings.json depoda kaliyor
+# (icinde yalnizca test konteyner adi var), ama settings.local.json kisisel
+# izin kayitlari ve mutlak yollar tutabiliyor.
+.claude/settings.local.json
