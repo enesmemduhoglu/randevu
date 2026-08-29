@@ -8,41 +8,51 @@
     "start": "next start",
     "lint": "eslint",
     "db:hazirla": "node scripts/db-hazirla.ts",
-    "db:goc": "prisma migrate dev",
-    "db:uygula": "prisma migrate deploy",
-    "db:uret": "prisma generate",
+    "db:goc": "drizzle-kit generate",
+    "db:uygula": "drizzle-kit migrate",
     "test": "vitest run",
     "test:izle": "vitest",
-    "tip": "tsc --noEmit"
+    "tip": "tsc --noEmit",
+    "db:uygula:prod": "node scripts/prod-goc.ts",
+    "cf:kur": "opennextjs-cloudflare build",
+    "cf:onizle": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:yayinla": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf:tip": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "postinstall": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.10.0",
-    "@prisma/client": "^7.10.0",
+    "@opennextjs/cloudflare": "^1.20.4",
+    "drizzle-orm": "^0.45.2",
     "next": "16.3.3",
-    "pg": "^8.23.0",
+    "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
-    "prisma": "^7.10.0",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "wrangler": "^4.127.1"
   },
   "allowScripts": {
-    "esbuild@0.28.2": true,
     "msgpackr-extract@3.0.4": true,
     "unrs-resolver@1.12.2": true,
-    "workerd@1.20260704.1": true,
     "@prisma/engines@7.10.0": true,
-    "prisma@7.10.0": true
+    "prisma@7.10.0": true,
+    "esbuild@0.25.4": true,
+    "esbuild@0.28.1": true,
+    "workerd@1.20260828.1": true,
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
   }
 }

@@ -1,0 +1,4 @@
+NEXTJS_ENV=development
+
+# Hyperdrive binding'ini yerelde taklit eden Postgres baglanti dizesi.
+CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE="postgresql://postgres:postgres@localhost:5455/randevu_dev"

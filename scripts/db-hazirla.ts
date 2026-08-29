@@ -4,7 +4,7 @@
 // ile ayaga kaldiriyor. Bize iki veritabani lazim - randevu_dev ve randevu_test -
 // ve ikincisi konteyner disinda olusturulmak zorunda.
 
-import { Client } from "pg";
+import postgres from "postgres";
 
 export async function veritabaniniOlustur(baglantiDizesi: string): Promise<void> {
   const hedef = new URL(baglantiDizesi);
@@ -16,23 +16,19 @@ export async function veritabaniniOlustur(baglantiDizesi: string): Promise<void>
   bakim.pathname = "/postgres";
   bakim.search = "";
 
-  const istemci = new Client({ connectionString: bakim.toString() });
-  await istemci.connect();
+  const sql = postgres(bakim.toString(), { max: 1 });
   try {
-    const { rowCount } = await istemci.query(
-      "SELECT 1 FROM pg_database WHERE datname = $1",
-      [ad],
-    );
-    if (rowCount === 0) {
+    const varMi = await sql`SELECT 1 FROM pg_database WHERE datname = ${ad}`;
+    if (varMi.length === 0) {
       // Tanimlayici baglanma parametresi olarak gecirilemez; ad .env'den gelen
       // kendi degerimiz, yine de cift tirnak kacisi yapiliyor.
-      await istemci.query(`CREATE DATABASE "${ad.replace(/"/g, '""')}"`);
+      await sql.unsafe(`CREATE DATABASE "${ad.replace(/"/g, '""')}"`);
       console.log(`veritabani olusturuldu: ${ad}`);
     } else {
       console.log(`veritabani zaten var: ${ad}`);
     }
   } finally {
-    await istemci.end();
+    await sql.end();
   }
 }
 
