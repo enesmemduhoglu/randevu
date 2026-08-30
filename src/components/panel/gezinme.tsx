@@ -45,8 +45,8 @@ const BOLUMLER: Bolum[] = [
       { ad: "Takvim", ikon: CalendarDaysIcon },
       { ad: "Hizmetler", ikon: ScissorsIcon, yol: "/panel/hizmetler" },
       { ad: "Personel", ikon: UsersIcon, yol: "/panel/personel" },
-      { ad: "Çalışma saatleri", ikon: ClockIcon },
-      { ad: "Ayarlar", ikon: SettingsIcon },
+      { ad: "Çalışma saatleri", ikon: ClockIcon, yol: "/panel/calisma-saatleri" },
+      { ad: "Ayarlar", ikon: SettingsIcon, yol: "/panel/ayarlar" },
     ],
   },
   {
