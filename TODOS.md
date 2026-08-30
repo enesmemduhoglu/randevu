@@ -591,3 +591,132 @@ ihlalle sınandı — yakaladı.**
       hatası çıkarsa panelden Database → Extensions üzerinden açılabilir.
 - [ ] Faz D'den devreden madde: **Confirm email hâlâ AÇIK.** Kayıt akışı elle
       hâlâ uçtan uca doğrulanamadı.
+
+---
+
+## Faz F — müsaitlik motoru
+
+**Kapandı:** `src/lib/zaman.ts`, `src/lib/musaitlik.ts`, `src/lib/musaitlik-sorgu.ts`,
+`GET /api/musaitlik`. Ürünün kalbi ve testlerin en yoğun olduğu faz: bu üç
+dosya için **76 test** yazıldı.
+
+### Zaman katmanı (`zaman.ts`)
+
+**Sunucunun saat dilimine hiçbir yerde güvenilmiyor.** `new Date()` dışında
+hiçbir yerel-zaman API'si kullanılmıyor: Worker'ın dilimi UTC, geliştirici
+makinesininki Europe/Istanbul, testlerinki bir başkası olabilir. Aynı kod üç
+yerde üç farklı sonuç üretirse hata ancak üretimde görünür.
+
+**Kütüphane eklenmedi.** `date-fns-tz` ya da `luxon` Worker bundle'ına yüz
+kilobaytlarca ekliyor ve bütçe 3 MiB (bkz. Faz E). Gereken iki dönüşüm
+`Intl`in zaten taşıdığı IANA verisiyle yapılabiliyor.
+
+**Yaz saati sınırları açıkça seçildi** (ECMAScript Temporal'ın "compatible"
+kuralıyla aynı):
+
+- **Var olmayan saat.** Saat ileri alınırken 02:00 doğrudan 03:00 olur; 02:30 o
+  gün hiç yaşanmaz. Sonuç **ileri kayıyor**. Hata fırlatmıyoruz: çalışma saati
+  02:30'da başlayan bir işletme için "o gün bir saat geç başladı" makul,
+  "randevu alınamaz" değil.
+- **İki kez yaşanan saat.** Saat geri alınırken 02:30 iki kez yaşanır. **İlki**
+  seçiliyor — "saat 02:30 olduğunda" denince kastedilen ilk defasıdır.
+
+Yöntem: geçiş bir günden kısa sürede olup bittiği için hedef günün bir gün
+öncesi ve sonrasındaki ofsetler iki adayı veriyor; istenen duvar saatine geri
+dönen adaylardan en erkeni seçiliyor.
+
+**Yakalanan iki tuzak:**
+- ICU bazı sürümlerde `hour12: false` ile gece yarısını **"24"** veriyor.
+  Düzeltilmezse 00:15 randevusu önceki günün 24:15'i gibi görünürdü.
+- `Date.UTC` taşırma yapıyor: `"2026-02-29"` (2026 artık yıl değil) sessizce
+  1 Mart olurdu ve kullanıcı istemediği bir günün saatlerini görürdü. Ayrıştırma
+  geri okuyup aynı gün mü diye bakıyor.
+
+### Motor (`musaitlik.ts`)
+
+**Saf fonksiyon** — `simdi` bile dışarıdan veriliyor. İçeride okunsaydı yaz
+saati geçişi, gün sınırı ve minimum bildirim süresi ancak o anları bekleyerek
+sınanabilirdi.
+
+- **Slot ızgarası her çalışma aralığının kendi başından başlıyor**, günün
+  başından değil. Öğleden sonraki aralık 13:10'da başlıyorsa saatler 13:10,
+  13:30... oluyor; gün başından sayılsaydı 12:50 gibi noktalara düşerdi.
+- **Hizmet aralığa sığmalı.** 18:00'de kapanan bir aralıkta 17:45'te başlayan
+  30 dakikalık hizmet yer bulamaz. Öğle arasına taşan randevu da böylece
+  engelleniyor: iki aralık ayrı ayrı deneniyor.
+- **Bitiş gerçek süreyle hesaplanıyor, duvar saatiyle değil.** Duvar saatinden
+  hesaplansaydı yaz saati geçişini kapsayan randevu 120 dakika sürer ve bir
+  sonrakiyle çakışırdı. Testi var: geçişi kapsayan aralıkta her randevu tam 60
+  dakika ve ardışık slotlar çakışmıyor.
+- **Çakışma testi yarım açık `[)`** — veritabanındaki `EXCLUDE` kısıtıyla aynı.
+  İkisi ayrışırsa motor "boş" dediği bir slotu kısıt reddeder ve kullanıcı
+  sebebini anlamaz.
+- **`slotAraligiDk <= 0` boş dönüyor.** Değer kullanıcı ayarından geliyor ve
+  döngü sonsuza giderdi.
+
+**Motor bir garanti değil.** İki müşteri aynı saniyede aynı slotu isterse ikisi
+de "boş" görür; kesin cevabı `EXCLUDE` kısıtı veriyor (DEĞİŞMEZ 8).
+
+### Sorgu katmanı (`musaitlik-sorgu.ts`)
+
+Route ile motor arasında ayrı bir dosya, çünkü aynı iş iki yerde gerekecek:
+`GET /api/musaitlik` listeyi gösteriyor, Faz G'deki `POST /api/randevu` ise
+yazmadan hemen önce aynı hesabı tekrarlayıp slotun hâlâ boş olduğunu
+doğrulayacak. İki yerde iki farklı hesap, müşteriye gösterilen liste ile kabul
+edilen randevunun ayrışması demekti.
+
+- **Personel verilmezse** hizmeti verebilen herkes deneniyor ve aynı saat **tek
+  seçenek** olarak dönüyor. "Farketmez" diyen müşteriye aynı saati iki kez
+  göstermek anlamsız olurdu; sıralı listede `sira`'sı küçük olan kazanıyor.
+- **Randevu ve izin aralıkları pencereyle KESİŞENLER olarak çekiliyor**,
+  "içinde olanlar" olarak değil: gece yarısını aşan bir randevu ya da bir
+  haftalık tatil aksi halde görünmezdi. İkisinin de testi var.
+- **Dolu kümesi yalnızca `BEKLIYOR` ve `ONAYLI`** — `EXCLUDE` kısıtının `WHERE`
+  koşuluyla aynı. İptal ve gelmedi saati boşaltıyor.
+
+### `GET /api/musaitlik`
+
+Oturumsuz ve halka açık: müşteri randevu almak için hesap açmıyor. Kiracı
+oturumdan değil `isletme` slug'ından çözülüyor ve `getHalkaAcikDb` filtreyi yine
+kapanış değişkeni olarak tutuyor.
+
+- **GET olduğu için `checkOrigin` yok** — DEĞİŞMEZ 2 yalnızca mutasyonlar için.
+  Kötüye kullanım (başka bir salonun doluluk takvimini kazımak) CSRF ile değil
+  hız sınırıyla engelleniyor; Cloudflare kuralı Faz G'de bu yola konacak.
+- **Yanıt önbelleklenmiyor** (`cache-control: no-store`). Müsaitlik yazma
+  kararını besliyor: bir saniye bayat veri, dolu bir slotu boş gösterip
+  müşteriyi 409'a götürür. Hyperdrive'ın sorgu önbelleği de aynı sebeple kapalı.
+- Kapalı ya da hiç olmayan işletme **aynı** cevabı alıyor: hangi slug'ların
+  kayıtlı olduğunu sızdırmanın faydası yok.
+
+### Bilerek kapsam dışı
+
+- **Randevu yazma yok.** `POST /api/randevu` ve iptal akışı Faz G'de.
+- **Çok günlü müsaitlik sorgusu yok.** Uç tek gün veriyor; takvimde "hangi
+  günler dolu" göstergesi gerekirse Faz G'de eklenecek. Şimdi eklemek,
+  kullanılmayan bir sorgu şekli sınamak olurdu.
+- **`kapali` (izin) ekranı hâlâ yok.** Motor tabloyu okuyor ama işletme henüz
+  izin giremiyor; ekran Faz H'de takvimle birlikte anlamlı olacak.
+- **Hız sınırı konmadı.** Cloudflare kuralı Faz G'de, `POST /api/randevu` ile
+  birlikte.
+
+### Doğrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` — **266 test geçti** (21 dosya)
+  - `zaman.test.ts` 23, `musaitlik.test.ts` 33, `musaitlik-sorgu.test.ts` 20
+  - sorgu testlerinin beşi halka açık yolun **IDOR** testi
+- **Elle, gerçek veriyle** (`next dev` + tohumlanmış `randevu_dev`): 45 dk'lık
+  hizmet öğle arasında kesiliyor (son sabah slotu 11:15, öğleden sonra 13:00'te
+  başlıyor), son slot 17:15; 120 dk'lık hizmet 18 slot üretiyor; cumartesi
+  10:00-16:00; pazar, geçmiş gün ve pencere dışı boş; Ayşe 10:00-10:45 dolu
+  olunca o saatler Ali'ye düşüyor ve **10:45 bitişik olduğu için** Ayşe'ye geri
+  dönüyor; bilinmeyen slug/hizmet 404, bozuk tarih ve eksik parametre 400
+
+### Elle yapılması gerekenler (Faz F)
+
+- [ ] Faz D'den devrediyor: **Supabase'de Confirm email hâlâ AÇIK**
+      (`mailer_autoconfirm: false`). Kayıt akışı uçtan uca doğrulanamıyor.
+- [ ] `randevu_dev` veritabanına örnek işletme tohumlandı (`isil-guzellik`,
+      iki personel, iki hizmet, haftalık çalışma düzeni, bir randevu). Faz G
+      geliştirmesi için duruyor; prod'a gitmiyor.
