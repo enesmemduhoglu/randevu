@@ -4,17 +4,18 @@ import { CikisDugmesi } from "@/components/panel/cikis-dugmesi";
 import { Gezinme } from "@/components/panel/gezinme";
 import { HesapMenusu } from "@/components/panel/hesap-menusu";
 import { MobilMenu } from "@/components/panel/mobil-menu";
+import { OturumTazeleyici } from "@/components/panel/oturum-tazeleyici";
 import { Logo } from "@/components/marka/logo";
 import { TemaDugmesi } from "@/components/tema-dugmesi";
 import { auth, authKimligi } from "@/lib/auth";
 import { getScopedDb } from "@/lib/scoped-db";
 
-// Panelin kabugu ve GERCEK yetki kapisi.
+// Panelin kabugu ve TEK yetki kapisi.
 //
-// Proxy (src/proxy.ts) yalnizca cookie'si hic olmayani ucuzca cevirebiliyor;
-// edge'de kostugu icin veritabani yok, yani kimin hangi isletmeye bagli
-// oldugunu bilemiyor. Karar burada veriliyor - cookie'nin varligi kimlik
-// kaniti degil.
+// Faz D'de bir de proxy vardi ve oturum cookie'si hic olmayani ucuzca
+// ceviriyordu. Faz E'de kaldirildi (bundle maliyeti icin bkz.
+// oturum-tazeleyici.tsx). Kayip yok: o kontrol zaten kesin degildi -
+// cookie'nin varligi kimlik kaniti DEGIL - ve gercek karar hep buradaydi.
 
 export default async function PanelDuzeni({ children }: LayoutProps<"/panel">) {
   const oturum = await auth();
@@ -47,6 +48,10 @@ export default async function PanelDuzeni({ children }: LayoutProps<"/panel">) {
 
   return (
     <div className="flex min-h-full flex-1 flex-col lg:flex-row">
+      {/* Gorunmez: erisim token'ini arka planda tazeliyor. Bu isi Faz D'de
+          proxy yapiyordu; olculdu ve bundle'a 1358 KiB gzip ekliyordu. */}
+      <OturumTazeleyici />
+
       <a
         href="#panel-icerik"
         className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:ring-2 focus:ring-ring"
