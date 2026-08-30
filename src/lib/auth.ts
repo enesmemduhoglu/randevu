@@ -3,6 +3,7 @@
 // kendisi. scoped-db bu dosyanin ciktisini girdi olarak aliyor.
 
 import { eq } from "drizzle-orm";
+import { cache } from "react";
 
 import { kullanici } from "@/db/sema";
 import { getDb } from "@/lib/db";
@@ -37,7 +38,9 @@ export type AuthKimligi = {
 /// onbellekleniyor - istek basina ag turu yok. getSession cookie'den geleni
 /// dogrulamadan donduruyor ve Supabase kendi dokumaninda ona guvenilmemesi
 /// gerektigini soyluyor.
-export async function authKimligi(): Promise<AuthKimligi | null> {
+/// `cache` gerekcesi auth() ile ayni: panel duzeni once auth(), oturum yoksa
+/// authKimligi() cagiriyor - ikincisi zaten birincinin icinde kosmustu.
+export const authKimligi = cache(async function authKimligi(): Promise<AuthKimligi | null> {
   const supabase = await supabaseSunucu();
 
   const { data, error } = await supabase.auth.getClaims();
@@ -51,7 +54,7 @@ export async function authKimligi(): Promise<AuthKimligi | null> {
     eposta: typeof claims.email === "string" ? claims.email : "",
     ad: typeof metaAd === "string" && metaAd.trim() ? metaAd.trim() : null,
   };
-}
+});
 
 /// Auth kullanicisinin BIZDEKI kaydi. Kayit akisinin yarida kalip kalmadigini
 /// anlamak icin de kullaniliyor: Supabase'de hesap var ama burada satir yoksa
@@ -78,7 +81,12 @@ export async function kullaniciyiYukle(authUserId: string) {
 /// Kimlik SUPABASE JWT'sinden, yetki KENDI veritabanimizdan geliyor. Ikisini
 /// ayirmak bilincli: rol ya da kiraci degistiginde token'in yenilenmesini
 /// beklemiyoruz, bir sonraki istekte dogru deger okunuyor.
-export async function auth(): Promise<Oturum | null> {
+///
+/// `cache` ile sarili: panel duzeni ve onun icindeki sayfa AYNI istekte ikisi
+/// de oturumu soruyor. Sarmadan her biri kendi JWT dogrulamasini ve kendi
+/// veritabani sorgusunu yapardi. React'in cache'i istek basina calisiyor, yani
+/// istekler arasi bir onbellek degil - bayat oturum riski yok.
+export const auth = cache(async function auth(): Promise<Oturum | null> {
   const kimlik = await authKimligi();
   if (!kimlik) return null;
 
@@ -98,7 +106,7 @@ export async function auth(): Promise<Oturum | null> {
     rol: kayit.rol,
     isletmeId: kayit.isletmeId,
   };
-}
+});
 
 /// Panel tarafi icin daraltilmis oturum. Isletmeye bagli olmayan bir rol
 /// (musteri) ya da isletmeId'si olmayan bir kayit buraya gecemiyor; boylece
