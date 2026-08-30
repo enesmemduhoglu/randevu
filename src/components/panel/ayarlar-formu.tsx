@@ -7,7 +7,7 @@ import { HataKutusu } from "@/components/kimlik/hata-kutusu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { sureBicimle } from "@/lib/bicim";
+import { sureBicimle, telefonBicimle } from "@/lib/bicim";
 import { SAAT_DILIMLERI, SLOT_ARALIKLARI } from "@/lib/ayar-girdi";
 
 export type AyarKaydi = {
@@ -116,7 +116,10 @@ export function AyarlarFormu({ ayarlar }: { ayarlar: AyarKaydi }) {
             name="telefon"
             inputMode="tel"
             placeholder="0532 123 45 67"
-            defaultValue={ayarlar.telefon ?? ""}
+            // Veritabaninda yalnizca rakam duruyor; kullaniciya okunur
+            // bicimde gosteriliyor. Sunucu geri gelen degeri yine rakama
+            // indirgiyor, yani gidis-donus guvenli.
+            defaultValue={telefonBicimle(ayarlar.telefon)}
             disabled={gonderiliyor}
             className="h-10"
           />
