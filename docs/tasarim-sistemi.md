@@ -112,6 +112,11 @@ durum her zaman kötü görünür.
 
 **Etiket her zaman görünür.** Yer tutucu etiketin yerini almaz.
 
+**Form alanı yüksekliği bağlama göre.** shadcn varsayılanı `h-8`; bu ölçü
+panel içi yoğun arayüz için. Müşterinin ya da işletme sahibinin telefondan
+doldurduğu formlarda (`/giris`, `/kayit`) `h-10` kullanılır — etiketle
+birlikte 44px dokunma hedefine giriyor. Aynı kural buton için de geçerli.
+
 ## Yeni token eklerken
 
 1. Ham değer gerekiyorsa **primitive**'e ekle (Türkçe ad, OKLCH).

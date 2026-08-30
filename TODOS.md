@@ -219,75 +219,189 @@ hata cikardi:
 
 ---
 
-## Faz D — kimlik ve kiraci (KISMI: cekirdek bitti, arayuz kalmadi)
+## Faz D — kimlik ve kiracı
 
-**Bu fazda kapanan:** sema (kullanici, personel), kiraci izolasyon katmani,
-IDOR guardrail'inin eslint kuraliyla geri getirilmesi, CSRF origin kontrolu,
-kimlik katmani ve proxy, isletme kayit akisi, vitrinin panel altina tasinmasi.
-
-**HENUZ KAPANMADI:** giris/kayit ekranlari ve /panel iskeleti. Bu yuzden faz
-kapali degil.
+**Kapandı:** şema (kullanıcı, personel), kiracı izolasyon katmanı, IDOR
+guardrail'inin eslint kuralıyla geri getirilmesi, CSRF origin kontrolü, kimlik
+katmanı ve proxy, işletme kayıt akışı, giriş/kayıt/kayıt-tamamlama ekranları,
+kimlik API route'ları, panel iskeleti, kök sayfa.
 
 ### Kararlar
 
-- **IDOR guardrail'i geri geldi.** Drizzle'a gecerken kaybettigimiz warden
-  kapisinin yerine eslint `no-restricted-imports`: `src/app` altindan
-  `@/lib/db` import etmek yasak. Kapsam route handler'lardan GENIS tutuldu -
-  sunucu bilesenleri de sorgu yapabiliyor ve risk birebir ayni. Kural kasitli
-  bir ihlalle dogrulandi.
+- **IDOR guardrail'i geri geldi.** Drizzle'a geçerken kaybettiğimiz warden
+  kapısının yerine eslint `no-restricted-imports`: `src/app` altından
+  `@/lib/db` import etmek yasak. Kapsam route handler'lardan GENİŞ tutuldu —
+  sunucu bileşenleri de sorgu yapabiliyor ve risk birebir aynı. Kural kasıtlı
+  bir ihlalle doğrulandı.
 
-- **Kimlik Supabase'den, yetki bizden.** `auth()` JWT'den yalnizca `sub`
-  aliyor, rol ve `isletmeId`'yi kendi `kullanici` tablomuzdan okuyor. Custom
-  Access Token Hook bilerek kullanilmadi: claim'e yazmak istek basina bir
-  sorgu tasarruf ettirirdi ama rol degisince bayat claim sorunu ve ikinci bir
-  migration yuzeyi getirirdi.
+- **Kimlik Supabase'den, yetki bizden.** `auth()` JWT'den yalnızca `sub`
+  alıyor, rol ve `isletmeId`'yi kendi `kullanici` tablomuzdan okuyor. Custom
+  Access Token Hook bilerek kullanılmadı: claim'e yazmak istek başına bir
+  sorgu tasarruf ettirirdi ama rol değişince bayat claim sorunu ve ikinci bir
+  migration yüzeyi getirirdi.
 
-- **`getClaims()`, `getSession()` degil.** getSession cookie'den geleni
-  DOGRULAMADAN donduruyor; Supabase kendi dokumaninda ona guvenilmemesi
-  gerektigini yaziyor. getClaims imzayi dogruluyor ve asimetrik anahtarlarda
-  bunu yerelde WebCrypto ile yapiyor - JWKS onbellekli, istek basina ag turu yok.
+- **`getClaims()`, `getSession()` değil.** getSession cookie'den geleni
+  DOĞRULAMADAN döndürüyor; Supabase kendi dokümanında ona güvenilmemesi
+  gerektiğini yazıyor. getClaims imzayı doğruluyor ve asimetrik anahtarlarda
+  bunu yerelde WebCrypto ile yapıyor — JWKS önbellekli, istek başına ağ turu
+  yok.
 
-- **Next 16'da `middleware.ts` DEGIL `proxy.ts`.** Export adi da `proxy`.
-  Egitim verisinden yazilsa yanlis olurdu; `AGENTS.md` uyarisi uzerine paketin
-  kendi dokumani okundu (`node_modules/next/dist/docs`).
+- **Next 16'da `middleware.ts` DEĞİL `proxy.ts`.** Export adı da `proxy`.
+  Eğitim verisinden yazılsa yanlış olurdu; `AGENTS.md` uyarısı üzerine paketin
+  kendi dokümanı okundu (`node_modules/next/dist/docs`).
 
-- **Proxy YETKILENDIRME YAPMIYOR.** OpenNext Node middleware'i desteklemedigi
-  icin edge'de kosuyor, yani veritabani yok. Yalnizca token yeniliyor (sunucu
-  bilesenleri cookie yazamiyor) ve oturum cookie'si hic olmayani ucuzca
-  kesiyor. Cookie'nin varligi kimlik kaniti DEGIL; gercek yetki her zaman
-  sunucuda `auth()` ile.
+- **Proxy YETKİLENDİRME YAPMIYOR.** OpenNext Node middleware'i desteklemediği
+  için edge'de koşuyor, yani veritabanı yok. Yalnızca token yeniliyor (sunucu
+  bileşenleri cookie yazamıyor) ve oturum cookie'si hiç olmayanı ucuzca
+  kesiyor. Cookie'nin varlığı kimlik kanıtı DEĞİL; gerçek yetki her zaman
+  sunucuda `auth()` ile — panelde bu karar `src/app/panel/layout.tsx`'te.
 
-- **Turkce slug icin harf tablosu, NFD degil.** Noktasiz i ve noktali I tek
-  kod noktasi, ayrilabilir aksanlari yok - NFD onlari cozemiyor. NFD adimi
-  yine de duruyor, Turkce olmayan aksanli adlar icin.
+- **`/api` proxy kapsamının DIŞINDA.** Proxy'nin tek işi cookie yenilemek ve
+  route handler'lar bunu kendileri yapabiliyor (`cookies().set` orada
+  çalışıyor, sunucu bileşenlerinin aksine). İkisi aynı yanıta cookie yazarsa
+  hangi `Set-Cookie`'nin sonda kalacağı belirsizleşiyordu — çıkış isteğinde bu,
+  oturumu hiç temizlememek anlamına gelirdi.
 
-- **`x-forwarded-proto` okunuyor.** TLS Cloudflare'de sonlaniyor, uygulamaya
-  istek duz http geliyor ama tarayicinin gonderdigi Origin https. Yalnizca
-  `req.url`'e guvenilseydi her mesru mutasyon 403 yerdi.
+- **Türkçe slug için harf tablosu, NFD değil.** Noktasız i ve noktalı I tek
+  kod noktası, ayrılabilir aksanları yok — NFD onları çözemiyor. NFD adımı
+  yine de duruyor, Türkçe olmayan aksanlı adlar için.
+
+- **`x-forwarded-proto` okunuyor.** TLS Cloudflare'de sonlanıyor, uygulamaya
+  istek düz http geliyor ama tarayıcının gönderdiği Origin https. Yalnızca
+  `req.url`'e güvenilseydi her meşru mutasyon 403 yerdi.
+
+- **Kimlik akışlarının tamamı sunucuda.** Formlar kendi route'larımıza POST
+  atıyor; Supabase çağrısını sunucu yapıyor, cookie'yi de o yazıyor. Bedeli:
+  formlar JS gerektiriyor. Karşılığı: şifre tarayıcıdaki bir SDK'ya hiç
+  girmiyor, cookie yazma tek yerde kalıyor ve dört route da `checkOrigin` ile
+  aynı CSRF kapısından geçiyor (server action olsaydı o kapı Next'in kendi
+  kontrolüne devredilirdi). `createBrowserClient` sarmalayıcısı hiç
+  çağrılmadığı için silindi.
+
+- **Route'larda adım sırası sözleşme:** `checkOrigin` → gövde ayrıştırma →
+  girdi doğrulama → *ancak sonra* Supabase/veritabanı. İlk üç adım ağa
+  çıkmadığı için o dilim Postgres'siz ve Supabase'siz sınanabiliyor; testler
+  tam olarak bu sıraya dayanıyor ve sıra bozulursa `cookies()` fırlatarak
+  düşüyorlar. Kayıtta ayrıca bir ürün gerekçesi var: geçersiz bir işletme
+  adıyla açılmış Supabase hesabı geri alınamaz, sahipsiz kalırdı.
+
+- **Girişte şifre uzunluğu kontrol EDİLMİYOR**, yalnızca boş mu diye
+  bakılıyor. Var olan bir hesabın şifresi kural sıkılaşmadan önce belirlenmiş
+  olabilir; onu "geçersiz" saymak sahibini kendi hesabından dışarı kilitlerdi.
+  Kayıtta tam kural geçerli — orada yeni şifre belirleniyor.
+
+- **Şifre üst sınırı 72 KARAKTER değil, 72 BAYT.** Supabase bcrypt kullanıyor
+  ve bcrypt 72 bayttan sonrasını sessizce atıyor. Türkçe harfler UTF-8'de iki
+  bayt, yani 40 karakterlik bir şifre sınırı aşıyor; karakter sayan bir kontrol
+  bunu kaçırırdı ve kullanıcı bir daha giriş yapamazdı.
+
+- **Başarısız girişte tek mesaj.** "Böyle bir hesap yok" ile "şifre yanlış"
+  ayrımını yapmak hesap sayımına (enumeration) kapı açar.
+
+- **Supabase hata kodları kendi cümlelerimize eşleniyor** (`src/lib/supabase/
+  hata.ts`). Sağlayıcının metni hiçbir zaman taşınmıyor (değişmez 5), yalnızca
+  bilinen KOD eşleniyor. Bu eşleme elle denemeden doğdu: Supabase `.test`
+  uzantılı adresi reddetti ve ekranda "bağlantıda bir sorun oldu" yazdı —
+  kullanıcıya düzeltebileceği bir şey olduğunu hiç söylemeyen bir mesaj.
+
+- **Çıkış kapsamı `local`, varsayılan `global` değil.** `global` kullanıcının
+  tüm cihazlarındaki yenileme token'larını iptal ediyor: telefonundan çıkan
+  biri masaüstünden de atılmış oluyor. "Tüm cihazlardan çık" ayrı ve açıkça
+  seçilen bir işlem olmalı.
+
+- **Route'lar `Response.redirect` dönmüyor.** fetch ile atılan bir istekte 30x
+  yanıtını tarayıcı sessizce izliyor ve istemci nereye gidildiğini
+  öğrenemiyor. Sözleşme: hata `{ hata }`, başarı `{ yon }` — yönlendirmeyi
+  istemci yapıyor ve ardından `router.refresh()` çağırıyor (cookie yeni
+  yazıldı, sunucu bileşenlerinin çıktısı bayat).
+
+- **`auth()` ve `authKimligi()` React `cache`'ine alındı.** Panel düzeni ve
+  içindeki sayfa aynı istekte ikisi de oturumu soruyor; sarmadan her biri
+  kendi JWT doğrulamasını ve kendi sorgusunu yapardı. İstek başına önbellek,
+  yani bayat oturum riski yok.
+
+- **`isletmeKaydiOlustur` benzersizlik ihlalini yakalıyor.** Transaction önce
+  "bu authUserId kayıtlı mı" diye bakıyor ama iki istek aynı anda gelirse
+  ikisi de boş görüyor; kesin cevabı `kullanici_auth_user_id_idx` veriyor
+  (değişmez 3). Slug çarpışması bilerek yakalanmıyor: o kadar dar bir pencere
+  için yeniden deneme döngüsü taşımak, hiç koşulmayan — yani sınanmamış — kod
+  demekti.
+
+- **Zod eklenmedi.** Doğrulanan alan sayısı az ve mesajların tamamı Türkçe;
+  kütüphanenin ürettiği metni yine elle yazacaktık. Form katmanı
+  (react-hook-form + zod) Faz E'de hizmet/personel formlarıyla birlikte gelecek.
+
+- **Olmayan sayfalara link verilmiyor.** Panel menüsünde Takvim, Hizmetler,
+  Personel, Çalışma saatleri ve Ayarlar tıklanamaz duruyor ve "Yakında" rozeti
+  taşıyor. 404'e götüren menü, eksik menüden kötü.
+
+- **Panel ana sayfasında sahte veri yok.** Gösterilecek randevu, hizmet ve
+  çalışma saati Faz E-H'de geliyor; boş bir takvim ya da uydurma istatistik
+  çizmek yerine elimizdeki gerçek bilgi (işletme adı, saat dilimi, randevu
+  sayfası adresi) ve sıradaki adımlar gösteriliyor.
+
+- **Kimlik ekranlarında alan yüksekliği `h-8` değil `h-10`.** Varsayılan ölçü
+  panel içi yoğun arayüz için; bu üç ekran mobilde parmakla kullanılıyor ve
+  tasarım sistemi dokunma hedefini en az 44px alıyor.
+
+- **İstemcide ağır doğrulama yok.** Kuralların tek sahibi sunucudaki
+  `girdi.ts`. Aynı kuralı iki yerde tutmak, ikisinin zamanla ayrışması ve
+  kullanıcının sunucuda göremediği bir hatayla karşılaşması demekti.
 
 ### Bilinen durum
 
-- **`/panel/gelistirici/vitrin` su an tarayicidan acilamiyor.** Yeni yol
-  proxy'nin KORUMALI listesine dustu ve `/giris` henuz yok, yani oturumsuz
-  ziyaret var olmayan bir sayfaya yonleniyor. Giris ekrani gelince cozulecek.
-- Supabase'de hesabi olup bizde `kullanici` kaydi olmayan bir kisi (kayit
-  yarida kalirsa) oturum acmis sayilmiyor. Retry akisi henuz yazilmadi.
+- **Supabase'de *Confirm email* hâlâ AÇIK.** Elle denemede ortaya çıktı: kayıt
+  isteği `over_email_send_rate_limit` ile döndü, yani Supabase doğrulama maili
+  göndermeye çalışıyor ve yerleşik SMTP'nin saatte 2 mesaj sınırına takılıyor.
+  Kapatılana kadar kayıt akışı ilk iki denemeden sonra tıkanıyor. Kod bu
+  duruma hazır (`data.session` yoksa kullanıcı `/giris`'e mesajla
+  yönlendiriliyor) ama üretim davranışı bu olmamalı.
+- **Uçtan uca mutlu yol elle doğrulanmadı** — yukarıdaki sınır yüzünden.
+  Doğrulanan: CSRF kapısı (403), doğrulama hataları (400), olmayan hesapla
+  giriş (401, gerçek Supabase'e ulaşarak), oturumsuz `/panel` ve
+  `/kayit/tamamla` yönlendirmeleri (307 → `/giris?devam=…`).
+- Supabase'de `faz-d-deneme@example.com` için sahipsiz bir hesap kalmış
+  olabilir (istek e-posta gönderimi adımında düştü). Yerel veritabanında
+  karşılığı yok — kontrol edilip silinebilir.
 
-### Dogrulama
+### Bilerek kapsam dışı
+
+- **Şifre sıfırlama akışı yok.** Kayıt ve giriş çalışır durumda; sıfırlama
+  gerçek e-posta gönderimi gerektiriyor ve o altyapı Faz I'de kuruluyor.
+  Şimdi yazılsa yerleşik SMTP'nin saatte 2 mesaj sınırına çarpardı.
+- **Müşteri rolü için ekran yok.** `MUSTERI` rolü şemada ve `auth()`'ta var,
+  panele girişi engelleniyor; `/randevularim` Faz J'de.
+- **Kök sayfa geçici.** Gerçek tanıtım sayfası ürün çalışır hale gelince
+  yazılacak; bugün anlatılacak bir şey yok ve uydurulmuş bir özellik listesi
+  sonradan düzeltilecek bir borç olurdu.
+- **`/saglik` halka açık kaldı.** Vitrin panel altına taşındı ama sağlık
+  sayfası dışarıdan izleme için anlamlı ve sızdırdığı tek şey PostgreSQL major
+  sürümü ile gidiş-dönüş süresi; hata metni zaten bastırılıyor.
+
+### Doğrulama
 
 - `npm run tip`, `npm run lint` temiz
-- `npm test` - **32 test gecti** (4 dosya, gercek Postgres)
-- Guardrail kasitli ihlalle dogrulandi
+- `npm test` — **90 test geçti** (10 dosya, gerçek Postgres)
+- `npm run build` başarılı; 13 route üretiliyor
+- **Elle (`next dev`):** `/`, `/giris`, `/kayit` 200; oturumsuz `/panel` ve
+  `/kayit/tamamla` → 307 `/giris?devam=…`; `/api/giris` Origin'siz ve yabancı
+  Origin'le 403, doğru Origin'le olmayan hesapta 401 (gerçek Supabase'e
+  ulaşarak); kayıtta Supabase hata kodları doğru cümleye eşleniyor
 
-### Elle yapilmasi gerekenler (Faz D)
+### Elle yapılması gerekenler (Faz D)
 
 - [ ] **PR #3 merge edilince prod'a migration uygula:**
       `npm run db:uygula:prod -- --onayla`
-      Goc yalnizca EKLEME (rol enum'i + kullanici + personel tablolari), mevcut
-      isletme tablosuna dokunmuyor, veri kaybi yok. Geri alma: iki `drop table`
+      Göç yalnızca EKLEME (rol enum'u + kullanıcı + personel tabloları), mevcut
+      işletme tablosuna dokunmuyor, veri kaybı yok. Geri alma: iki `drop table`
       ve bir `drop type`.
-- [ ] **Supabase panelinde Confirm email KAPALI tutulmali.** Yerlesik SMTP
-      saatte 2 mail ile sinirli; acik birakilirsa kayit akisi ilk gun tikanir.
-      Domain + Resend custom SMTP baglanana kadar (Faz I) boyle kalacak.
-- [ ] Giris/kayit ekranlari ve /panel iskeleti - Faz D'nin kalan yarisi.
-      Bunlar gelene kadar /panel/gelistirici/vitrin tarayicidan acilamiyor.
+- [ ] **Supabase panelinde *Confirm email* KAPATILMALI** (Authentication →
+      Sign In / Providers → Email). Şu an açık ve kayıt akışını tıkıyor.
+      Yerleşik SMTP saatte 2 mail ile sınırlı; domain + Resend custom SMTP
+      bağlanana kadar (Faz I) kapalı kalmalı.
+- [ ] Confirm email kapatıldıktan sonra **uçtan uca elle doğrulama**: kayıt →
+      panel, çıkış, tekrar giriş, `?devam=` ile korunan sayfaya dönüş.
+- [ ] Cloudflare'e yayınlarken `NEXT_PUBLIC_SUPABASE_URL` ve
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY` **derleme anında** ortamda olmalı;
+      `NEXT_PUBLIC_` önekli değişkenler `cf:kur` adımında gömülüyor.
+- [ ] Deploy kararı ve custom domain bağlantısı (Faz B'den devrediyor).
