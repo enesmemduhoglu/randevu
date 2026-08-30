@@ -114,13 +114,34 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
       return sonuc.length;
     },
 
+    /// Personeli pasife alir - ama SON aktif personeli almaz.
+    ///
+    /// Randevu bir personele baglanmak zorunda (`personelId` notNull). Son
+    /// kisiyi de pasife almak, isletmeyi randevu alinamaz bir duruma sokar ve
+    /// bunu kullanici ancak musterisi sikayet edince fark ederdi.
+    ///
+    /// Sayma ve guncelleme AYNI transaction'da: ard arda iki istek ikisini de
+    /// "son degil" gorup ikisini birden pasifleyebilirdi.
     async personelPasifleStir(id: string) {
-      const sonuc = await db
-        .update(personel)
-        .set({ aktif: false })
-        .where(and(eq(personel.id, id), eq(personel.isletmeId, kiraci)))
-        .returning({ id: personel.id });
-      return sonuc.length;
+      return db.transaction(async (tx) => {
+        const aktifler = await tx
+          .select({ id: personel.id })
+          .from(personel)
+          .where(and(eq(personel.isletmeId, kiraci), eq(personel.aktif, true)))
+          .for("update");
+
+        // Hedef zaten pasifse ya da bizim degilse "yok" - IDOR'da varligi
+        // sizdirmamak icin ikisi ayni cevabi aliyor.
+        if (!aktifler.some((p) => p.id === id)) return { durum: "yok" as const };
+        if (aktifler.length <= 1) return { durum: "son-personel" as const };
+
+        await tx
+          .update(personel)
+          .set({ aktif: false })
+          .where(and(eq(personel.id, id), eq(personel.isletmeId, kiraci)));
+
+        return { durum: "tamam" as const };
+      });
     },
 
     async kullanicilariListele() {

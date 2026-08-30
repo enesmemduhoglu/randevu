@@ -163,19 +163,56 @@ test("personelPasifleStir baska isletmenin personelini pasife alamiyor", async (
   const b = await isletmeKur("isletme-b");
 
   const bPersonel = await hamPersonelEkle(b.isletmeId, "B Berk");
+  // b'nin ikinci personeli: yoksa "son personel" kurali devreye girer ve test
+  // IDOR'u degil o kurali olcmus olurdu.
+  await hamPersonelEkle(b.isletmeId, "B Bora");
 
   const aDb = await getScopedDb(a.oturum);
-  const etkilenen = await aDb.personelPasifleStir(bPersonel.id);
+  const sonuc = await aDb.personelPasifleStir(bPersonel.id);
 
-  expect(etkilenen).toBe(0);
+  // "yok" - baska kiraciya ait kayit ile hic olmayan kayit ayni gorunmeli.
+  expect(sonuc.durum).toBe("yok");
 
   const sonrasi = await hamPersonelOku(bPersonel.id);
   expect(sonrasi?.aktif).toBe(true);
 
-  // Kendi personelini pasife alabiliyor.
+  // Kendi personelini pasife alabiliyor (ikinci personel varken).
   const aPersonel = await hamPersonelEkle(a.isletmeId, "A Ayse");
-  expect(await aDb.personelPasifleStir(aPersonel.id)).toBe(1);
+  await hamPersonelEkle(a.isletmeId, "A Ali");
+  expect((await aDb.personelPasifleStir(aPersonel.id)).durum).toBe("tamam");
   expect((await hamPersonelOku(aPersonel.id))?.aktif).toBe(false);
+});
+
+test("son aktif personel pasife alinamiyor", async () => {
+  // Randevu bir personele baglanmak zorunda; son kisiyi de pasiflemek
+  // isletmeyi randevu alinamaz duruma sokardi.
+  const a = await isletmeKur("isletme-a");
+  const tek = await hamPersonelEkle(a.isletmeId, "Tek Kisi");
+
+  const aDb = await getScopedDb(a.oturum);
+  expect((await aDb.personelPasifleStir(tek.id)).durum).toBe("son-personel");
+  expect((await hamPersonelOku(tek.id))?.aktif).toBe(true);
+});
+
+test("ayni anda gelen iki pasifleme istegi son personeli birakiyor", async () => {
+  // Sayma ve guncelleme ayni transaction'da ve satirlar kilitleniyor; olmasa
+  // iki istek de "son degil" gorup ikisini birden pasifleyebilirdi.
+  const a = await isletmeKur("isletme-a");
+  const bir = await hamPersonelEkle(a.isletmeId, "Bir");
+  const iki = await hamPersonelEkle(a.isletmeId, "Iki");
+
+  const aDb = await getScopedDb(a.oturum);
+  await Promise.all([
+    aDb.personelPasifleStir(bir.id),
+    aDb.personelPasifleStir(iki.id),
+  ]);
+
+  const kalanAktif = [
+    (await hamPersonelOku(bir.id))?.aktif,
+    (await hamPersonelOku(iki.id))?.aktif,
+  ].filter(Boolean);
+
+  expect(kalanAktif).toHaveLength(1);
 });
 
 test("personelEkle kaydi her zaman oturumun isletmesine bagliyor", async () => {
