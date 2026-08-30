@@ -6,9 +6,16 @@
 // kapanis degiskeni. Yanlis kiracinin verisini istemek icin once bu dosyayi
 // degistirmek gerekiyor - unutmakla olmuyor.
 
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
-import { isletme, kullanici, personel } from "@/db/sema";
+import {
+  calismaSaati,
+  hizmet,
+  isletme,
+  kullanici,
+  personel,
+  personelHizmet,
+} from "@/db/sema";
 import { getDb } from "@/lib/db";
 
 export type Rol = "SAHIP" | "PERSONEL" | "MUSTERI";
@@ -25,6 +32,23 @@ type YeniPersonel = {
   ad: string;
   unvan?: string | null;
   sira?: number;
+};
+
+type YeniHizmet = {
+  ad: string;
+  aciklama?: string | null;
+  sureDk: number;
+  fiyatKurus?: number;
+  renk?: string | null;
+  sira?: number;
+};
+
+/// Bir personelin bir gunune ait tek aralik. Ogle arasi icin ayni gune iki
+/// satir gonderiliyor.
+export type CalismaAraligi = {
+  haftaninGunu: number;
+  baslangicDk: number;
+  bitisDk: number;
 };
 
 /// Isletme oturumuna bagli, kiraci filtresi enjekte edilmis veri kapisi.
@@ -104,6 +128,200 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
         .select()
         .from(kullanici)
         .where(eq(kullanici.isletmeId, kiraci));
+    },
+
+    // ---- Ayarlar ----------------------------------------------------------
+
+    async ayarlariGuncelle(veri: {
+      ad?: string;
+      telefon?: string | null;
+      adres?: string | null;
+      hakkinda?: string | null;
+      saatDilimi?: string;
+      slotAraligiDk?: number;
+      minOnceBildirimDk?: number;
+      maksIleriGun?: number;
+      otomatikOnay?: boolean;
+    }) {
+      const sonuc = await db
+        .update(isletme)
+        .set(veri)
+        .where(eq(isletme.id, kiraci))
+        .returning({ id: isletme.id });
+      return sonuc.length;
+    },
+
+    // ---- Hizmetler --------------------------------------------------------
+
+    async hizmetleriListele({ pasifDahil = false } = {}) {
+      const kosul = pasifDahil
+        ? eq(hizmet.isletmeId, kiraci)
+        : and(eq(hizmet.isletmeId, kiraci), eq(hizmet.aktif, true));
+
+      return db
+        .select()
+        .from(hizmet)
+        .where(kosul)
+        .orderBy(asc(hizmet.sira), asc(hizmet.ad));
+    },
+
+    async hizmetGetir(id: string) {
+      const [kayit] = await db
+        .select()
+        .from(hizmet)
+        // Iki kosul birlikte: id tek basina yeterli DEGIL.
+        .where(and(eq(hizmet.id, id), eq(hizmet.isletmeId, kiraci)))
+        .limit(1);
+      return kayit ?? null;
+    },
+
+    async hizmetEkle(veri: YeniHizmet) {
+      const [kayit] = await db
+        .insert(hizmet)
+        .values({ ...veri, isletmeId: kiraci })
+        .returning();
+      return kayit;
+    },
+
+    async hizmetGuncelle(id: string, veri: Partial<YeniHizmet>) {
+      const sonuc = await db
+        .update(hizmet)
+        .set(veri)
+        .where(and(eq(hizmet.id, id), eq(hizmet.isletmeId, kiraci)))
+        .returning({ id: hizmet.id });
+      // 0 donuyorsa kayit yok YA DA baska kiraciya ait - ikisi de cagirana
+      // ayni gorunmeli.
+      return sonuc.length;
+    },
+
+    /// Hizmet SILINMIYOR, pasifleniyor. Gecmis randevular ona bagli
+    /// (`ON DELETE restrict`) ve silinen bir hizmet gecmisi de goturur.
+    async hizmetPasifleStir(id: string) {
+      const sonuc = await db
+        .update(hizmet)
+        .set({ aktif: false })
+        .where(and(eq(hizmet.id, id), eq(hizmet.isletmeId, kiraci)))
+        .returning({ id: hizmet.id });
+      return sonuc.length;
+    },
+
+    // ---- Personel <-> hizmet ---------------------------------------------
+
+    async personelHizmetleriniListele(personelId: string) {
+      return db
+        .select({ hizmetId: personelHizmet.hizmetId })
+        .from(personelHizmet)
+        .where(
+          and(
+            eq(personelHizmet.personelId, personelId),
+            eq(personelHizmet.isletmeId, kiraci),
+          ),
+        );
+    },
+
+    /// Personelin verdigi hizmetleri TOPLU yazar (once siler, sonra ekler).
+    ///
+    /// Tek tek ekle/cikar yerine toplu yazma: arayuz zaten kutucuk listesi
+    /// gonderiyor ve araya giren ikinci bir istek yarim bir kume birakmasin.
+    /// Bos liste "hicbiri" degil "hepsi" demek - sema yorumuna bak.
+    async personelHizmetleriniYaz(personelId: string, hizmetIdler: string[]) {
+      return db.transaction(async (tx) => {
+        // KIRACI KONTROLU. Bu satir olmadan baska isletmenin personeline
+        // baglanti yazilabilirdi: asagidaki insert isletmeId'yi kendisi
+        // koyuyor, yani satir "bizim" gorunur ama personel onlarin olurdu.
+        const [sahiplik] = await tx
+          .select({ id: personel.id })
+          .from(personel)
+          .where(and(eq(personel.id, personelId), eq(personel.isletmeId, kiraci)))
+          .limit(1);
+        if (!sahiplik) return { durum: "yok" as const };
+
+        // Hizmetlerin de bizim olmasi gerekiyor; yabanci id sessizce
+        // eklenmemeli.
+        const bizimHizmetler = hizmetIdler.length
+          ? await tx
+              .select({ id: hizmet.id })
+              .from(hizmet)
+              .where(
+                and(eq(hizmet.isletmeId, kiraci), inArray(hizmet.id, hizmetIdler)),
+              )
+          : [];
+
+        if (bizimHizmetler.length !== hizmetIdler.length) {
+          return { durum: "gecersiz-hizmet" as const };
+        }
+
+        await tx
+          .delete(personelHizmet)
+          .where(
+            and(
+              eq(personelHizmet.personelId, personelId),
+              eq(personelHizmet.isletmeId, kiraci),
+            ),
+          );
+
+        if (bizimHizmetler.length) {
+          await tx.insert(personelHizmet).values(
+            bizimHizmetler.map((h) => ({
+              personelId,
+              hizmetId: h.id,
+              isletmeId: kiraci,
+            })),
+          );
+        }
+
+        return { durum: "tamam" as const };
+      });
+    },
+
+    // ---- Calisma saatleri -------------------------------------------------
+
+    async calismaSaatleriniListele(personelId?: string) {
+      const kosul = personelId
+        ? and(
+            eq(calismaSaati.isletmeId, kiraci),
+            eq(calismaSaati.personelId, personelId),
+          )
+        : eq(calismaSaati.isletmeId, kiraci);
+
+      return db
+        .select()
+        .from(calismaSaati)
+        .where(kosul)
+        .orderBy(asc(calismaSaati.haftaninGunu), asc(calismaSaati.baslangicDk));
+    },
+
+    /// Bir personelin HAFTASINI komple yazar.
+    ///
+    /// Neden toplu: haftalik duzen kullanicinin kafasinda tek bir sey. Satir
+    /// satir ekle/sil API'si, yarim uygulanmis bir haftanin ortaya cikmasina
+    /// izin verirdi - pazartesi silinmis, yenisi yazilamamis gibi.
+    async calismaSaatleriniYaz(personelId: string, araliklar: CalismaAraligi[]) {
+      return db.transaction(async (tx) => {
+        const [sahiplik] = await tx
+          .select({ id: personel.id })
+          .from(personel)
+          .where(and(eq(personel.id, personelId), eq(personel.isletmeId, kiraci)))
+          .limit(1);
+        if (!sahiplik) return { durum: "yok" as const };
+
+        await tx
+          .delete(calismaSaati)
+          .where(
+            and(
+              eq(calismaSaati.personelId, personelId),
+              eq(calismaSaati.isletmeId, kiraci),
+            ),
+          );
+
+        if (araliklar.length) {
+          await tx.insert(calismaSaati).values(
+            araliklar.map((a) => ({ ...a, personelId, isletmeId: kiraci })),
+          );
+        }
+
+        return { durum: "tamam" as const };
+      });
     },
   };
 }
