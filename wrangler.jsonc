@@ -14,6 +14,23 @@
   "observability": {
     "enabled": true
   },
+  // workers.dev KAPALI, tek adres custom domain.
+  //
+  // Iki sebep: (1) bu hesapta workers.dev alt alan adi kayitli degil ve
+  // wrangler'in otomatik denedigi "randevu" adi kuresel olarak alinmis;
+  // (2) plan zaten tek kanonik adres istiyor - iki adresten servis edilen bir
+  // uygulama, checkOrigin listesini ve paylasilan baglantilari ikiye boler.
+  "workers_dev": false,
+  // custom_domain: true -> Cloudflare bu ALT ALAN ADI icin DNS kaydini
+  // kendisi olusturuyor ve sertifikayi yonetiyor. Kok alan adina
+  // DOKUNMUYOR: orada baska bir proje ve Email Routing'in MX kayitlari
+  // duruyor (bkz. docs/plan.md).
+  "routes": [
+    {
+      "pattern": "randevu.enesmemduhoglu.tech",
+      "custom_domain": true
+    }
+  ],
   // Kaynak: Supabase Supavisor SESSION MODE (port 5432). Direct baglanti
   // (db.<ref>.supabase.co) yalnizca IPv6 cozdugu icin kullanilamiyor; 6543
   // transaction mode ise Prisma'nin named prepared statement'larini kiriyor.

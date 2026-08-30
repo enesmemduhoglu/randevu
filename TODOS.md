@@ -840,3 +840,60 @@ Aynı koşumda doğrulanan diğerleri:
 - Bundle **1621 KiB gzip** (3 MiB sınırının 1451 KiB altında)
 
 **Sonuç:** deploy'un önünde teknik bir bilinmeyen kalmadı.
+
+### İlk yayın — 30 Ağustos 2026
+
+**Canlı: https://randevu.enesmemduhoglu.tech**
+
+Faz B'den beri bekleyen deploy yapıldı. Version ID `58a1e2ab`, Worker açılış
+süresi **25 ms**, bundle **1621 KiB gzip**.
+
+#### workers.dev kapatıldı, tek adres custom domain
+
+`wrangler deploy` ilk denemede hesap ayarına takıldı: bu hesapta workers.dev
+alt alan adı kayıtlı değildi ve wrangler'ın otomatik denediği `randevu` adı
+küresel olarak alınmış. İki yol vardı; **custom domain** seçildi.
+
+`wrangler.jsonc`'ye `"workers_dev": false` ve `custom_domain: true` ile
+`randevu.enesmemduhoglu.tech` yazıldı. Cloudflare DNS kaydını ve sertifikayı
+kendisi yönetiyor. **Kök alan adına dokunulmadı** — orada başka bir proje ve
+Email Routing'in MX kayıtları duruyor (`docs/plan.md`).
+
+Tek adres olması ayrıca bilinçli: iki adresten servis edilen bir uygulama
+`checkOrigin` listesini ve paylaşılan bağlantıları ikiye böler.
+
+#### Windows tuzağı tekrar çıktı
+
+İlk `cf:yayinla` `.open-next` üzerinde **EPERM** ile düştü. `CLAUDE.md`'de
+yazan tuzak: `wrangler dev` çalışırken dizin kilitli kalıyor. Bu sefer kilidi
+tutan şey `cf:onizle`'nin süreç ağacıydı — port dinleyen süreci öldürmek
+yetmedi, `taskkill /T` ile ağacın tamamını kapatmak gerekti (wrangler ölen
+workerd'yi yeniden başlatıyor).
+
+#### Üretimde doğrulananlar
+
+| | |
+|---|---|
+| DNS + TLS | geçerli sertifika, kök sayfa 200 |
+| `/saglik` | Hyperdrive → Supavisor → Postgres 17, gidiş-dönüş **228 ms** |
+| Oturumsuz `/panel` | 307 → `/giris?devam=/panel` |
+| Origin'siz POST | **403** — DEĞİŞMEZ 2 üretimde de tutuyor |
+| Kayıt → panel | 200, panel doğru veriyle geldi |
+| Para ayrıştırma | `400,25` → `40025` kuruş |
+| Müsaitlik (oturumsuz) | 26 slot, öğle arası kesik (11:00 → 13:00), son 17:00 |
+| `Cache-Control` | `no-store` |
+
+Duman testi verisi üretimden **silindi** (`isletme` silinince kiracıya bağlı
+her şey cascade ile gidiyor). Üretim veritabanı yine boş.
+
+#### Yayın sonrası kalanlar
+
+- [ ] Supabase'de `site_url` hâlâ `http://localhost:3000`. Şifre sıfırlama ve
+      e-posta doğrulama akışları açılmadan önce
+      `https://randevu.enesmemduhoglu.tech` yapılmalı.
+- [ ] Üretim, `main` dalının **önünde**: yayın `duzeltme/telefon-bicimi`
+      dalından yapıldı (PR #6'daki üç düzeltmeyi içeriyor). PR merge edilince
+      ikisi hizalanır.
+- [ ] Supabase'de duman testinden kalan bir auth kullanıcısı var
+      (`duman-<zaman>@example.com`); bizim tablolarımızda karşılığı yok.
+- [ ] `/api/musaitlik` üzerinde hız sınırı yok (Faz G).
