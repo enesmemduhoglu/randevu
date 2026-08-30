@@ -3,7 +3,8 @@
 Renk, tipografi ve bileşen kuralları. Ses tonu ve metin dili `docs/marka.md`'de.
 Tek kaynak `src/app/globals.css`; bu belge oradaki kararların gerekçesi.
 
-Canlı referans: **`/vitrin`** — bütün token'lar ve bileşen durumları tek sayfada.
+Canlı referans: **`/panel/gelistirici/vitrin`** — bütün token'lar ve bileşen
+durumları tek sayfada. Geliştirici aracı; halka açık bir sayfa değil.
 
 ## Yön
 
@@ -92,8 +93,8 @@ sınırına giriyor.
 
 **`latin-ext` subset'i şart.** Türkçe'nin `ğ ı ş İ` karakterleri `latin`
 subset'inde yok; eksik olsaydı bu harfler yedek fonta düşer ve başlıklarda
-görünür bir karışıklık olurdu. `/vitrin` sayfasındaki örnek metinler bu
-karakterleri bilerek içeriyor.
+görünür bir karışıklık olurdu. `/panel/gelistirici/vitrin` sayfasındaki örnek
+metinler bu karakterleri bilerek içeriyor.
 
 ## Bileşen kuralları
 
@@ -110,6 +111,11 @@ gezilebilmeli.
 durum her zaman kötü görünür.
 
 **Etiket her zaman görünür.** Yer tutucu etiketin yerini almaz.
+
+**Form alanı yüksekliği bağlama göre.** shadcn varsayılanı `h-8`; bu ölçü
+panel içi yoğun arayüz için. Müşterinin ya da işletme sahibinin telefondan
+doldurduğu formlarda (`/giris`, `/kayit`) `h-10` kullanılır — etiketle
+birlikte 44px dokunma hedefine giriyor. Aynı kural buton için de geçerli.
 
 ## Yeni token eklerken
 

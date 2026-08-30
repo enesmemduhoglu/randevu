@@ -16,18 +16,22 @@ Yorumlar "ne yaptigini" degil **"neden boyle yaptigini"** anlatir.
 
 ## Degismezler
 
-**1. Route handler'da ham `db.*` yok.** Kiraciya bagli her sorgu
+**1. `src/app` altinda ham `db` yok.** Kiraciya bagli her sorgu
 `src/lib/scoped-db.ts` uzerinden gider; o her sorguya oturumun `isletmeId`
 filtresini enjekte eder. Yeni bir sorgu tipi gerekiyorsa route'a ham Drizzle
 yazma, `scoped-db.ts`'e metot ekle. Muaf dosyalar: `src/lib/db.ts`,
-`src/lib/scoped-db.ts`, `src/lib/auth.ts`.
+`src/lib/scoped-db.ts`, `src/lib/auth.ts`, `src/lib/kayit.ts`,
+`src/lib/saglik.ts`.
 
-> **Dikkat: bu kural artik otomatik zorlanmiyor.** `warden` degismez kapisi
-> Prisma'nin `db.model.method(` bicimini ariyor; Drizzle'in
-> `db.select().from()` bicimini yakalamiyor. Faz D'de `scoped-db.ts` gelince
-> ESLint `no-restricted-imports` kuraliyla deterministik hale getirilecek:
-> `src/app/**/route.ts` icinden `@/lib/db` import etmek yasak olacak.
-> O kural yazilana kadar bu degismez **incelemeye bagli**.
+> **Zorlayan: ESLint `no-restricted-imports`** (`eslint.config.mjs`).
+> `src/app/**` icinden `@/lib/db` import etmek hata veriyor. Kapsam route
+> handler'lardan GENIS: sunucu bilesenleri de sorgu yapabiliyor ve yanlis
+> kiracinin verisini okuma riski birebir ayni.
+>
+> Faz B'de Drizzle'a gecerken bu kural bir sure zorlanamamisti - `warden`
+> degismez kapisi Prisma'nin `db.model.method(` bicimini ariyor, Drizzle'in
+> `db.select().from()` bicimini yakalamiyor. Faz D'de eslint kuraliyla geri
+> geldi.
 
 **2. Mutasyon route'unda `checkOrigin`.** POST/PUT/PATCH/DELETE'te CSRF ikinci
 katmani. `SameSite=Lax` tek basina yetmez: `multipart/form-data` kabul eden

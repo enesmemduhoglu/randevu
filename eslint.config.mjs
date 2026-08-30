@@ -17,6 +17,37 @@ const eslintConfig = defineConfig([
     ".wrangler/**",
     "cloudflare-env.d.ts",
   ]),
+
+  // DEGISMEZ 1 — kiraci izolasyonu.
+  //
+  // Prisma'dayken bu kurali warden'in degismez kapisi zorluyordu: route
+  // handler'da `db.model.method(` gorunce blokluyordu. Drizzle'in
+  // `db.select().from()` bicimini o regex yakalamiyor, yani kural Faz B'den
+  // beri yalnizca incelemeye bagliydi. Burasi o borcu kapatiyor.
+  //
+  // Kapsam route handler'lardan genis tutuldu: sunucu bilesenleri de sorgu
+  // yapabiliyor ve yanlis kiracinin verisini okuma riski birebir ayni.
+  {
+    files: ["src/app/**/*.ts", "src/app/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/db",
+              message:
+                "src/app altinda ham veritabani istemcisi kullanilmaz: kiraci " +
+                "filtresi unutulabilir. Kiraciya bagli sorgular icin " +
+                "@/lib/scoped-db > getScopedDb(oturum), oturumsuz halka acik " +
+                "okumalar icin getHalkaAcikDb(slug) kullan. Gereken sorgu " +
+                "yoksa route'a ham sorgu yazma, scoped-db'ye metot ekle.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

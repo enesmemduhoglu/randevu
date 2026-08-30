@@ -1,7 +1,5 @@
 import { CalendarX2Icon } from "lucide-react";
 
-import { Logo } from "@/components/marka/logo";
-import { TemaDugmesi } from "@/components/tema-dugmesi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,8 +16,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Bilesen vitrini: Faz C'nin gozle dogrulanabilir ciktisi. Token'lar, tipografi
 // ve bilesen durumlari tek sayfada duruyor ki bir sey bozuldugunda burada
-// gorulsun. Uretimde kimseye gosterilmeyecek; Faz D'de panel gelince
-// /panel/gelistirici altina tasinacak.
+// gorulsun. Halka acik bir sayfa degil, gelistirici araci: Faz D'de panel
+// gelince /vitrin'den /panel/gelistirici/vitrin altina tasindi.
 
 function Bolum({
   baslik,
@@ -77,12 +75,9 @@ const SAATLER = [
 
 export default function VitrinSayfasi() {
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 py-10">
-      <header className="mb-10 flex items-center justify-between">
-        <Logo />
-        <TemaDugmesi />
-      </header>
-
+    <div className="w-full max-w-3xl">
+      {/* Kendi basligi ve tema dugmesi yok: sayfa artik panel kabugunun
+          icinde aciliyor ve ikisi de orada duruyor. */}
       <div className="space-y-12">
         <Bolum
           baslik="Tipografi"

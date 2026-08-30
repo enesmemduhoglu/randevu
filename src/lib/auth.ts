@@ -1,0 +1,126 @@
+// KAPI DISI DOSYA (bkz. CLAUDE.md degismez 1). Ham veritabani erisimi burada
+// mesru: aranan kayit kiraciya bagli DEGIL, kiraciyi belirleyen kaydin ta
+// kendisi. scoped-db bu dosyanin ciktisini girdi olarak aliyor.
+
+import { eq } from "drizzle-orm";
+import { cache } from "react";
+
+import { kullanici } from "@/db/sema";
+import { getDb } from "@/lib/db";
+import type { IsletmeOturumu, Rol } from "@/lib/scoped-db";
+import { supabaseSunucu } from "@/lib/supabase/sunucu";
+
+export type Oturum = {
+  kullaniciId: string;
+  authUserId: string;
+  eposta: string;
+  ad: string;
+  rol: Rol;
+  /// DEGISMEZ 6: duz string. Musteri rolunde null - musteri tek bir isletmeye
+  /// bagli degil.
+  isletmeId: string | null;
+};
+
+/// Supabase'in bildigi kadariyla kimlik. Bizim `kullanici` tablomuza HIC
+/// bakmiyor, yani kaydi yarida kalmis bir kisi icin de doluyor.
+export type AuthKimligi = {
+  authUserId: string;
+  eposta: string;
+  /// Kayit sirasinda Supabase'e yazilan ad. Kayit tamamlama formunu on
+  /// doldurmak icin; guvenilir bir alan degil, kullanici kendi yaziyor.
+  ad: string | null;
+};
+
+/// Token'daki kimlik. Veritabanina dokunmuyor.
+///
+/// getClaims, getSession'in aksine imzayi DOGRULUYOR. Asimetrik imza
+/// anahtarlariyla dogrulama yerelde WebCrypto ile yapiliyor, JWKS
+/// onbellekleniyor - istek basina ag turu yok. getSession cookie'den geleni
+/// dogrulamadan donduruyor ve Supabase kendi dokumaninda ona guvenilmemesi
+/// gerektigini soyluyor.
+/// `cache` gerekcesi auth() ile ayni: panel duzeni once auth(), oturum yoksa
+/// authKimligi() cagiriyor - ikincisi zaten birincinin icinde kosmustu.
+export const authKimligi = cache(async function authKimligi(): Promise<AuthKimligi | null> {
+  const supabase = await supabaseSunucu();
+
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims?.sub) return null;
+
+  const claims = data.claims;
+  const metaAd = (claims.user_metadata as { ad?: unknown } | undefined)?.ad;
+
+  return {
+    authUserId: claims.sub,
+    eposta: typeof claims.email === "string" ? claims.email : "",
+    ad: typeof metaAd === "string" && metaAd.trim() ? metaAd.trim() : null,
+  };
+});
+
+/// Auth kullanicisinin BIZDEKI kaydi. Kayit akisinin yarida kalip kalmadigini
+/// anlamak icin de kullaniliyor: Supabase'de hesap var ama burada satir yoksa
+/// kiracisiz bir kimlik var demektir.
+export async function kullaniciyiYukle(authUserId: string) {
+  const db = await getDb();
+  const [kayit] = await db
+    .select({
+      id: kullanici.id,
+      eposta: kullanici.eposta,
+      ad: kullanici.ad,
+      rol: kullanici.rol,
+      isletmeId: kullanici.isletmeId,
+    })
+    .from(kullanici)
+    .where(eq(kullanici.authUserId, authUserId))
+    .limit(1);
+
+  return kayit ?? null;
+}
+
+/// Istegi yapan kisiyi cozer. Oturum yoksa null.
+///
+/// Kimlik SUPABASE JWT'sinden, yetki KENDI veritabanimizdan geliyor. Ikisini
+/// ayirmak bilincli: rol ya da kiraci degistiginde token'in yenilenmesini
+/// beklemiyoruz, bir sonraki istekte dogru deger okunuyor.
+///
+/// `cache` ile sarili: panel duzeni ve onun icindeki sayfa AYNI istekte ikisi
+/// de oturumu soruyor. Sarmadan her biri kendi JWT dogrulamasini ve kendi
+/// veritabani sorgusunu yapardi. React'in cache'i istek basina calisiyor, yani
+/// istekler arasi bir onbellek degil - bayat oturum riski yok.
+export const auth = cache(async function auth(): Promise<Oturum | null> {
+  const kimlik = await authKimligi();
+  if (!kimlik) return null;
+
+  const kayit = await kullaniciyiYukle(kimlik.authUserId);
+
+  // Supabase'de hesap var ama bizde kullanici kaydi yok: kayit akisi yarida
+  // kalmis demektir. Oturum acilmis saymiyoruz - yarim bir hesapla panele
+  // girmek, kiracisi olmayan bir oturum uretirdi. Cagiran taraf bu durumu
+  // authKimligi() ile ayirt edip kullaniciyi /kayit/tamamla'ya gonderiyor.
+  if (!kayit) return null;
+
+  return {
+    kullaniciId: kayit.id,
+    authUserId: kimlik.authUserId,
+    eposta: kayit.eposta,
+    ad: kayit.ad,
+    rol: kayit.rol,
+    isletmeId: kayit.isletmeId,
+  };
+});
+
+/// Panel tarafi icin daraltilmis oturum. Isletmeye bagli olmayan bir rol
+/// (musteri) ya da isletmeId'si olmayan bir kayit buraya gecemiyor; boylece
+/// scoped-db'nin `isletmeId: string` sozlesmesi tip seviyesinde garanti.
+export async function isletmeOturumu(): Promise<IsletmeOturumu | null> {
+  const oturum = await auth();
+  if (!oturum) return null;
+  if (oturum.rol === "MUSTERI") return null;
+  if (!oturum.isletmeId) return null;
+
+  return {
+    kullaniciId: oturum.kullaniciId,
+    authUserId: oturum.authUserId,
+    isletmeId: oturum.isletmeId,
+    rol: oturum.rol,
+  };
+}
