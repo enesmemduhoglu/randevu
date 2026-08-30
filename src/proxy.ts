@@ -16,7 +16,10 @@ import { NextResponse, type NextRequest } from "next/server";
 // Gercek yetkilendirme her zaman sunucu tarafinda auth() ile yapiliyor:
 // cookie'nin varligi kimlik kaniti DEGIL.
 
-const KORUMALI = ["/panel"];
+// /kayit/tamamla da burada: o ekran yalnizca Supabase kimligi olan ama bizde
+// kaydi olmayan kisi icin anlamli. Cookie'si hic olmayani buradan cevirmek,
+// sayfayi acip orada yonlendirmekten ucuz.
+const KORUMALI = ["/panel", "/kayit/tamamla"];
 
 export async function proxy(istek: NextRequest) {
   let yanit = NextResponse.next({ request: istek });
@@ -62,7 +65,13 @@ export async function proxy(istek: NextRequest) {
 export const config = {
   // Statik varliklar ve resim optimizasyonu disinda her yol. Proxy her istekte
   // kostugu icin kapsam dar tutuluyor.
+  //
+  // `/api` de DISARIDA. Sebep, performans degil dogruluk: proxy'nin tek isi
+  // cookie yenilemek ve bunu route handler'lar zaten KENDILERI yapabiliyor
+  // (sunucu bilesenlerinin aksine `cookies().set` orada calisiyor). Ikisi ayni
+  // yanitta cookie yazarsa hangi Set-Cookie'nin sonda kalacagi belirsizlesir -
+  // cikis isteginde bu, oturumu temizlememek anlamina gelirdi.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
