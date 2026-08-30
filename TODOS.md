@@ -355,16 +355,10 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
 
 ### Bilinen durum
 
-- **Supabase'de *Confirm email* hâlâ AÇIK.** Elle denemede ortaya çıktı: kayıt
-  isteği `over_email_send_rate_limit` ile döndü, yani Supabase doğrulama maili
-  göndermeye çalışıyor ve yerleşik SMTP'nin saatte 2 mesaj sınırına takılıyor.
-  Kapatılana kadar kayıt akışı ilk iki denemeden sonra tıkanıyor. Kod bu
-  duruma hazır (`data.session` yoksa kullanıcı `/giris`'e mesajla
-  yönlendiriliyor) ama üretim davranışı bu olmamalı.
-- **Uçtan uca mutlu yol elle doğrulanmadı** — yukarıdaki sınır yüzünden.
-  Doğrulanan: CSRF kapısı (403), doğrulama hataları (400), olmayan hesapla
-  giriş (401, gerçek Supabase'e ulaşarak), oturumsuz `/panel` ve
-  `/kayit/tamamla` yönlendirmeleri (307 → `/giris?devam=…`).
+- ~~Supabase'de *Confirm email* hâlâ açık.~~ **Faz F sırasında kapatıldı ve
+  akış uçtan uca doğrulandı** — bkz. "Uçtan uca doğrulama" bölümü. Kod her iki
+  duruma da hazır: `data.session` yoksa kullanıcı `/giris`'e mesajla
+  yönlendiriliyor.
 - Supabase'de `faz-d-deneme@example.com` için sahipsiz bir hesap kalmış
   olabilir (istek e-posta gönderimi adımında düştü). Yerel veritabanında
   karşılığı yok — kontrol edilip silinebilir.
@@ -400,12 +394,12 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
       Göç yalnızca EKLEME (rol enum'u + kullanıcı + personel tabloları), mevcut
       işletme tablosuna dokunmuyor, veri kaybı yok. Geri alma: iki `drop table`
       ve bir `drop type`.
-- [ ] **Supabase panelinde *Confirm email* KAPATILMALI** (Authentication →
-      Sign In / Providers → Email). Şu an açık ve kayıt akışını tıkıyor.
-      Yerleşik SMTP saatte 2 mail ile sınırlı; domain + Resend custom SMTP
-      bağlanana kadar (Faz I) kapalı kalmalı.
-- [ ] Confirm email kapatıldıktan sonra **uçtan uca elle doğrulama**: kayıt →
-      panel, çıkış, tekrar giriş, `?devam=` ile korunan sayfaya dönüş.
+- [x] **Supabase'de *Confirm email* KAPATILDI** (30 Ağustos 2026,
+      Management API: `mailer_autoconfirm: true`). Yerleşik SMTP saatte 2 mail
+      ile sınırlı; domain + Resend custom SMTP bağlanana kadar (Faz I) kapalı
+      kalmalı. Açılırsa kayıt akışı ilk iki denemeden sonra tıkanır.
+- [x] **Uçtan uca elle doğrulama yapıldı** (30 Ağustos 2026). Ayrıntı aşağıda
+      "Uçtan uca doğrulama" bölümünde.
 - [ ] Cloudflare'e yayınlarken `NEXT_PUBLIC_SUPABASE_URL` ve
       `NEXT_PUBLIC_SUPABASE_ANON_KEY` **derleme anında** ortamda olmalı;
       `NEXT_PUBLIC_` önekli değişkenler `cf:kur` adımında gömülüyor.
@@ -589,8 +583,8 @@ ihlalle sınandı — yakaladı.**
 - [ ] **Supabase'de `btree_gist` uzantısı** göçün ilk satırında kuruluyor
       (`CREATE EXTENSION IF NOT EXISTS`). Supabase bunu destekliyor; yetki
       hatası çıkarsa panelden Database → Extensions üzerinden açılabilir.
-- [ ] Faz D'den devreden madde: **Confirm email hâlâ AÇIK.** Kayıt akışı elle
-      hâlâ uçtan uca doğrulanamadı.
+- [x] Faz D'den devreden madde kapandı: Confirm email kapatıldı ve akış uçtan
+      uca doğrulandı.
 
 ---
 
@@ -715,8 +709,78 @@ kapanış değişkeni olarak tutuyor.
 
 ### Elle yapılması gerekenler (Faz F)
 
-- [ ] Faz D'den devrediyor: **Supabase'de Confirm email hâlâ AÇIK**
-      (`mailer_autoconfirm: false`). Kayıt akışı uçtan uca doğrulanamıyor.
+- [x] Faz D'den devreden madde kapandı: `mailer_autoconfirm: true` yapıldı ve
+      kayıt → panel akışı uçtan uca doğrulandı.
 - [ ] `randevu_dev` veritabanına örnek işletme tohumlandı (`isil-guzellik`,
       iki personel, iki hizmet, haftalık çalışma düzeni, bir randevu). Faz G
       geliştirmesi için duruyor; prod'a gitmiyor.
+
+---
+
+## Uçtan uca doğrulama — 30 Ağustos 2026
+
+Faz D'den beri bekleyen engel kalktı: Supabase'de *Confirm email* kapatıldı
+(`mailer_autoconfirm: true`, Management API üzerinden). Ardından Faz D-E-F'nin
+tamamı **çalışan uygulamada, gerçek Supabase ve gerçek Postgres'e karşı**
+sınandı. Aşağıdakilerin hepsi `next dev` üzerinde gözlendi.
+
+### Kimlik akışı
+
+| Adım | Sonuç |
+|---|---|
+| Kayıt (yeni e-posta) | `200 {"yon":"/panel"}`, dört `sb-*` cookie'si yazıldı |
+| Oturumla `/panel` | 200 |
+| Çıkış | `200 {"yon":"/giris"}`, cookie'ler temizlendi |
+| Çıkış sonrası `/panel` | `307 → /giris?devam=/panel` |
+| Yanlış şifreyle giriş | `401 "E-posta ya da şifre hatalı"` — hangisinin yanlış olduğu **söylenmiyor** |
+| Doğru şifre + `devam=/panel/hizmetler` | `200 {"yon":"/panel/hizmetler"}` |
+| **Açık yönlendirme denemesi** `devam=//kotu.site` | `200 {"yon":"/panel"}` — kapı tuttu |
+
+### Panel
+
+Altı sayfa da oturumla 200 dönüyor: `/panel`, `/panel/hizmetler`,
+`/panel/personel`, `/panel/calisma-saatleri`, `/panel/ayarlar`,
+`/panel/gelistirici/vitrin`.
+
+Mutasyonlar: hizmet eklendi (`"150,50"` → `fiyatKurus: 15050`, yani para
+ayrıştırması uçtan uca doğru), personel eklendi, ayarlar güncellendi.
+
+### IDOR — gerçek oturumla, çapraz kiracı
+
+Bir işletmenin oturumuyla **başka** bir işletmenin kayıtlarına üç ayrı saldırı
+denendi. Üçü de reddedildi ve kurban kayıtlar veritabanında **değişmedi**:
+
+| Deneme | Yanıt | Kurban kayıt |
+|---|---|---|
+| `PATCH /api/hizmetler/<başkasının-id>` | `404 "Hizmet bulunamadı"` | `Saç kesimi, 45 dk, aktif` — değişmedi |
+| `DELETE /api/hizmetler/<başkasının-id>` | `404 "Hizmet bulunamadı"` | aynı |
+| `PUT /api/personel/<başkasının-id>/calisma-saatleri` | `404 "Personel bulunamadı"` | 0 satır eklendi |
+
+404 mesajı bilerek "yetkiniz yok" demiyor: başka kiracıya ait bir kaydı istemek
+ile hiç olmayan bir kaydı istemek çağırana aynı görünmeli, yoksa kaydın varlığı
+sızar.
+
+### Müsaitlik motoru (Faz F)
+
+Tohumlanmış `randevu_dev` verisiyle (`isil-guzellik`, iki personel, iki hizmet,
+hafta içi 09:00-12:00 ve 13:00-18:00, cumartesi 10:00-16:00):
+
+| Senaryo | Sonuç |
+|---|---|
+| 45 dk hizmet, salı | Son sabah slotu **11:15**, sonra **13:00**; son slot **17:15** |
+| 120 dk hizmet | 18 slot, son **16:00** |
+| Cumartesi | 22 slot, 10:00–15:15 |
+| Pazar / geçmiş gün / pencere dışı | Boş |
+| Ayşe 10:00-10:45 dolu | O saatler **Ali**'ye düştü; **10:45 bitişik olduğu için Ayşe**'ye döndü |
+| Bilinmeyen slug / hizmet | 404 |
+| Bozuk tarih / eksik parametre | 400 |
+
+Son satır `'[)'` aralık semantiğinin uçtan uca doğru olduğunu gösteriyor: kısıt,
+motor ve sorgu katmanı aynı kuralı uyguluyor.
+
+### Bu doğrulamanın bıraktıkları
+
+- Supabase'de test hesapları kaldı (`deneme-<zaman>@example.com`). Silinmesi
+  gerekmiyor ama isteniyorsa Supabase panelinden Authentication → Users.
+- `randevu_dev` içinde iki örnek işletme var (`isil-guzellik` tohumu ve test
+  kaydı). Yalnızca geliştirme veritabanı; prod'a gitmiyor.
