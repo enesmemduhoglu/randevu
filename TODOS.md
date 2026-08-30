@@ -389,11 +389,9 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
 
 ### Elle yapılması gerekenler (Faz D)
 
-- [ ] **PR #3 merge edilince prod'a migration uygula:**
-      `npm run db:uygula:prod -- --onayla`
-      Göç yalnızca EKLEME (rol enum'u + kullanıcı + personel tabloları), mevcut
-      işletme tablosuna dokunmuyor, veri kaybı yok. Geri alma: iki `drop table`
-      ve bir `drop type`.
+- [x] **Prod'a uygulandı** (30 Ağustos 2026, Faz E göçüyle birlikte). Göç
+      yalnızca EKLEME'ydi (rol enum'u + kullanıcı + personel tabloları); mevcut
+      işletme tablosuna dokunmadı. Geri alma: iki `drop table`, bir `drop type`.
 - [x] **Supabase'de *Confirm email* KAPATILDI** (30 Ağustos 2026,
       Management API: `mailer_autoconfirm: true`). Yerleşik SMTP saatte 2 mail
       ile sınırlı; domain + Resend custom SMTP bağlanana kadar (Faz I) kapalı
@@ -575,14 +573,12 @@ ihlalle sınandı — yakaladı.**
 
 ### Elle yapılması gerekenler (Faz E)
 
-- [ ] **PR merge edilince prod'a göç uygula:** `npm run db:uygula:prod -- --onayla`
-      Göç yalnızca EKLEME (yedi tablo, dört enum, `btree_gist` uzantısı ve
-      `isletme`ye yeni kolonlar — hepsi `DEFAULT` değerli, mevcut satırlar
-      etkilenmiyor). Geri alma: yedi `drop table`, dört `drop type`, `isletme`
+- [x] **Prod'a uygulandı** (30 Ağustos 2026). Göç yalnızca EKLEME'ydi (yedi
+      tablo, dört enum, `btree_gist` uzantısı ve `isletme`ye `DEFAULT` değerli
+      kolonlar). Geri alma: yedi `drop table`, dört `drop type`, `isletme`
       kolonlarında `drop column`.
-- [ ] **Supabase'de `btree_gist` uzantısı** göçün ilk satırında kuruluyor
-      (`CREATE EXTENSION IF NOT EXISTS`). Supabase bunu destekliyor; yetki
-      hatası çıkarsa panelden Database → Extensions üzerinden açılabilir.
+- [x] **`btree_gist` Supabase'de sorunsuz kuruldu** — yetki hatası çıkmadı,
+      göçün ilk satırı (`CREATE EXTENSION IF NOT EXISTS`) yetti.
 - [x] Faz D'den devreden madde kapandı: Confirm email kapatıldı ve akış uçtan
       uca doğrulandı.
 
@@ -784,3 +780,34 @@ motor ve sorgu katmanı aynı kuralı uyguluyor.
   gerekmiyor ama isteniyorsa Supabase panelinden Authentication → Users.
 - `randevu_dev` içinde iki örnek işletme var (`isil-guzellik` tohumu ve test
   kaydı). Yalnızca geliştirme veritabanı; prod'a gitmiyor.
+
+### Prod göçü — 30 Ağustos 2026
+
+PR #3 ve #4 merge edildikten sonra `npm run db:uygula:prod -- --onayla`
+çalıştırıldı. Öncesinde prod'da yalnızca `isletme` tablosu ve tek bir göç
+vardı (Faz A); tablo boştu, yani veri riski yoktu.
+
+**Sonuç:** 10 tablo, 5 enum, `btree_gist` uzantısı, 3 göç uygulanmış durumda.
+`isletme`ye eklenen yedi kolonun hepsi `DEFAULT` değerli; mevcut satırlar
+etkilenmedi (zaten yoktu).
+
+`btree_gist` Supabase'de **yetki hatası çıkarmadan** kuruldu — göçün ilk
+satırındaki `CREATE EXTENSION IF NOT EXISTS` yetti. Panelden elle açmaya gerek
+kalmadı.
+
+#### Çakışma kısıtı PROD'da sınandı
+
+DEĞİŞMEZ 8'in üretimde gerçekten tuttuğu, **geri alınan bir transaction**
+içinde kanıtlandı — prod'a kalıcı hiçbir satır yazılmadı (sonrasında sayıldı:
+0). Her deneme kendi `SAVEPOINT`'inde koştu; ilk denemede bu yapılmamıştı ve
+23P01 hatası transaction'ı iptal edince sonraki komutlar `25P02` alıp anlamsız
+sonuç vermişti.
+
+| Deneme | Sonuç |
+|---|---|
+| Çakışan ikinci randevu | `23P01 randevu_cakisma_yok` — reddedildi |
+| Bitişik randevu (11:00 biten, 11:00 başlayan) | Kabul edildi — `'[)'` doğru |
+| Ters aralık (bitiş < başlangıç) | `23514 randevu_bitis_baslangictan_sonra` |
+| İptal edilenin saatine yeni randevu | Kabul edildi — `WHERE` koşulu doğru |
+
+Yani kısıt, motor ve sorgu katmanı üretimde de aynı kuralı uyguluyor.
