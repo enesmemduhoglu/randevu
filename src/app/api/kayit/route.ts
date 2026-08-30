@@ -2,6 +2,7 @@ import { adDogrula, epostaDogrula, sifreDogrula } from "@/lib/girdi";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
 import { isletmeKaydiOlustur } from "@/lib/kayit";
 import { checkOrigin } from "@/lib/origin";
+import { kayitHatasi, zatenKayitliMi } from "@/lib/supabase/hata";
 import { supabaseSunucu } from "@/lib/supabase/sunucu";
 
 // Kayit: Supabase'de hesap acar, ardindan isletme + sahip + varsayilan personel
@@ -18,23 +19,6 @@ import { supabaseSunucu } from "@/lib/supabase/sunucu";
 // kalirdi.
 //
 // YANIT SOZLESMESI: hata `{ hata }`, basari `{ yon }` (+ gerekiyorsa `mesaj`).
-
-/// Supabase "bu e-posta zaten kayitli" diyor mu?
-///
-/// Tip bildirimi yerine alan kontrolu: AuthError'in `code` alani surumle
-/// birlikte geldi, eski surumlerde yalnizca `message` vardi. Iki yolu da
-/// okumak, SDK yukseltmesinde bu dalin sessizce olmesini engelliyor.
-function zatenKayitliHatasi(hata: unknown): boolean {
-  if (typeof hata !== "object" || hata === null) return false;
-
-  const alanlar = hata as { code?: unknown; message?: unknown };
-  if (alanlar.code === "user_already_exists") return true;
-
-  return (
-    typeof alanlar.message === "string" &&
-    alanlar.message.toLowerCase().includes("already registered")
-  );
-}
 
 export async function POST(istek: Request) {
   const engel = checkOrigin(istek);
@@ -71,21 +55,14 @@ export async function POST(istek: Request) {
   });
 
   if (error) {
-    if (zatenKayitliHatasi(error)) {
+    if (zatenKayitliMi(error)) {
       return Response.json(
         { hata: "Bu e-posta ile bir hesap zaten var. Giriş yapın." },
         { status: 409 },
       );
     }
-    // DEGISMEZ 5: saglayicinin hata metni govdeye girmiyor.
-    return Response.json(
-      {
-        hata:
-          "Kayıt tamamlanamadı. Bağlantıda bir sorun oldu, birkaç saniye sonra " +
-          "tekrar deneyin.",
-      },
-      { status: 502 },
-    );
+    const cevap = kayitHatasi(error);
+    return Response.json({ hata: cevap.hata }, { status: cevap.durum });
   }
 
   const authKullanici = data.user;

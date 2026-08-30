@@ -2,6 +2,7 @@ import { kullaniciyiYukle } from "@/lib/auth";
 import { epostaDogrula, guvenliYol } from "@/lib/girdi";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
 import { checkOrigin } from "@/lib/origin";
+import { hizSiniriMi, hizSiniriYaniti } from "@/lib/supabase/hata";
 import { supabaseSunucu } from "@/lib/supabase/sunucu";
 
 // Giris: e-posta ve sifreyle Supabase oturumu acar, sonra kullaniciyi nereye
@@ -49,6 +50,14 @@ export async function POST(istek: Request) {
     email: eposta.deger,
     password: sifre,
   });
+
+  // Hiz siniri "sifre yanlis" DEGIL. Ayni mesaji verseydik kullanici sifresini
+  // yanlis hatirladigini sanip tekrar tekrar denerdi - ve her deneme siniri
+  // biraz daha uzatirdi.
+  if (hizSiniriMi(error)) {
+    const cevap = hizSiniriYaniti();
+    return Response.json({ hata: cevap.hata }, { status: cevap.durum });
+  }
 
   if (error || !data.user) {
     // TEK MESAJ, iki ayri durum icin. "Boyle bir hesap yok" ile "sifre yanlis"
