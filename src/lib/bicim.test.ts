@@ -7,6 +7,7 @@ import {
   saatBicimle,
   saatiDakikayaCevir,
   sureBicimle,
+  telefonBicimle,
 } from "@/lib/bicim";
 
 // Kurallarin kaynagi docs/marka.md. Bu testler o belgeyi kod haline getiriyor:
@@ -117,5 +118,31 @@ describe("gun adlari", () => {
       "Cumartesi",
       "Pazar",
     ]);
+  });
+});
+
+describe("telefonBicimle", () => {
+  test("on haneli numara marka bicimine giriyor", () => {
+    expect(telefonBicimle("5321234567")).toBe("0532 123 45 67");
+  });
+
+  test("bos ve tanimsiz deger bos dize", () => {
+    expect(telefonBicimle(null)).toBe("");
+    expect(telefonBicimle(undefined)).toBe("");
+    expect(telefonBicimle("")).toBe("");
+  });
+
+  test("tanimadigi bicim OLDUGU GIBI donuyor", () => {
+    // Eski ya da yurt disi bir numarayi bozup gostermektense ham haliyle
+    // gostermek daha durust.
+    expect(telefonBicimle("123")).toBe("123");
+    expect(telefonBicimle("+41791234567")).toBe("+41791234567");
+  });
+
+  test("telefonDogrula ile gidis-donus", async () => {
+    // Form bicimli degeri gonderiyor, sunucu yine rakama indirgiyor.
+    const { telefonDogrula } = await import("@/lib/ayar-girdi");
+    const geri = telefonDogrula(telefonBicimle("5321234567"));
+    expect(geri).toEqual({ tamam: true, deger: "5321234567" });
   });
 });

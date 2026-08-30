@@ -37,6 +37,21 @@ export function sureBicimle(dakika: number): string {
   return `${saat} sa ${dk} dk`;
 }
 
+/// Rakam dizisi -> "0532 123 45 67".
+///
+/// Veritabaninda telefon YALNIZCA RAKAM duruyor (10 hane, bastaki 0 ve 90
+/// kirpilmis) cunku `musteri` tablosunda benzersiz ve iki yazim iki ayri
+/// musteri kaydi uretirdi. Gosterim bicimi bu yuzden okuma aninda uretiliyor.
+///
+/// Tanimadigi bicimdeki deger OLDUGU GIBI donuyor: eski ya da yurt disi bir
+/// numarayi bozup gostermektense ham haliyle gostermek daha durust.
+export function telefonBicimle(rakamlar: string | null | undefined): string {
+  if (!rakamlar) return "";
+  if (!/^\d{10}$/.test(rakamlar)) return rakamlar;
+
+  return `0${rakamlar.slice(0, 3)} ${rakamlar.slice(3, 6)} ${rakamlar.slice(6, 8)} ${rakamlar.slice(8)}`;
+}
+
 /// Gece yarisindan itibaren dakika -> "09:00". Saat iki haneli (marka kurali).
 export function saatBicimle(dakika: number): string {
   const toplam = Math.max(0, Math.min(1440, Math.trunc(dakika)));
