@@ -97,6 +97,25 @@ describe("isletmeKaydiOlustur", () => {
     expect(hepsi).toHaveLength(1);
   });
 
+  test("ayni anda gelen iki kayit: ikincisi kaybediyor", async () => {
+    // Transaction once "bu authUserId kayitli mi" diye BAKIYOR; iki istek ayni
+    // anda gelirse ikisi de bos gorur. Kesin cevabi veren sey uygulama
+    // katmanindaki o kontrol degil, kullanici_auth_user_id_idx benzersizlik
+    // kisiti. Bu test tam olarak onu zorluyor.
+    const [ilk, ikinci] = await Promise.all([
+      isletmeKaydiOlustur({ ...temelGirdi, isletmeAdi: "Bir Salon" }),
+      isletmeKaydiOlustur({ ...temelGirdi, isletmeAdi: "Iki Salon" }),
+    ]);
+
+    expect([ilk.durum, ikinci.durum].sort()).toEqual(["tamam", "zaten-kayitli"]);
+
+    // Kaybeden taraf yarim kayit birakmamali: kendi isletmesini de geri almali.
+    const db = await getDb();
+    expect(await db.select().from(kullanici)).toHaveLength(1);
+    expect(await db.select().from(isletme)).toHaveLength(1);
+    expect(await db.select().from(personel)).toHaveLength(1);
+  });
+
   test("ayni addaki ikinci isletme sirali slug aliyor", async () => {
     const ilk = await isletmeKaydiOlustur(temelGirdi);
     const ikinci = await isletmeKaydiOlustur({

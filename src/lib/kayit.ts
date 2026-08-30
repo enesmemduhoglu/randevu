@@ -48,6 +48,30 @@ export type KayitSonucu =
   | { durum: "zaten-kayitli" }
   | { durum: "slug-uretilemedi" };
 
+/// Postgres benzersizlik ihlali (23505) mi, hangi kisitta?
+///
+/// postgres.js hatayi `code` ve `constraint_name` alanlariyla veriyor. Tip
+/// bildirimi yerine alan kontrolu yapiliyor: surucu tipi hatalari `Error`
+/// olarak veriyor ve `as` ile daraltmak, bir gun baska bir hata gelirse
+/// derleyicinin uyarmayacagi bir yalan olurdu.
+function benzersizIhlali(hata: unknown, kisit: string): boolean {
+  if (typeof hata !== "object" || hata === null) return false;
+
+  const alanlar = hata as {
+    code?: unknown;
+    constraint_name?: unknown;
+    message?: unknown;
+  };
+  if (alanlar.code !== "23505") return false;
+
+  // Kisit adi iki farkli yerden gelebiliyor. postgres.js protokoldeki alani
+  // `constraint_name` olarak aciyor; mesaj metnine dusmek ise yedek yol -
+  // surucu bir gun alani adlandirmayi degistirirse bu dal sessizce yanlis
+  // cevap vermek yerine calismaya devam eder.
+  if (alanlar.constraint_name === kisit) return true;
+  return typeof alanlar.message === "string" && alanlar.message.includes(kisit);
+}
+
 /// Kayit: isletme + sahip kullanici + varsayilan personel, TEK transaction'da.
 ///
 /// Uc kayit birlikte anlamli: isletmesi olmayan bir sahip panele giremez,
@@ -56,10 +80,34 @@ export type KayitSonucu =
 export async function isletmeKaydiOlustur(
   girdi: KayitGirdisi,
 ): Promise<KayitSonucu> {
-  const db = await getDb();
-
   const temelSlug = slugUret(girdi.isletmeAdi);
   if (!temelSlug) return { durum: "slug-uretilemedi" };
+
+  try {
+    return await tekDeneme(girdi, temelSlug);
+  } catch (hata) {
+    // DEGISMEZ 3'un ruhu: garanti veritabaninda. Asagidaki transaction once
+    // "bu authUserId kayitli mi" diye BAKIYOR, ama iki istek ayni anda
+    // gelirse ikisi de bos gorur ve ikincisi unique indekse carpar. Uygulama
+    // katmanindaki kontrol erken geri bildirim; kesin cevabi kisit veriyor.
+    if (benzersizIhlali(hata, "kullanici_auth_user_id_idx")) {
+      return { durum: "zaten-kayitli" };
+    }
+
+    // Slug carpismasi BILEREK yakalanmiyor. Iki ayri isletmenin ayni adla
+    // ayni milisaniyede kaydolmasi gerekir; o kadar dar bir pencere icin
+    // burada bir yeniden deneme dongusu tasimak, dongunun kendisinin hicbir
+    // zaman kosulmamasi demek - yani sinanmamis kod. Cagiran taraf bu durumu
+    // 500 olarak gorur ve kullanici tekrar dener.
+    throw hata;
+  }
+}
+
+async function tekDeneme(
+  girdi: KayitGirdisi,
+  temelSlug: string,
+): Promise<KayitSonucu> {
+  const db = await getDb();
 
   return db.transaction(async (tx) => {
     const [mevcut] = await tx

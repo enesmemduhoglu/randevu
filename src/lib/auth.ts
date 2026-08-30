@@ -20,24 +20,43 @@ export type Oturum = {
   isletmeId: string | null;
 };
 
-/// Istegi yapan kisiyi cozer. Oturum yoksa null.
+/// Supabase'in bildigi kadariyla kimlik. Bizim `kullanici` tablomuza HIC
+/// bakmiyor, yani kaydi yarida kalmis bir kisi icin de doluyor.
+export type AuthKimligi = {
+  authUserId: string;
+  eposta: string;
+  /// Kayit sirasinda Supabase'e yazilan ad. Kayit tamamlama formunu on
+  /// doldurmak icin; guvenilir bir alan degil, kullanici kendi yaziyor.
+  ad: string | null;
+};
+
+/// Token'daki kimlik. Veritabanina dokunmuyor.
 ///
-/// Kimlik SUPABASE JWT'sinden, yetki KENDI veritabanimizdan geliyor. Ikisini
-/// ayirmak bilincli: rol ya da kiraci degistiginde token'in yenilenmesini
-/// beklemiyoruz, bir sonraki istekte dogru deger okunuyor.
-export async function auth(): Promise<Oturum | null> {
+/// getClaims, getSession'in aksine imzayi DOGRULUYOR. Asimetrik imza
+/// anahtarlariyla dogrulama yerelde WebCrypto ile yapiliyor, JWKS
+/// onbellekleniyor - istek basina ag turu yok. getSession cookie'den geleni
+/// dogrulamadan donduruyor ve Supabase kendi dokumaninda ona guvenilmemesi
+/// gerektigini soyluyor.
+export async function authKimligi(): Promise<AuthKimligi | null> {
   const supabase = await supabaseSunucu();
 
-  // getClaims, getSession'in aksine imzayi DOGRULUYOR. Asimetrik imza
-  // anahtarlariyla dogrulama yerelde WebCrypto ile yapiliyor, JWKS
-  // onbellekleniyor - istek basina ag turu yok. getSession cookie'den geleni
-  // dogrulamadan donduruyor ve Supabase kendi dokumaninda ona guvenilmemesi
-  // gerektigini soyluyor.
   const { data, error } = await supabase.auth.getClaims();
   if (error || !data?.claims?.sub) return null;
 
-  const authUserId = data.claims.sub;
+  const claims = data.claims;
+  const metaAd = (claims.user_metadata as { ad?: unknown } | undefined)?.ad;
 
+  return {
+    authUserId: claims.sub,
+    eposta: typeof claims.email === "string" ? claims.email : "",
+    ad: typeof metaAd === "string" && metaAd.trim() ? metaAd.trim() : null,
+  };
+}
+
+/// Auth kullanicisinin BIZDEKI kaydi. Kayit akisinin yarida kalip kalmadigini
+/// anlamak icin de kullaniliyor: Supabase'de hesap var ama burada satir yoksa
+/// kiracisiz bir kimlik var demektir.
+export async function kullaniciyiYukle(authUserId: string) {
   const db = await getDb();
   const [kayit] = await db
     .select({
@@ -51,14 +70,29 @@ export async function auth(): Promise<Oturum | null> {
     .where(eq(kullanici.authUserId, authUserId))
     .limit(1);
 
+  return kayit ?? null;
+}
+
+/// Istegi yapan kisiyi cozer. Oturum yoksa null.
+///
+/// Kimlik SUPABASE JWT'sinden, yetki KENDI veritabanimizdan geliyor. Ikisini
+/// ayirmak bilincli: rol ya da kiraci degistiginde token'in yenilenmesini
+/// beklemiyoruz, bir sonraki istekte dogru deger okunuyor.
+export async function auth(): Promise<Oturum | null> {
+  const kimlik = await authKimligi();
+  if (!kimlik) return null;
+
+  const kayit = await kullaniciyiYukle(kimlik.authUserId);
+
   // Supabase'de hesap var ama bizde kullanici kaydi yok: kayit akisi yarida
   // kalmis demektir. Oturum acilmis saymiyoruz - yarim bir hesapla panele
-  // girmek, kiracisi olmayan bir oturum uretirdi.
+  // girmek, kiracisi olmayan bir oturum uretirdi. Cagiran taraf bu durumu
+  // authKimligi() ile ayirt edip kullaniciyi /kayit/tamamla'ya gonderiyor.
   if (!kayit) return null;
 
   return {
     kullaniciId: kayit.id,
-    authUserId,
+    authUserId: kimlik.authUserId,
     eposta: kayit.eposta,
     ad: kayit.ad,
     rol: kayit.rol,
