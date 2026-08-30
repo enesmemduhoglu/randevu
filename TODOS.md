@@ -888,12 +888,66 @@ her şey cascade ile gidiyor). Üretim veritabanı yine boş.
 
 #### Yayın sonrası kalanlar
 
-- [ ] Supabase'de `site_url` hâlâ `http://localhost:3000`. Şifre sıfırlama ve
-      e-posta doğrulama akışları açılmadan önce
-      `https://randevu.enesmemduhoglu.tech` yapılmalı.
-- [ ] Üretim, `main` dalının **önünde**: yayın `duzeltme/telefon-bicimi`
-      dalından yapıldı (PR #6'daki üç düzeltmeyi içeriyor). PR merge edilince
-      ikisi hizalanır.
-- [ ] Supabase'de duman testinden kalan bir auth kullanıcısı var
-      (`duman-<zaman>@example.com`); bizim tablolarımızda karşılığı yok.
+- [x] Supabase `site_url` → `https://randevu.enesmemduhoglu.tech` yapıldı.
+- [x] `uri_allow_list` → `http://localhost:3000/**`. Faz I'de şifre sıfırlama
+      gelince yerel geliştirmenin de çalışması için; üretim adresi zaten
+      `site_url` üzerinden izinli.
+- [x] PR #6 merge edildi; üretim ve `main` hizalandı.
+- [x] Duman testi auth kullanıcıları silindi. Supabase'de yalnızca
+      `demo@ornek.com` duruyor — yerel tarayıcı testleri için, satırları
+      `randevu_dev`'de.
 - [ ] `/api/musaitlik` üzerinde hız sınırı yok (Faz G).
+
+---
+
+## Oturum sonu durumu — 30 Ağustos 2026
+
+**Canlı:** https://randevu.enesmemduhoglu.tech · **Tek dal:** `main` ·
+**270 test** (21 dosya) · bundle **1621 KiB gzip**
+
+| Faz | Durum |
+|---|---|
+| A — iskele | kapandı |
+| B — Cloudflare zemini | kapandı (deploy dahil) |
+| C — tasarım dili | kapandı |
+| D — kimlik ve kiracı | kapandı |
+| E — şema ve panel CRUD | kapandı |
+| F — müsaitlik motoru | kapandı |
+| **G — halka açık randevu sayfası** | **sıradaki** |
+| H, I, J, K | bekliyor |
+
+### Ne çalışıyor, ne çalışmıyor
+
+**Çalışıyor:** işletme kaydı, giriş/çıkış, panel (hizmetler, personel, çalışma
+saatleri, ayarlar), müsaitlik motoru ve `GET /api/musaitlik`.
+
+**Çalışmıyor:** müşteri hiçbir şekilde randevu ALAMIYOR — `/r/[slug]` yok
+(Faz G). İşletme sahibi randevu göremiyor (Faz H). Bildirim ve şifre sıfırlama
+yok (Faz I).
+
+### Yakın zamanda kaybedilmesi kolay iki ayrıntı
+
+- **`wrangler.jsonc` üretim yapılandırmasını taşıyor** (`workers_dev: false` +
+  custom domain). Bu dosya bir kez `main`'e girmeden merge edilip dal
+  silindiği için neredeyse kayboluyordu; commit'ler yerelden cherry-pick ile
+  kurtarıldı. Deploy'dan önce bu iki alanın yerinde olduğunu doğrula.
+- **`.open-next` Windows'ta kilitleniyor.** `cf:onizle`'nin süreç ağacını
+  `taskkill /T` ile kapatmak gerekiyor; yalnızca portu dinleyen süreci
+  öldürmek yetmiyor, wrangler ölen workerd'yi yeniden başlatıyor.
+
+### Faz G'ye başlarken
+
+- Motor ve sorgu katmanı hazır. `POST /api/randevu` yazmadan hemen önce
+  `slotUygunMu()` çağırmalı: müşterinin gördüğü liste ile kabul edilen randevu
+  ayrışmamalı.
+- Route oturumsuz olacak: `getHalkaAcikDb(slug)`, `checkOrigin` şart
+  (DEĞİŞMEZ 2), çakışma ihlali `pgHata.cakismaIhlaliMi` ile yakalanıp
+  **409**'a çevrilecek (DEĞİŞMEZ 8).
+- `musteri` telefon üzerinden tekilleniyor; normalizasyon
+  `ayar-girdi.ts > telefonDogrula`'da.
+- `randevu.iptalToken` şemada var ve benzersiz. **Tahmin edilemez olmalı ve
+  id'den türetilmemeli.**
+- Hız sınırı ve Turnstile bu fazda; `/api/musaitlik` şu an korumasız.
+- Çalışma saatleri ekranındaki `<input type="time">` işletim sistemi yereline
+  göre AM/PM gösterebiliyor (marka kuralı 24 saat). Karar verilmedi:
+  native alan mı, 15 dakikalık açılır liste mi.
