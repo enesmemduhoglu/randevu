@@ -6,15 +6,17 @@
 // kapanis degiskeni. Yanlis kiracinin verisini istemek icin once bu dosyayi
 // degistirmek gerekiyor - unutmakla olmuyor.
 
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 
 import {
   calismaSaati,
   hizmet,
   isletme,
+  kapali,
   kullanici,
   personel,
   personelHizmet,
+  randevu,
 } from "@/db/sema";
 import { getDb } from "@/lib/db";
 
@@ -351,11 +353,28 @@ export type ScopedDb = Awaited<ReturnType<typeof getScopedDb>>;
 
 /// Oturumsuz, halka acik okumalar icin. Kiraci slug'dan cozuluyor ve yalnizca
 /// AKTIF isletme donuyor - pasif bir isletmenin randevu sayfasi acilmamali.
+///
+/// Buradaki her metot da kapsamli: kiraci yine kapanis degiskeni ve disaridan
+/// verilemiyor. Fark, kiracinin oturumdan degil slug'dan gelmesi. Halka acik
+/// olmasi kapsamsiz olmasi demek DEGIL - aksi halde bir musteri baska bir
+/// salonun randevularini okuyabilirdi.
 export async function getHalkaAcikDb(slug: string) {
   const db = await getDb();
 
   const [sahip] = await db
-    .select({ id: isletme.id, ad: isletme.ad, saatDilimi: isletme.saatDilimi })
+    .select({
+      id: isletme.id,
+      ad: isletme.ad,
+      slug: isletme.slug,
+      hakkinda: isletme.hakkinda,
+      adres: isletme.adres,
+      telefon: isletme.telefon,
+      saatDilimi: isletme.saatDilimi,
+      slotAraligiDk: isletme.slotAraligiDk,
+      minOnceBildirimDk: isletme.minOnceBildirimDk,
+      maksIleriGun: isletme.maksIleriGun,
+      otomatikOnay: isletme.otomatikOnay,
+    })
     .from(isletme)
     .where(and(eq(isletme.slug, slug), eq(isletme.aktif, true)))
     .limit(1);
@@ -373,6 +392,123 @@ export async function getHalkaAcikDb(slug: string) {
         .from(personel)
         .where(and(eq(personel.isletmeId, kiraci), eq(personel.aktif, true)))
         .orderBy(personel.sira);
+    },
+
+    async hizmetleriListele() {
+      return db
+        .select({
+          id: hizmet.id,
+          ad: hizmet.ad,
+          aciklama: hizmet.aciklama,
+          sureDk: hizmet.sureDk,
+          fiyatKurus: hizmet.fiyatKurus,
+          renk: hizmet.renk,
+        })
+        .from(hizmet)
+        .where(and(eq(hizmet.isletmeId, kiraci), eq(hizmet.aktif, true)))
+        .orderBy(asc(hizmet.sira), asc(hizmet.ad));
+    },
+
+    async hizmetGetir(id: string) {
+      const [kayit] = await db
+        .select({ id: hizmet.id, ad: hizmet.ad, sureDk: hizmet.sureDk })
+        .from(hizmet)
+        .where(
+          and(
+            eq(hizmet.id, id),
+            eq(hizmet.isletmeId, kiraci),
+            eq(hizmet.aktif, true),
+          ),
+        )
+        .limit(1);
+      return kayit ?? null;
+    },
+
+    /// Bir hizmeti VEREBILEN aktif personeller.
+    ///
+    /// `personel_hizmet` bos olmasi "hepsi" demek (bkz. sema yorumu), yani
+    /// eslemesi hic olmayan personel her hizmeti veriyor sayiliyor. Bu kural
+    /// burada uygulaniyor ki cagiran taraf onu bilmek zorunda kalmasin.
+    async hizmetiVerenPersoneller(hizmetId: string) {
+      const aktifler = await db
+        .select({ id: personel.id, ad: personel.ad, unvan: personel.unvan })
+        .from(personel)
+        .where(and(eq(personel.isletmeId, kiraci), eq(personel.aktif, true)))
+        .orderBy(personel.sira);
+
+      const eslemeler = await db
+        .select({
+          personelId: personelHizmet.personelId,
+          hizmetId: personelHizmet.hizmetId,
+        })
+        .from(personelHizmet)
+        .where(eq(personelHizmet.isletmeId, kiraci));
+
+      const eslemesiOlan = new Set(eslemeler.map((e) => e.personelId));
+      const buHizmeti = new Set(
+        eslemeler.filter((e) => e.hizmetId === hizmetId).map((e) => e.personelId),
+      );
+
+      return aktifler.filter(
+        (p) => !eslemesiOlan.has(p.id) || buHizmeti.has(p.id),
+      );
+    },
+
+    async calismaSaatleriniListele(personelId: string) {
+      return db
+        .select({
+          haftaninGunu: calismaSaati.haftaninGunu,
+          baslangicDk: calismaSaati.baslangicDk,
+          bitisDk: calismaSaati.bitisDk,
+        })
+        .from(calismaSaati)
+        .where(
+          and(
+            eq(calismaSaati.isletmeId, kiraci),
+            eq(calismaSaati.personelId, personelId),
+          ),
+        );
+    },
+
+    /// Verilen aralikla KESISEN kapali araliklar.
+    ///
+    /// Kesisme testi `baslangic < ust AND bitis > alt`: araligi tamamen
+    /// kapsayan bir izin de yakalaniyor. "Baslangici pencerede olanlar" diye
+    /// sorulsaydi dun baslayip yarin biten bir tatil gorunmezdi.
+    async kapaliAraliklariListele(personelId: string, alt: Date, ust: Date) {
+      return db
+        .select({ baslangic: kapali.baslangic, bitis: kapali.bitis })
+        .from(kapali)
+        .where(
+          and(
+            eq(kapali.isletmeId, kiraci),
+            lt(kapali.baslangic, ust),
+            gt(kapali.bitis, alt),
+            // personelId NULL ise butun isletme kapali; o satirlar herkesi
+            // ilgilendiriyor.
+            or(isNull(kapali.personelId), eq(kapali.personelId, personelId)),
+          ),
+        );
+    },
+
+    /// Saati DOLU sayan randevular.
+    ///
+    /// Yalnizca BEKLIYOR ve ONAYLI: iptal ve gelmedi saati bosaltiyor.
+    /// Veritabanindaki EXCLUDE kisitinin WHERE kosuluyla ayni kume - ikisi
+    /// ayrisirsa motor "bos" dedigi bir sloti kisit reddeder.
+    async doluRandevulariListele(personelId: string, alt: Date, ust: Date) {
+      return db
+        .select({ baslangic: randevu.baslangic, bitis: randevu.bitis })
+        .from(randevu)
+        .where(
+          and(
+            eq(randevu.isletmeId, kiraci),
+            eq(randevu.personelId, personelId),
+            inArray(randevu.durum, ["BEKLIYOR", "ONAYLI"]),
+            lt(randevu.baslangic, ust),
+            gt(randevu.bitis, alt),
+          ),
+        );
     },
   };
 }

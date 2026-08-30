@@ -355,16 +355,10 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
 
 ### Bilinen durum
 
-- **Supabase'de *Confirm email* hâlâ AÇIK.** Elle denemede ortaya çıktı: kayıt
-  isteği `over_email_send_rate_limit` ile döndü, yani Supabase doğrulama maili
-  göndermeye çalışıyor ve yerleşik SMTP'nin saatte 2 mesaj sınırına takılıyor.
-  Kapatılana kadar kayıt akışı ilk iki denemeden sonra tıkanıyor. Kod bu
-  duruma hazır (`data.session` yoksa kullanıcı `/giris`'e mesajla
-  yönlendiriliyor) ama üretim davranışı bu olmamalı.
-- **Uçtan uca mutlu yol elle doğrulanmadı** — yukarıdaki sınır yüzünden.
-  Doğrulanan: CSRF kapısı (403), doğrulama hataları (400), olmayan hesapla
-  giriş (401, gerçek Supabase'e ulaşarak), oturumsuz `/panel` ve
-  `/kayit/tamamla` yönlendirmeleri (307 → `/giris?devam=…`).
+- ~~Supabase'de *Confirm email* hâlâ açık.~~ **Faz F sırasında kapatıldı ve
+  akış uçtan uca doğrulandı** — bkz. "Uçtan uca doğrulama" bölümü. Kod her iki
+  duruma da hazır: `data.session` yoksa kullanıcı `/giris`'e mesajla
+  yönlendiriliyor.
 - Supabase'de `faz-d-deneme@example.com` için sahipsiz bir hesap kalmış
   olabilir (istek e-posta gönderimi adımında düştü). Yerel veritabanında
   karşılığı yok — kontrol edilip silinebilir.
@@ -395,17 +389,15 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
 
 ### Elle yapılması gerekenler (Faz D)
 
-- [ ] **PR #3 merge edilince prod'a migration uygula:**
-      `npm run db:uygula:prod -- --onayla`
-      Göç yalnızca EKLEME (rol enum'u + kullanıcı + personel tabloları), mevcut
-      işletme tablosuna dokunmuyor, veri kaybı yok. Geri alma: iki `drop table`
-      ve bir `drop type`.
-- [ ] **Supabase panelinde *Confirm email* KAPATILMALI** (Authentication →
-      Sign In / Providers → Email). Şu an açık ve kayıt akışını tıkıyor.
-      Yerleşik SMTP saatte 2 mail ile sınırlı; domain + Resend custom SMTP
-      bağlanana kadar (Faz I) kapalı kalmalı.
-- [ ] Confirm email kapatıldıktan sonra **uçtan uca elle doğrulama**: kayıt →
-      panel, çıkış, tekrar giriş, `?devam=` ile korunan sayfaya dönüş.
+- [x] **Prod'a uygulandı** (30 Ağustos 2026, Faz E göçüyle birlikte). Göç
+      yalnızca EKLEME'ydi (rol enum'u + kullanıcı + personel tabloları); mevcut
+      işletme tablosuna dokunmadı. Geri alma: iki `drop table`, bir `drop type`.
+- [x] **Supabase'de *Confirm email* KAPATILDI** (30 Ağustos 2026,
+      Management API: `mailer_autoconfirm: true`). Yerleşik SMTP saatte 2 mail
+      ile sınırlı; domain + Resend custom SMTP bağlanana kadar (Faz I) kapalı
+      kalmalı. Açılırsa kayıt akışı ilk iki denemeden sonra tıkanır.
+- [x] **Uçtan uca elle doğrulama yapıldı** (30 Ağustos 2026). Ayrıntı aşağıda
+      "Uçtan uca doğrulama" bölümünde.
 - [ ] Cloudflare'e yayınlarken `NEXT_PUBLIC_SUPABASE_URL` ve
       `NEXT_PUBLIC_SUPABASE_ANON_KEY` **derleme anında** ortamda olmalı;
       `NEXT_PUBLIC_` önekli değişkenler `cf:kur` adımında gömülüyor.
@@ -581,13 +573,241 @@ ihlalle sınandı — yakaladı.**
 
 ### Elle yapılması gerekenler (Faz E)
 
-- [ ] **PR merge edilince prod'a göç uygula:** `npm run db:uygula:prod -- --onayla`
-      Göç yalnızca EKLEME (yedi tablo, dört enum, `btree_gist` uzantısı ve
-      `isletme`ye yeni kolonlar — hepsi `DEFAULT` değerli, mevcut satırlar
-      etkilenmiyor). Geri alma: yedi `drop table`, dört `drop type`, `isletme`
+- [x] **Prod'a uygulandı** (30 Ağustos 2026). Göç yalnızca EKLEME'ydi (yedi
+      tablo, dört enum, `btree_gist` uzantısı ve `isletme`ye `DEFAULT` değerli
+      kolonlar). Geri alma: yedi `drop table`, dört `drop type`, `isletme`
       kolonlarında `drop column`.
-- [ ] **Supabase'de `btree_gist` uzantısı** göçün ilk satırında kuruluyor
-      (`CREATE EXTENSION IF NOT EXISTS`). Supabase bunu destekliyor; yetki
-      hatası çıkarsa panelden Database → Extensions üzerinden açılabilir.
-- [ ] Faz D'den devreden madde: **Confirm email hâlâ AÇIK.** Kayıt akışı elle
-      hâlâ uçtan uca doğrulanamadı.
+- [x] **`btree_gist` Supabase'de sorunsuz kuruldu** — yetki hatası çıkmadı,
+      göçün ilk satırı (`CREATE EXTENSION IF NOT EXISTS`) yetti.
+- [x] Faz D'den devreden madde kapandı: Confirm email kapatıldı ve akış uçtan
+      uca doğrulandı.
+
+---
+
+## Faz F — müsaitlik motoru
+
+**Kapandı:** `src/lib/zaman.ts`, `src/lib/musaitlik.ts`, `src/lib/musaitlik-sorgu.ts`,
+`GET /api/musaitlik`. Ürünün kalbi ve testlerin en yoğun olduğu faz: bu üç
+dosya için **76 test** yazıldı.
+
+### Zaman katmanı (`zaman.ts`)
+
+**Sunucunun saat dilimine hiçbir yerde güvenilmiyor.** `new Date()` dışında
+hiçbir yerel-zaman API'si kullanılmıyor: Worker'ın dilimi UTC, geliştirici
+makinesininki Europe/Istanbul, testlerinki bir başkası olabilir. Aynı kod üç
+yerde üç farklı sonuç üretirse hata ancak üretimde görünür.
+
+**Kütüphane eklenmedi.** `date-fns-tz` ya da `luxon` Worker bundle'ına yüz
+kilobaytlarca ekliyor ve bütçe 3 MiB (bkz. Faz E). Gereken iki dönüşüm
+`Intl`in zaten taşıdığı IANA verisiyle yapılabiliyor.
+
+**Yaz saati sınırları açıkça seçildi** (ECMAScript Temporal'ın "compatible"
+kuralıyla aynı):
+
+- **Var olmayan saat.** Saat ileri alınırken 02:00 doğrudan 03:00 olur; 02:30 o
+  gün hiç yaşanmaz. Sonuç **ileri kayıyor**. Hata fırlatmıyoruz: çalışma saati
+  02:30'da başlayan bir işletme için "o gün bir saat geç başladı" makul,
+  "randevu alınamaz" değil.
+- **İki kez yaşanan saat.** Saat geri alınırken 02:30 iki kez yaşanır. **İlki**
+  seçiliyor — "saat 02:30 olduğunda" denince kastedilen ilk defasıdır.
+
+Yöntem: geçiş bir günden kısa sürede olup bittiği için hedef günün bir gün
+öncesi ve sonrasındaki ofsetler iki adayı veriyor; istenen duvar saatine geri
+dönen adaylardan en erkeni seçiliyor.
+
+**Yakalanan iki tuzak:**
+- ICU bazı sürümlerde `hour12: false` ile gece yarısını **"24"** veriyor.
+  Düzeltilmezse 00:15 randevusu önceki günün 24:15'i gibi görünürdü.
+- `Date.UTC` taşırma yapıyor: `"2026-02-29"` (2026 artık yıl değil) sessizce
+  1 Mart olurdu ve kullanıcı istemediği bir günün saatlerini görürdü. Ayrıştırma
+  geri okuyup aynı gün mü diye bakıyor.
+
+### Motor (`musaitlik.ts`)
+
+**Saf fonksiyon** — `simdi` bile dışarıdan veriliyor. İçeride okunsaydı yaz
+saati geçişi, gün sınırı ve minimum bildirim süresi ancak o anları bekleyerek
+sınanabilirdi.
+
+- **Slot ızgarası her çalışma aralığının kendi başından başlıyor**, günün
+  başından değil. Öğleden sonraki aralık 13:10'da başlıyorsa saatler 13:10,
+  13:30... oluyor; gün başından sayılsaydı 12:50 gibi noktalara düşerdi.
+- **Hizmet aralığa sığmalı.** 18:00'de kapanan bir aralıkta 17:45'te başlayan
+  30 dakikalık hizmet yer bulamaz. Öğle arasına taşan randevu da böylece
+  engelleniyor: iki aralık ayrı ayrı deneniyor.
+- **Bitiş gerçek süreyle hesaplanıyor, duvar saatiyle değil.** Duvar saatinden
+  hesaplansaydı yaz saati geçişini kapsayan randevu 120 dakika sürer ve bir
+  sonrakiyle çakışırdı. Testi var: geçişi kapsayan aralıkta her randevu tam 60
+  dakika ve ardışık slotlar çakışmıyor.
+- **Çakışma testi yarım açık `[)`** — veritabanındaki `EXCLUDE` kısıtıyla aynı.
+  İkisi ayrışırsa motor "boş" dediği bir slotu kısıt reddeder ve kullanıcı
+  sebebini anlamaz.
+- **`slotAraligiDk <= 0` boş dönüyor.** Değer kullanıcı ayarından geliyor ve
+  döngü sonsuza giderdi.
+
+**Motor bir garanti değil.** İki müşteri aynı saniyede aynı slotu isterse ikisi
+de "boş" görür; kesin cevabı `EXCLUDE` kısıtı veriyor (DEĞİŞMEZ 8).
+
+### Sorgu katmanı (`musaitlik-sorgu.ts`)
+
+Route ile motor arasında ayrı bir dosya, çünkü aynı iş iki yerde gerekecek:
+`GET /api/musaitlik` listeyi gösteriyor, Faz G'deki `POST /api/randevu` ise
+yazmadan hemen önce aynı hesabı tekrarlayıp slotun hâlâ boş olduğunu
+doğrulayacak. İki yerde iki farklı hesap, müşteriye gösterilen liste ile kabul
+edilen randevunun ayrışması demekti.
+
+- **Personel verilmezse** hizmeti verebilen herkes deneniyor ve aynı saat **tek
+  seçenek** olarak dönüyor. "Farketmez" diyen müşteriye aynı saati iki kez
+  göstermek anlamsız olurdu; sıralı listede `sira`'sı küçük olan kazanıyor.
+- **Randevu ve izin aralıkları pencereyle KESİŞENLER olarak çekiliyor**,
+  "içinde olanlar" olarak değil: gece yarısını aşan bir randevu ya da bir
+  haftalık tatil aksi halde görünmezdi. İkisinin de testi var.
+- **Dolu kümesi yalnızca `BEKLIYOR` ve `ONAYLI`** — `EXCLUDE` kısıtının `WHERE`
+  koşuluyla aynı. İptal ve gelmedi saati boşaltıyor.
+
+### `GET /api/musaitlik`
+
+Oturumsuz ve halka açık: müşteri randevu almak için hesap açmıyor. Kiracı
+oturumdan değil `isletme` slug'ından çözülüyor ve `getHalkaAcikDb` filtreyi yine
+kapanış değişkeni olarak tutuyor.
+
+- **GET olduğu için `checkOrigin` yok** — DEĞİŞMEZ 2 yalnızca mutasyonlar için.
+  Kötüye kullanım (başka bir salonun doluluk takvimini kazımak) CSRF ile değil
+  hız sınırıyla engelleniyor; Cloudflare kuralı Faz G'de bu yola konacak.
+- **Yanıt önbelleklenmiyor** (`cache-control: no-store`). Müsaitlik yazma
+  kararını besliyor: bir saniye bayat veri, dolu bir slotu boş gösterip
+  müşteriyi 409'a götürür. Hyperdrive'ın sorgu önbelleği de aynı sebeple kapalı.
+- Kapalı ya da hiç olmayan işletme **aynı** cevabı alıyor: hangi slug'ların
+  kayıtlı olduğunu sızdırmanın faydası yok.
+
+### Bilerek kapsam dışı
+
+- **Randevu yazma yok.** `POST /api/randevu` ve iptal akışı Faz G'de.
+- **Çok günlü müsaitlik sorgusu yok.** Uç tek gün veriyor; takvimde "hangi
+  günler dolu" göstergesi gerekirse Faz G'de eklenecek. Şimdi eklemek,
+  kullanılmayan bir sorgu şekli sınamak olurdu.
+- **`kapali` (izin) ekranı hâlâ yok.** Motor tabloyu okuyor ama işletme henüz
+  izin giremiyor; ekran Faz H'de takvimle birlikte anlamlı olacak.
+- **Hız sınırı konmadı.** Cloudflare kuralı Faz G'de, `POST /api/randevu` ile
+  birlikte.
+
+### Doğrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` — **266 test geçti** (21 dosya)
+  - `zaman.test.ts` 23, `musaitlik.test.ts` 33, `musaitlik-sorgu.test.ts` 20
+  - sorgu testlerinin beşi halka açık yolun **IDOR** testi
+- **Elle, gerçek veriyle** (`next dev` + tohumlanmış `randevu_dev`): 45 dk'lık
+  hizmet öğle arasında kesiliyor (son sabah slotu 11:15, öğleden sonra 13:00'te
+  başlıyor), son slot 17:15; 120 dk'lık hizmet 18 slot üretiyor; cumartesi
+  10:00-16:00; pazar, geçmiş gün ve pencere dışı boş; Ayşe 10:00-10:45 dolu
+  olunca o saatler Ali'ye düşüyor ve **10:45 bitişik olduğu için** Ayşe'ye geri
+  dönüyor; bilinmeyen slug/hizmet 404, bozuk tarih ve eksik parametre 400
+
+### Elle yapılması gerekenler (Faz F)
+
+- [x] Faz D'den devreden madde kapandı: `mailer_autoconfirm: true` yapıldı ve
+      kayıt → panel akışı uçtan uca doğrulandı.
+- [ ] `randevu_dev` veritabanına örnek işletme tohumlandı (`isil-guzellik`,
+      iki personel, iki hizmet, haftalık çalışma düzeni, bir randevu). Faz G
+      geliştirmesi için duruyor; prod'a gitmiyor.
+
+---
+
+## Uçtan uca doğrulama — 30 Ağustos 2026
+
+Faz D'den beri bekleyen engel kalktı: Supabase'de *Confirm email* kapatıldı
+(`mailer_autoconfirm: true`, Management API üzerinden). Ardından Faz D-E-F'nin
+tamamı **çalışan uygulamada, gerçek Supabase ve gerçek Postgres'e karşı**
+sınandı. Aşağıdakilerin hepsi `next dev` üzerinde gözlendi.
+
+### Kimlik akışı
+
+| Adım | Sonuç |
+|---|---|
+| Kayıt (yeni e-posta) | `200 {"yon":"/panel"}`, dört `sb-*` cookie'si yazıldı |
+| Oturumla `/panel` | 200 |
+| Çıkış | `200 {"yon":"/giris"}`, cookie'ler temizlendi |
+| Çıkış sonrası `/panel` | `307 → /giris?devam=/panel` |
+| Yanlış şifreyle giriş | `401 "E-posta ya da şifre hatalı"` — hangisinin yanlış olduğu **söylenmiyor** |
+| Doğru şifre + `devam=/panel/hizmetler` | `200 {"yon":"/panel/hizmetler"}` |
+| **Açık yönlendirme denemesi** `devam=//kotu.site` | `200 {"yon":"/panel"}` — kapı tuttu |
+
+### Panel
+
+Altı sayfa da oturumla 200 dönüyor: `/panel`, `/panel/hizmetler`,
+`/panel/personel`, `/panel/calisma-saatleri`, `/panel/ayarlar`,
+`/panel/gelistirici/vitrin`.
+
+Mutasyonlar: hizmet eklendi (`"150,50"` → `fiyatKurus: 15050`, yani para
+ayrıştırması uçtan uca doğru), personel eklendi, ayarlar güncellendi.
+
+### IDOR — gerçek oturumla, çapraz kiracı
+
+Bir işletmenin oturumuyla **başka** bir işletmenin kayıtlarına üç ayrı saldırı
+denendi. Üçü de reddedildi ve kurban kayıtlar veritabanında **değişmedi**:
+
+| Deneme | Yanıt | Kurban kayıt |
+|---|---|---|
+| `PATCH /api/hizmetler/<başkasının-id>` | `404 "Hizmet bulunamadı"` | `Saç kesimi, 45 dk, aktif` — değişmedi |
+| `DELETE /api/hizmetler/<başkasının-id>` | `404 "Hizmet bulunamadı"` | aynı |
+| `PUT /api/personel/<başkasının-id>/calisma-saatleri` | `404 "Personel bulunamadı"` | 0 satır eklendi |
+
+404 mesajı bilerek "yetkiniz yok" demiyor: başka kiracıya ait bir kaydı istemek
+ile hiç olmayan bir kaydı istemek çağırana aynı görünmeli, yoksa kaydın varlığı
+sızar.
+
+### Müsaitlik motoru (Faz F)
+
+Tohumlanmış `randevu_dev` verisiyle (`isil-guzellik`, iki personel, iki hizmet,
+hafta içi 09:00-12:00 ve 13:00-18:00, cumartesi 10:00-16:00):
+
+| Senaryo | Sonuç |
+|---|---|
+| 45 dk hizmet, salı | Son sabah slotu **11:15**, sonra **13:00**; son slot **17:15** |
+| 120 dk hizmet | 18 slot, son **16:00** |
+| Cumartesi | 22 slot, 10:00–15:15 |
+| Pazar / geçmiş gün / pencere dışı | Boş |
+| Ayşe 10:00-10:45 dolu | O saatler **Ali**'ye düştü; **10:45 bitişik olduğu için Ayşe**'ye döndü |
+| Bilinmeyen slug / hizmet | 404 |
+| Bozuk tarih / eksik parametre | 400 |
+
+Son satır `'[)'` aralık semantiğinin uçtan uca doğru olduğunu gösteriyor: kısıt,
+motor ve sorgu katmanı aynı kuralı uyguluyor.
+
+### Bu doğrulamanın bıraktıkları
+
+- Supabase'de test hesapları kaldı (`deneme-<zaman>@example.com`). Silinmesi
+  gerekmiyor ama isteniyorsa Supabase panelinden Authentication → Users.
+- `randevu_dev` içinde iki örnek işletme var (`isil-guzellik` tohumu ve test
+  kaydı). Yalnızca geliştirme veritabanı; prod'a gitmiyor.
+
+### Prod göçü — 30 Ağustos 2026
+
+PR #3 ve #4 merge edildikten sonra `npm run db:uygula:prod -- --onayla`
+çalıştırıldı. Öncesinde prod'da yalnızca `isletme` tablosu ve tek bir göç
+vardı (Faz A); tablo boştu, yani veri riski yoktu.
+
+**Sonuç:** 10 tablo, 5 enum, `btree_gist` uzantısı, 3 göç uygulanmış durumda.
+`isletme`ye eklenen yedi kolonun hepsi `DEFAULT` değerli; mevcut satırlar
+etkilenmedi (zaten yoktu).
+
+`btree_gist` Supabase'de **yetki hatası çıkarmadan** kuruldu — göçün ilk
+satırındaki `CREATE EXTENSION IF NOT EXISTS` yetti. Panelden elle açmaya gerek
+kalmadı.
+
+#### Çakışma kısıtı PROD'da sınandı
+
+DEĞİŞMEZ 8'in üretimde gerçekten tuttuğu, **geri alınan bir transaction**
+içinde kanıtlandı — prod'a kalıcı hiçbir satır yazılmadı (sonrasında sayıldı:
+0). Her deneme kendi `SAVEPOINT`'inde koştu; ilk denemede bu yapılmamıştı ve
+23P01 hatası transaction'ı iptal edince sonraki komutlar `25P02` alıp anlamsız
+sonuç vermişti.
+
+| Deneme | Sonuç |
+|---|---|
+| Çakışan ikinci randevu | `23P01 randevu_cakisma_yok` — reddedildi |
+| Bitişik randevu (11:00 biten, 11:00 başlayan) | Kabul edildi — `'[)'` doğru |
+| Ters aralık (bitiş < başlangıç) | `23514 randevu_bitis_baslangictan_sonra` |
+| İptal edilenin saatine yeni randevu | Kabul edildi — `WHERE` koşulu doğru |
+
+Yani kısıt, motor ve sorgu katmanı üretimde de aynı kuralı uyguluyor.
