@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, expect, test } from "vitest";
 
 import { isletme, kullanici, personel } from "@/db/sema";
+import { tablolariBosalt } from "@/db/test-temizlik";
 import { baglantiyiKapat, getDb } from "@/lib/db";
 import {
   getHalkaAcikDb,
@@ -81,11 +82,7 @@ async function hamPersonelOku(id: string) {
 }
 
 beforeEach(async () => {
-  const db = await getDb();
-  // Sira onemli: foreign key'ler personel -> kullanici -> isletme yonunde.
-  await db.delete(personel);
-  await db.delete(kullanici);
-  await db.delete(isletme);
+  await tablolariBosalt();
 });
 
 afterAll(async () => {

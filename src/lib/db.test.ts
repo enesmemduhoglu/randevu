@@ -2,14 +2,14 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, expect, test } from "vitest";
 
 import { isletme } from "@/db/sema";
+import { tablolariBosalt } from "@/db/test-temizlik";
 import { baglantiyiKapat, getDb } from "@/lib/db";
 
 // Bu dosya zeminin kanit testi: sema, migration, gercek Postgres ve Drizzle
 // birlikte calisiyor mu? Is mantigini degil, altyapiyi dogrular.
 
 beforeEach(async () => {
-  const db = await getDb();
-  await db.delete(isletme);
+  await tablolariBosalt();
 });
 
 afterAll(async () => {
