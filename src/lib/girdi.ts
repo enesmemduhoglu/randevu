@@ -92,6 +92,95 @@ export function adDogrula(
   return { tamam: true, deger };
 }
 
+/// Tam sayi alanlari (sure, sira, gun sayisi...).
+///
+/// JSON'dan gelen deger sayi ya da metin olabilir; ikisini de kabul ediyoruz
+/// cunku HTML form alanlari her zaman metin gonderiyor ve donusumu tek yerde
+/// yapmak, her cagri yerinde `Number(...)` yazmaktan guvenli.
+export function tamsayiDogrula(
+  ham: unknown,
+  alan: string,
+  { enAz, enCok }: { enAz: number; enCok: number },
+): Dogrulama<number> {
+  const sayi =
+    typeof ham === "number"
+      ? ham
+      : typeof ham === "string" && ham.trim() !== ""
+        ? Number(ham.trim())
+        : NaN;
+
+  if (!Number.isFinite(sayi)) {
+    return { tamam: false, hata: `${alan} sayı olmalı` };
+  }
+  if (!Number.isInteger(sayi)) {
+    return { tamam: false, hata: `${alan} tam sayı olmalı` };
+  }
+  if (sayi < enAz || sayi > enCok) {
+    return { tamam: false, hata: `${alan} ${enAz} ile ${enCok} arasında olmalı` };
+  }
+
+  return { tamam: true, deger: sayi };
+}
+
+/// Turkce yazilmis para tutarini KURUSA cevirir.
+///
+/// Neden sunucuda ayristiriliyor: istemci "350,50" yazip 35050 hesaplasaydi
+/// donusum kayan noktali sayidan gecerdi (350.5 * 100 = 35050.000000000004
+/// gibi) ve kurus kaybi/fazlasi olusurdu. Metin uzerinde tam sayi aritmetigi
+/// bu sinifi tamamen kapatiyor.
+///
+/// Bicim (docs/marka.md): binlik ayraci ".", ondalik ",". "1.250,50" = 125050.
+/// Virgul yokken tek bir nokta ve ardindan bir-iki basamak varsa ondalik
+/// sayiliyor - "350.50" yazan kullaniciyi 35000 ile sasirtmamak icin.
+export function paraKurusDogrula(ham: unknown, alan: string): Dogrulama<number> {
+  if (typeof ham === "number") {
+    return tamsayiDogrula(ham, alan, { enAz: 0, enCok: 100_000_000 });
+  }
+  if (typeof ham !== "string") return { tamam: false, hata: `${alan} gerekli` };
+
+  const temiz = ham.replace(/[\s₺]/g, "");
+  if (temiz === "") return { tamam: true, deger: 0 };
+  if (!/^[0-9.,]+$/.test(temiz)) {
+    return { tamam: false, hata: `${alan} yalnızca rakam içermeli` };
+  }
+
+  let tamKisim = temiz;
+  let ondalik = "0";
+
+  const sonVirgul = temiz.lastIndexOf(",");
+  if (sonVirgul !== -1) {
+    tamKisim = temiz.slice(0, sonVirgul).replace(/\./g, "");
+    ondalik = temiz.slice(sonVirgul + 1);
+  } else {
+    const noktalar = temiz.split(".").length - 1;
+    const sonNokta = temiz.lastIndexOf(".");
+    const kuyruk = sonNokta === -1 ? "" : temiz.slice(sonNokta + 1);
+    if (noktalar === 1 && kuyruk.length > 0 && kuyruk.length <= 2) {
+      tamKisim = temiz.slice(0, sonNokta);
+      ondalik = kuyruk;
+    } else {
+      tamKisim = temiz.replace(/\./g, "");
+    }
+  }
+
+  if (!/^\d*$/.test(tamKisim) || !/^\d*$/.test(ondalik)) {
+    return { tamam: false, hata: `${alan} geçerli bir tutar olmalı` };
+  }
+  if (ondalik.length > 2) {
+    return { tamam: false, hata: `${alan} en fazla iki ondalık basamak alır` };
+  }
+
+  const lira = Number(tamKisim || "0");
+  const kurus = Number(ondalik.padEnd(2, "0") || "0");
+  const toplam = lira * 100 + kurus;
+
+  if (!Number.isSafeInteger(toplam) || toplam > 100_000_000) {
+    return { tamam: false, hata: `${alan} çok büyük` };
+  }
+
+  return { tamam: true, deger: toplam };
+}
+
 /// Kontrol karakteri taramasi. Regex yerine kod noktasi karsilastirmasi
 /// kullaniliyor: kacis dizileri bu depoda birkac kez arac zincirinde gercek
 /// (gorunmez) karaktere donusup kaynagi bozdu.
