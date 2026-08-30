@@ -250,11 +250,16 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
   Eğitim verisinden yazılsa yanlış olurdu; `AGENTS.md` uyarısı üzerine paketin
   kendi dokümanı okundu (`node_modules/next/dist/docs`).
 
-- **Proxy YETKİLENDİRME YAPMIYOR.** OpenNext Node middleware'i desteklemediği
-  için edge'de koşuyor, yani veritabanı yok. Yalnızca token yeniliyor (sunucu
+- **Proxy YETKİLENDİRME YAPMIYOR.** Yalnızca token yeniliyor (sunucu
   bileşenleri cookie yazamıyor) ve oturum cookie'si hiç olmayanı ucuzca
   kesiyor. Cookie'nin varlığı kimlik kanıtı DEĞİL; gerçek yetki her zaman
   sunucuda `auth()` ile — panelde bu karar `src/app/panel/layout.tsx`'te.
+
+  > **Faz E'de düzeltildi:** buradaki "OpenNext Node middleware'i
+  > desteklemediği için edge'de koşuyor" cümlesi ölçümle değil varsayımla
+  > yazılmıştı ve yanlıştı. Next 16'da proxy zorunlu olarak Node.js
+  > runtime'ında koşuyor, OpenNext destekliyor ve bedeli Worker bundle'ında
+  > 1358 KiB gzip'ti. Proxy Faz E'de kaldırıldı; ayrıntı Faz E bölümünde.
 
 - **`/api` proxy kapsamının DIŞINDA.** Proxy'nin tek işi cookie yenilemek ve
   route handler'lar bunu kendileri yapabiliyor (`cookies().set` orada
@@ -405,3 +410,184 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
       `NEXT_PUBLIC_SUPABASE_ANON_KEY` **derleme anında** ortamda olmalı;
       `NEXT_PUBLIC_` önekli değişkenler `cf:kur` adımında gömülüyor.
 - [ ] Deploy kararı ve custom domain bağlantısı (Faz B'den devrediyor).
+
+---
+
+## Faz E — şema ve panel CRUD
+
+**Kapandı:** yedi yeni tablo, `EXCLUDE` çakışma kısıtı, hizmet / personel /
+çalışma saatleri / ayarlar ekranları ve route'ları, değişmez tarayıcısı,
+proxy'nin kaldırılması.
+
+### Kararlar
+
+- **Çalışma saati `timestamp` değil, gün + dakika.** Bunlar tekrar eden duvar
+  saati kuralları: "Pazartesi 09:00" yaz saati geçişinde de 09:00'dur.
+  Timestamp olarak saklansaydı yılda iki kez bir saat kayardı.
+
+- **`haftaninGunu` 0 = Pazar**, yani JavaScript `Date.getDay()` ile birebir.
+  Müsaitlik motoru günü hesaplarken dönüşüm yapmasın diye. Arayüz haftayı
+  pazartesiden başlatıyor; sıra `HAFTA_SIRASI` sabitinde veriliyor.
+
+- **Öğle arası ayrı bir kavram değil, ikinci bir aralık.** Aynı güne iki satır
+  yazılıyor. "Ara başlangıç/bitiş" gibi ayrı alanlar koysaydık, üçüncü bir ara
+  gerektiğinde hem şemayı hem arayüzü hem dönüşümü yeniden yazmak gerekirdi.
+
+- **Para kuruş cinsinden tam sayı ve dönüşüm SUNUCUDA.** Ondalık sayıda
+  `0.1 + 0.2` problemi tutara sızardı; `numeric` ise JS tarafında string olarak
+  gelir. İstemci "350,50" için 35050'yi kendisi hesaplasaydı dönüşüm kayan
+  noktadan geçerdi (`350.5 * 100 = 35050.000000000004`). Metin üzerinde tam
+  sayı aritmetiği bu sınıfı tamamen kapatıyor; `paraBicimle` ↔
+  `paraKurusDogrula` gidiş-dönüş testiyle kilitli.
+
+- **`personel_hizmet` boş olması "hiçbiri" değil "hepsi" demek.** Tek kişilik
+  işletmede tablo hiç dolmuyor ve varsayılan davranış doğru kalıyor.
+  Alternatifi her yeni hizmet için her personele satır yazmaktı — unutulduğunda
+  hizmet görünmez olurdu.
+
+- **Hizmet ve personel silinmiyor, pasifleniyor.** Geçmiş randevular onlara
+  `ON DELETE restrict` ile bağlı; silmek geçmişi de götürürdü.
+
+- **Son aktif personel pasife alınamıyor.** Randevu bir personele bağlanmak
+  zorunda; son kişiyi de pasiflemek işletmeyi randevu alınamaz duruma sokar ve
+  bu ancak müşteri şikâyet edince fark edilirdi. Sayma ve güncelleme aynı
+  transaction'da, satırlar `FOR UPDATE` ile kilitli — olmasa ard arda gelen iki
+  istek ikisini de "son değil" görüp ikisini birden pasifleyebilirdi.
+
+- **Toplu yazma (önce sil, sonra ekle), satır bazlı API değil.** Haftalık düzen
+  ve hizmet eşlemesi kullanıcının kafasında tek bir şey; satır bazlı bir API
+  yarım uygulanmış bir hafta bırakabilirdi. Yabancı bir id geldiğinde isteğin
+  tamamı reddediliyor — sessizce atlamak "kaydettim" deyip yarım küme bırakmak
+  olurdu.
+
+- **Saat dilimi ve randevu aralığı kapalı liste**, `Intl.supportedValuesOf`
+  değil: workerd'in ICU derlemesi tam değil ve orada liste eksik dönebiliyor —
+  kullanıcının kayıtlı saat dilimi bir gün "geçersiz" sayılırdı. Aynı sebeple
+  `paraBicimle` de `Intl.NumberFormat` kullanmıyor.
+
+- **Telefon veritabanında yalnızca rakam ve tek biçimde**; baştaki `0` ve `90`
+  kırpılıyor. `musteri` tablosunda telefon benzersiz olduğu için iki yazım iki
+  ayrı müşteri kaydı üretir ve geçmiş ikiye bölünürdü.
+
+- **Gün içi çakışan çalışma aralıkları reddediliyor.** Bu kuralın işi Faz F'deki
+  müsaitlik motorunun girdisini korumak: motor çakışan aralıkları çözerken aynı
+  slotu iki kez üretir ya da sessizce düşürür. Bitişik aralıklar (13:00 biten ve
+  13:00 başlayan) çakışma sayılmıyor — kullanıcının öğleden önce/sonra ayrımını
+  görmek istemesi meşru.
+
+### Çakışma kısıtı (DEĞİŞMEZ 8 artık gerçek)
+
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+ALTER TABLE "randevu" ADD CONSTRAINT "randevu_cakisma_yok"
+  EXCLUDE USING gist ("personel_id" WITH =,
+                      tstzrange("baslangic","bitis",'[)') WITH &&)
+  WHERE ("durum" IN ('BEKLIYOR','ONAYLI'));
+```
+
+Drizzle `EXCLUDE`'u ifade edemiyor; kısıt migration'a elle yazıldı. İki ayrıntı
+kasıtlı: aralık `'[)'` olduğu için bitişik randevular çakışma sayılmıyor
+(10-11 ile 11-12 birlikte alınabiliyor), `WHERE` koşulu iptal ve gelmedi
+durumlarını dışarıda bıraktığı için iptal edilen saat boşalıyor. Sekiz test bu
+davranışların her birini ayrı ayrı kilitliyor.
+
+Göç hem **boş** hem **Faz D verisiyle dolu** bir veritabanında sınandı; ikisinde
+de uygulandı ve mevcut veri korundu.
+
+### Ortaya çıkan iki gerçek hata
+
+1. **Drizzle, Postgres hatasını sarmalıyor.** `DrizzleQueryError`'da `code`
+   alanı YOK; o yalnızca en içteki nesnede duruyor. Yani Faz D'de yazılan
+   `hata.code === "23505"` kontrolü **hiçbir zaman eşleşmiyordu** — kayıt yarışı
+   sadece yedek mesaj kontrolü sayesinde çalışıyordu. `src/lib/pg-hata.ts`
+   `cause` zincirini geziyor ve testi uydurulmuş bir nesne değil, gerçek bir
+   Drizzle hatası kullanıyor.
+
+2. **Test temizliği şema büyüyünce sessizce bozuldu.** Her dosya kendi bildiği
+   tabloları siliyordu; `randevu` personele `ON DELETE restrict` ile bağlı
+   olduğu için bir dosya randevu bırakınca sonraki dosyanın `delete(personel)`
+   çağrısı düşüyordu. Testler tek tek geçerken hep birlikte düşüyorlardı — en
+   pahalı hata türü. `TRUNCATE ... CASCADE` zinciri Postgres'e çözdürüyor.
+
+### Proxy kaldırıldı — ölçülmüş bir karar
+
+Cloudflare bundle'ı 3 MiB'lik ücretsiz plan sınırının **100 KiB altına**
+inmişti (2969.80 KiB gzip). Sebep tek bir dosya çıktı: proxy kaldırılınca
+**1611.40 KiB**'a düştü, yani proxy tek başına **1358 KiB** — bütçenin %44'ü.
+
+Neden bu kadar pahalı: Next 16'da proxy **zorunlu olarak Node.js runtime'ında**
+koşuyor. Paketin kendi dokümanı açık yazıyor: *"Proxy defaults to using the
+Node.js runtime. The `runtime` config option is not available in Proxy files.
+Setting the `runtime` config option in Proxy will throw an error."* OpenNext de
+onun için Next sunucu runtime'ının ikinci bir kopyasını paketliyor. Kaçış yolu
+yok; seçim "proxy var ya da yok".
+
+**Faz D'deki not yanlıştı:** "OpenNext Node middleware'i desteklemediği için
+edge'de koşuyor" cümlesi ölçümle değil varsayımla yazılmıştı.
+
+Proxy'nin iki işi vardı ve ikisi de karşılandı:
+1. Token tazeleme → `POST /api/oturum` + `OturumTazeleyici` istemci bileşeni
+   (25 dakikada bir ve sekme öne geldiğinde). Sunucu bileşenleri cookie
+   yazamıyor, route handler'lar yazabiliyor.
+2. Cookie'siz isteği `/panel`den ucuzca çevirme → zaten **kesin bir kontrol
+   değildi** (cookie'nin varlığı kimlik kanıtı değil) ve gerçek karar hep panel
+   düzenindeydi.
+
+**Kaybedilen tek şey:** derin bağlantıya dönüş. Önce `/panel/hizmetler`e
+oturumsuz giren kişi girişten sonra oraya dönüyordu, şimdi `/panel`e dönüyor.
+Sunucu bileşeni kendi yolunu güvenilir biçimde okuyamıyor; bedeli 1358 KiB'a
+değmez.
+
+### Değişmez tarayıcısı
+
+`panelKapisi` üç adımı (checkOrigin → oturum → gövde) tek yere aldı ve bunun
+bir bedeli oldu: `checkOrigin` artık route dosyalarında **görünmüyor**, yani
+warden'ın metin arayan kapısı onu yakalayamıyor. Aynı şey Faz B'de bir kez
+yaşandı (Prisma'dan Drizzle'a geçerken kiracı kapısı sessizce zorlanamaz hale
+geldi ve iki faz incelemeye bağlı kaldı).
+
+Tekrarlanmasın diye `src/lib/degismezler.test.ts` eklendi: `src/app` altındaki
+her route dosyasını okuyup mutasyon metodu olan her birinde kapının varlığını
+arıyor, `panelKapisi`nin gerçekten `checkOrigin` çağırdığını doğruluyor ve
+hiçbir dosyanın `@/lib/db` import etmediğini kontrol ediyor. **Kasıtlı bir
+ihlalle sınandı — yakaladı.**
+
+### Bilerek kapsam dışı
+
+- **Randevu CRUD'u yok.** Tablo ve kısıt hazır ama randevu yazan tek yol Faz
+  F-G'de gelecek (müsaitlik motoru + halka açık sayfa). Panelden elle randevu
+  ekleme Faz H'de.
+- **`bildirim_kuyrugu` tablosu boş duruyor.** Faz I'de kullanılacak; şimdi
+  oluşturuldu ki o faz migration gerektirmesin.
+- **`kapali` (izin/tatil) tablosunun ekranı yok.** Müsaitlik motoru onu Faz
+  F'de okuyacak; ekranı o zaman anlamlı olacak.
+- **Hizmet sırası elle düzenlenemiyor.** Şemada `sira` var ve liste ona göre
+  sıralanıyor; sürükle-bırak arayüzü bu fazın kazancına değmezdi.
+- **Personel hesabı davet etme yok.** `personel.kullaniciId` şemada duruyor ama
+  personeli sisteme davet etme akışı yazılmadı; şu an işletme sahibi herkesi
+  kendi adına yönetiyor.
+
+### Doğrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` — **189 test geçti** (18 dosya, gerçek Postgres)
+- `npm run build` başarılı, 23 route
+- `npm run cf:kur` + `wrangler deploy --dry-run`: **1612 KiB gzip** (3 MiB
+  sınırının 1460 KiB altında)
+- Göç boş ve dolu veritabanında ayrı ayrı sınandı
+- Elle (`next dev`): `/`, `/giris` 200; oturumsuz `/panel`, `/panel/hizmetler`
+  → 307 `/giris?devam=/panel`; `/kayit/tamamla` → 307 `/giris`;
+  `/api/oturum` Origin'siz 403
+
+### Elle yapılması gerekenler (Faz E)
+
+- [ ] **PR merge edilince prod'a göç uygula:** `npm run db:uygula:prod -- --onayla`
+      Göç yalnızca EKLEME (yedi tablo, dört enum, `btree_gist` uzantısı ve
+      `isletme`ye yeni kolonlar — hepsi `DEFAULT` değerli, mevcut satırlar
+      etkilenmiyor). Geri alma: yedi `drop table`, dört `drop type`, `isletme`
+      kolonlarında `drop column`.
+- [ ] **Supabase'de `btree_gist` uzantısı** göçün ilk satırında kuruluyor
+      (`CREATE EXTENSION IF NOT EXISTS`). Supabase bunu destekliyor; yetki
+      hatası çıkarsa panelden Database → Extensions üzerinden açılabilir.
+- [ ] Faz D'den devreden madde: **Confirm email hâlâ AÇIK.** Kayıt akışı elle
+      hâlâ uçtan uca doğrulanamadı.
