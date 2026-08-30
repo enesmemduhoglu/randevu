@@ -811,3 +811,32 @@ sonuç vermişti.
 | İptal edilenin saatine yeni randevu | Kabul edildi — `WHERE` koşulu doğru |
 
 Yani kısıt, motor ve sorgu katmanı üretimde de aynı kuralı uyguluyor.
+
+### workerd doğrulaması — 30 Ağustos 2026
+
+Faz F'nin en büyük **doğrulanmamış** varsayımı kapandı: müsaitlik motorunun
+tamamı `Intl.DateTimeFormat` + IANA saat dilimi verisine dayanıyor ve workerd'in
+ICU derlemesinin tam olduğu **varsayılmıştı, ölçülmemişti**. (Aynı şüpheyle
+`ayar-girdi.ts`'te saat dilimi listesi kapalı tutulmuştu.)
+
+`npm run cf:onizle` ile gerçek workerd'de sınandı — deploy gerekmedi:
+
+| Senaryo | Beklenen | workerd |
+|---|---|---|
+| `Europe/Istanbul`, salı, 45 dk hizmet | 28 slot, öğle arası kesik, son 17:15 | **birebir aynı** |
+| Berlin kış (+1), pazar 09:00 yerel | `08:00Z` | ✓ |
+| Berlin **ileri geçiş günü** (2027-03-28) | `07:00Z` | ✓ |
+| Berlin yaz (+2) | `07:00Z` | ✓ |
+| Berlin **geri geçiş günü** (2027-10-31) | `08:00Z` | ✓ |
+
+Yani workerd'de **tam IANA yaz saati kuralları var**; motor Node'daki testlerle
+aynı sonucu üretiyor. Zaman katmanını yeniden yazma riski yok.
+
+Aynı koşumda doğrulanan diğerleri:
+- `/saglik`: Hyperdrive → Supavisor → Postgres 17, gidiş-dönüş **17 ms**
+- Oturumsuz `/panel` → 307 `/giris?devam=/panel`
+- Origin'siz POST → 403 (DEĞİŞMEZ 2 üretim çalışma zamanında da tutuyor)
+- Gerçek Supabase'e giriş → 200, cookie'ler yazıldı, panel doğru veriyle geldi
+- Bundle **1621 KiB gzip** (3 MiB sınırının 1451 KiB altında)
+
+**Sonuç:** deploy'un önünde teknik bir bilinmeyen kalmadı.
