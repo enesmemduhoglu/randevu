@@ -15,6 +15,13 @@
       "when": 1788045776440,
       "tag": "0001_kullanici-ve-personel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788082912824,
+      "tag": "0002_hizmet-randevu-ve-cakisma-kisiti",
+      "breakpoints": true
     }
   ]
 }
