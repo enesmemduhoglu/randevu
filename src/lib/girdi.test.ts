@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vitest";
 
-import { adDogrula, epostaDogrula, guvenliYol, sifreDogrula } from "@/lib/girdi";
+import {
+  adDogrula,
+  epostaDogrula,
+  guvenliYol,
+  paraKurusDogrula,
+  sifreDogrula,
+  tamsayiDogrula,
+} from "@/lib/girdi";
 
 // Bu dosya veritabanina DOKUNMUYOR: girdi.ts saf. Postgres'e kosan diger test
 // dosyalarindan bagimsiz, milisaniyeler icinde bitiyor.
@@ -112,5 +119,71 @@ describe("guvenliYol", () => {
     expect(guvenliYol(null)).toBeNull();
     expect(guvenliYol(undefined)).toBeNull();
     expect(guvenliYol(`/${"a".repeat(512)}`)).toBeNull();
+  });
+});
+
+describe("tamsayiDogrula", () => {
+  test("sayi ve metin girdiyi ayni sekilde kabul ediyor", () => {
+    // HTML form alanlari daima metin gonderiyor; JSON govdesi sayi.
+    expect(tamsayiDogrula(45, "Süre", { enAz: 5, enCok: 480 })).toEqual({
+      tamam: true,
+      deger: 45,
+    });
+    expect(tamsayiDogrula(" 45 ", "Süre", { enAz: 5, enCok: 480 })).toEqual({
+      tamam: true,
+      deger: 45,
+    });
+  });
+
+  test("ondalik ve sayi olmayan degerler reddediliyor", () => {
+    expect(tamsayiDogrula(45.5, "Süre", { enAz: 5, enCok: 480 }).tamam).toBe(false);
+    expect(tamsayiDogrula("kirk", "Süre", { enAz: 5, enCok: 480 }).tamam).toBe(false);
+    expect(tamsayiDogrula("", "Süre", { enAz: 5, enCok: 480 }).tamam).toBe(false);
+    expect(tamsayiDogrula(null, "Süre", { enAz: 5, enCok: 480 }).tamam).toBe(false);
+  });
+
+  test("sinirlar kapsayici", () => {
+    expect(tamsayiDogrula(5, "Süre", { enAz: 5, enCok: 480 }).tamam).toBe(true);
+    expect(tamsayiDogrula(480, "Süre", { enAz: 5, enCok: 480 }).tamam).toBe(true);
+    expect(tamsayiDogrula(4, "Süre", { enAz: 5, enCok: 480 }).tamam).toBe(false);
+    expect(tamsayiDogrula(481, "Süre", { enAz: 5, enCok: 480 }).tamam).toBe(false);
+  });
+});
+
+describe("paraKurusDogrula", () => {
+  test("Turkce bicimi kurusa ceviriyor", () => {
+    expect(paraKurusDogrula("350", "Ücret")).toEqual({ tamam: true, deger: 35000 });
+    expect(paraKurusDogrula("350,50", "Ücret")).toEqual({ tamam: true, deger: 35050 });
+    expect(paraKurusDogrula("1.250,50", "Ücret")).toEqual({ tamam: true, deger: 125050 });
+    expect(paraKurusDogrula("1.250", "Ücret")).toEqual({ tamam: true, deger: 125000 });
+  });
+
+  test("kayan noktali aritmetigin kurus kaybettirdigi degerler tam cikiyor", () => {
+    // 350.5 * 100 JavaScript'te 35050.000000000004 veriyor; metin uzerinden
+    // tam sayi aritmetigi bu sinifi tamamen kapatiyor.
+    expect(paraKurusDogrula("350,50", "Ücret")).toEqual({ tamam: true, deger: 35050 });
+    expect(paraKurusDogrula("8,29", "Ücret")).toEqual({ tamam: true, deger: 829 });
+    expect(paraKurusDogrula("1,10", "Ücret")).toEqual({ tamam: true, deger: 110 });
+  });
+
+  test("tek noktali kisa kuyruk ondalik sayiliyor", () => {
+    // "350.50" yazan kullaniciyi 35000 ile sasirtmamak icin.
+    expect(paraKurusDogrula("350.50", "Ücret")).toEqual({ tamam: true, deger: 35050 });
+    expect(paraKurusDogrula("350.5", "Ücret")).toEqual({ tamam: true, deger: 35050 });
+  });
+
+  test("bosluk ve para simgesi temizleniyor", () => {
+    expect(paraKurusDogrula(" 350 ₺ ", "Ücret")).toEqual({ tamam: true, deger: 35000 });
+  });
+
+  test("bos deger sifir", () => {
+    // Ucretsiz hizmet mesru: ilk gorusme, konsultasyon.
+    expect(paraKurusDogrula("", "Ücret")).toEqual({ tamam: true, deger: 0 });
+  });
+
+  test("gecersiz degerler reddediliyor", () => {
+    expect(paraKurusDogrula("elli lira", "Ücret").tamam).toBe(false);
+    expect(paraKurusDogrula("350,505", "Ücret").tamam).toBe(false);
+    expect(paraKurusDogrula(null, "Ücret").tamam).toBe(false);
   });
 });

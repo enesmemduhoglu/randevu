@@ -36,7 +36,14 @@ yazma, `scoped-db.ts`'e metot ekle. Muaf dosyalar: `src/lib/db.ts`,
 **2. Mutasyon route'unda `checkOrigin`.** POST/PUT/PATCH/DELETE'te CSRF ikinci
 katmani. `SameSite=Lax` tek basina yetmez: `multipart/form-data` kabul eden
 yollar CORS'un "basit istek" sinifina girer. Paylasilan sirla gelen makine
-yollari (Cron) muaftir. *(warden kapisi uyarir.)*
+yollari (Cron) muaftir.
+
+> Panel route'lari bunu `src/lib/panel-kapisi.ts` uzerinden aliyor
+> (checkOrigin -> oturum -> govde, bu sirayla). Yani `checkOrigin` route
+> dosyasinda GORUNMEYEBILIR ve warden'in metin arayan kapisi uyari verir -
+> yardimci kullaniliyorsa bu uyari beklenen bir sey. Gercek zorlama
+> `src/lib/degismezler.test.ts`'te: her route dosyasini okuyup kapinin
+> varligini ariyor.
 
 **3. Karar degistiren yollarda kosullu UPDATE.** Once-oku-sonra-yaz yapma;
 beklenen durumu `where`'e koy ve etkilenen satir sayisi 0 ise 409 don. Ayni
@@ -58,9 +65,12 @@ yalnizca `src/lib/zaman.ts` uzerinden ve isletmenin `saatDilimi` alaniyla
 yapilir. Sunucunun saat dilimine hicbir yerde guvenilmez.
 
 **8. Cakisma engeli veritabaninda.** Ayni personelin cakisan iki aktif randevusu
-`EXCLUDE USING gist` kisitiyla imkansiz. Uygulama katmanindaki kontrol
-kullaniciya erken geri bildirim icindir, **garanti degildir**; kisit ihlali
-yakalanip 409'a cevrilir.
+`EXCLUDE USING gist` kisitiyla imkansiz (Faz E, `drizzle/0002_*.sql`). Aralik
+`'[)'`: bitisik randevular cakisma DEGIL. `WHERE durum IN ('BEKLIYOR','ONAYLI')`:
+iptal edilen saat bosaliyor. Uygulama katmanindaki kontrol kullaniciya erken
+geri bildirim icindir, **garanti degildir**; kisit ihlali yakalanip 409'a
+cevrilir - hata kodunu okurken `src/lib/pg-hata.ts` kullan, Drizzle hatayi
+sarmaliyor ve `hata.code` sarmalayicida YOK.
 
 **9. `auth.users`'a foreign key yok.** Supabase Auth yalnizca kimlik saglar;
 `kullanici.auth_user_id` duz bir uuid string olarak durur. Boylece migration'lar
