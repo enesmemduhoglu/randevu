@@ -1051,3 +1051,101 @@ gördü.
 - [ ] `design-review` skill'i (plan.md: Faz G ve H sonrası koşturulur).
 - [ ] Çalışma saatleri ekranındaki `<input type="time">` AM/PM sorunu hâlâ
       karara bağlanmadı — native alan mı, 15 dakikalık açılır liste mi.
+
+---
+
+## Faz G2 — bot koruması
+
+**Dal:** `faz-g2/bot-korumasi` (Faz G'den dallandı, `main`'den değil) ·
+**2 commit** · **341 test** (24 dosya), bunun **20'si** bu fazın.
+
+Faz G'nin kodu bu işi kendi yorumlarında "G2'de gelecek" diye işaretlemişti;
+o satırlar artık gerçek.
+
+### Neden ayrı bir katman gerekliydi
+
+Faz G'deki "aynı numarayla en çok 3 açık randevu" sınırı bot korumasının
+yerini **tutmuyor**. Sınır numaraya bağlı; numarayı her istekte değiştiren
+bir betik onu hiç görmeden geçiyor ve takvimi doldurabiliyor. Sınır kötü
+kullanan **müşteriyi** durduruyor, Turnstile **betiği**.
+
+Turnstile seçildi çünkü hesapta zaten var, ücretsiz ve çoğu ziyaretçiye
+hiçbir şey göstermiyor. Randevu alan kitle telefondan geliyor; resim
+seçtiren bir kapı, engellediğinden fazla meşru müşteri kaybettirirdi.
+
+### Kararlar
+
+**`TURNSTILE_MODU` varsayılanı `sahte`, ve yalnızca tam olarak "gercek"
+yazılmışsa gerçek.** Tanımsızken gerçeğe düşmek, yeni geliştiricinin ilk
+gününde her randevuyu 403'e çevirirdi. "acik"/"true"/"1" de gerçek
+sayılmıyor: yazım hatası olan bir env sessizce bütün randevuları kapatmasın.
+`BILDIRIM_MODU` ile aynı desen.
+
+**Gerçek modda sır yoksa kapı KAPALI.** Yanlış yapılandırılmış bir üretim
+dağıtımının korumasız çalışmasından iyidir: sessizce açık kalan bir kapıyı
+kimse fark etmez, kapalı kapı ilk istekte görünür.
+
+**Ağ hatasında da kapalı.** Alternatifi, Cloudflare'e ulaşılamadığı her anda
+kapının kendiliğinden açılmasıydı — saldırganın tetikleyebileceği bir durumu,
+korumanın kapanma koşulu yapmak olurdu.
+
+**Üç sebep (eksik / geçersiz / ulaşılamadı) kullanıcıya aynı metni
+gösteriyor.** "Sunucu Cloudflare'e ulaşamadı" demek meşru müşteriye yardım
+etmiyor, botun ise hangi dalda olduğunu öğretiyor. Yapılabilecek tek şey her
+durumda aynı: yenile, tekrar dene.
+
+**Kapı slug çözümünden ÖNCE.** Geçemeyen istek veritabanına tek sorgu bile
+açtırmıyor — bir betiğin saniyede yüzlerce istek atması Postgres'e değil
+Cloudflare'e maliyet yazıyor. Testi de bu: olmayan slug + jetonsuz istek 404
+değil **403** alıyor.
+
+**IP `CF-Connecting-IP`'den okunuyor, `X-Forwarded-For` bilerek
+okunmuyor** — ikincisini istemci serbestçe yazıyor ve jetonu IP'ye bağlama
+güvencesini sahte bir değerle yok ederdi.
+
+**Widget örtük (implicit) render.** Jetonu forma `cf-turnstile-response`
+adıyla kendisi yazıyor. Açık render daha fazla denetim verirdi ama script'in
+yüklenmesini beklemek, iki kez çalışmamasını sağlamak ve React yeniden
+çiziminde widget'i temizlemek bize düşerdi — üç ayrı hata kaynağı,
+ihtiyacımız olmayan bir esneklik karşılığında.
+
+**Hatadan sonra widget sıfırlanıyor.** Jeton tek kullanımlık: 403 ya da 409
+sonrası müşteri "tekrar dene" dediğinde aynı harcanmış jetonu gönderirdi ve
+ikinci deneme, sebebi görünmeden her zaman başarısız olurdu.
+
+**İki taraf aynı koşulda açılıp kapanıyor.** Anahtar tanımsızsa widget hiç
+çizilmiyor ve sunucu `sahte` moda düşüyor — yerelde randevu almak için
+Cloudflare hesabı gerekmiyor.
+
+### Bilerek kapsam dışı
+
+- **Hız sınırı koda girmedi, Cloudflare kuralı olarak kalıyor.** `plan.md`
+  zaten böyle tarif ediyordu. Worker'ın `ratelimit` binding'iyle kod
+  tarafında yapmak mümkün ama `wrangler.jsonc` üretim yapılandırmasını
+  taşıyor ve bu oturumda `cf:onizle` ile **ölçülemedi**; ölçülmemiş bir
+  runtime varsayımını o dosyaya sokmak bu depoda daha önce üç kez yanlış
+  çıktı. Elle yapılacaklar listesinde.
+- **Panel ve kimlik yollarında Turnstile yok.** `/api/giris` ve `/api/kayit`
+  de halka açık, ama oturum açma denemesinin kendi geri bildirimi var ve
+  kayıt e-posta doğrulamasına bağlanacak (Faz I). Ayrı bir karar olarak
+  kalsın.
+- **`npm run build` ve `cf:onizle` bu oturumda koşturulmadı.**
+
+### Elle yapılması gerekenler (Faz G2)
+
+- [ ] Cloudflare paneli → Turnstile → yeni site (`randevu.enesmemduhoglu.tech`).
+      Widget türü **Managed**. Çıkan iki değer:
+      - site key → `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. **Derleme anında**
+        gömülüyor, yani `npm run cf:kur` adımında ortamda olmalı.
+      - secret → `npx wrangler secret put TURNSTILE_SECRET`. `.env`'e
+        yazılmıyor.
+- [ ] Üretimde `TURNSTILE_MODU=gercek`. Bu satır girilene kadar kod yayında
+      olsa bile kapı **açık** — koda bakıp "koruma var" demek yetmiyor.
+- [ ] Cloudflare paneli → Security → WAF → **Rate limiting rules**. Ücretsiz
+      planda tek kural hakkı var; `/api/randevu` ve `/api/musaitlik`
+      yollarını tek ifadede eşleştir, sayaç karakteristiği **IP**. Süre ve
+      eşik seçenekleri plana göre değişiyor, panelde görünen listeden en kısa
+      pencere seçilsin.
+- [ ] `cf:onizle` ile workerd'de gerçek modu ölç: sır `wrangler secret`
+      üzerinden geldiği için `process.env`'de **görünmüyor**, binding
+      dalının gerçekten çalıştığı ölçülmeden varsayılmasın.
