@@ -150,9 +150,12 @@ kurallari (dogrudan `resend.emails.send`, `checkOrigin`) etkilenmedi.
 - [x] Windows Gelistirici Modu acildi (symlink yetkisi). **Her `cf:kur` icin
       gerekli** - kapatilirsa build EPERM ile duser.
 - [x] `wrangler login` yapildi; hesap `6f4d2de4cf9316fbf3538ddea2867547`.
-- [ ] Deploy karari ve custom domain baglantisi.
+- [x] Deploy karari ve custom domain baglantisi - 30 Agustos 2026'da yapildi,
+      ayrinti "Ilk yayin" bolumunde. `wrangler.jsonc` `workers_dev: false` +
+      custom domain tasiyor.
 - [ ] Supabase access token kullanici tarafindan silindi - yeni bir islem
-      gerekirse yenisi lazim.
+      gerekirse yenisi lazim. (Kapanmiyor: duran bir kosul, yapilacak is
+      degil.)
 
 ---
 
@@ -398,10 +401,14 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
       kalmalı. Açılırsa kayıt akışı ilk iki denemeden sonra tıkanır.
 - [x] **Uçtan uca elle doğrulama yapıldı** (30 Ağustos 2026). Ayrıntı aşağıda
       "Uçtan uca doğrulama" bölümünde.
-- [ ] Cloudflare'e yayınlarken `NEXT_PUBLIC_SUPABASE_URL` ve
+- [x] Cloudflare'e yayınlarken `NEXT_PUBLIC_SUPABASE_URL` ve
       `NEXT_PUBLIC_SUPABASE_ANON_KEY` **derleme anında** ortamda olmalı;
-      `NEXT_PUBLIC_` önekli değişkenler `cf:kur` adımında gömülüyor.
-- [ ] Deploy kararı ve custom domain bağlantısı (Faz B'den devrediyor).
+      `NEXT_PUBLIC_` önekli değişkenler `cf:kur` adımında gömülüyor. İlk
+      yayında sağlandı — ama bu bir kerelik iş değil, **her `cf:kur` için
+      geçerli duran bir kural**. Faz G2'nin
+      `NEXT_PUBLIC_TURNSTILE_SITE_KEY`'i de aynı sınıfta.
+- [x] Deploy kararı ve custom domain bağlantısı (Faz B'den devrediyordu) —
+      30 Ağustos 2026, "İlk yayın" bölümü.
 
 ---
 
@@ -707,7 +714,7 @@ kapanış değişkeni olarak tutuyor.
 
 - [x] Faz D'den devreden madde kapandı: `mailer_autoconfirm: true` yapıldı ve
       kayıt → panel akışı uçtan uca doğrulandı.
-- [ ] `randevu_dev` veritabanına örnek işletme tohumlandı (`isil-guzellik`,
+- [x] `randevu_dev` veritabanına örnek işletme tohumlandı (`isil-guzellik`,
       iki personel, iki hizmet, haftalık çalışma düzeni, bir randevu). Faz G
       geliştirmesi için duruyor; prod'a gitmiyor.
 
@@ -896,7 +903,9 @@ her şey cascade ile gidiyor). Üretim veritabanı yine boş.
 - [x] Duman testi auth kullanıcıları silindi. Supabase'de yalnızca
       `demo@ornek.com` duruyor — yerel tarayıcı testleri için, satırları
       `randevu_dev`'de.
-- [ ] `/api/musaitlik` üzerinde hız sınırı yok (Faz G).
+- [ ] `/api/musaitlik` üzerinde hız sınırı yok. **Faz G2'ye taşındı** ve orada
+      Cloudflare WAF kuralı olarak duruyor — kod tarafında değil, bilerek
+      (gerekçe: Faz G2 → "Bilerek kapsam dışı").
 
 ---
 
@@ -1149,3 +1158,72 @@ Cloudflare hesabı gerekmiyor.
 - [ ] `cf:onizle` ile workerd'de gerçek modu ölç: sır `wrangler secret`
       üzerinden geldiği için `process.env`'de **görünmüyor**, binding
       dalının gerçekten çalıştığı ölçülmeden varsayılmasın.
+
+      **Ölçerken `.env` değil `.dev.vars`.** workerd'de kod
+      `getCloudflareContext().env`'i okuyor ve wrangler orayı `.dev.vars`'tan
+      dolduruyor; `.env`'e yazılan `TURNSTILE_SECRET` `cf:onizle`'de
+      görünmez ve kapı "sır yok" dalına düşüp her randevuyu 403 yapar —
+      yani koda değil yanlış dosyaya bakmış olursun. `.env`'deki satır
+      yalnızca `next dev` içindir.
+
+---
+
+## Oturum sonu durumu — 31 Ağustos 2026
+
+**Canlı:** https://randevu.enesmemduhoglu.tech (G öncesi sürüm) ·
+**Tek dal:** `main` · **341 test** (24 dosya)
+
+Bu oturumda Faz G ve G2 kapandı: PR #7 ve #8 merge edildi, dalları silindi.
+
+| Faz | Durum |
+|---|---|
+| A — iskele | kapandı |
+| B — Cloudflare zemini | kapandı |
+| C — tasarım dili | kapandı |
+| D — kimlik ve kiracı | kapandı |
+| E — şema ve panel CRUD | kapandı |
+| F — müsaitlik motoru | kapandı |
+| G — halka açık randevu sayfası | **kapandı** (PR #7) |
+| G2 — bot koruması | **kapandı** (PR #8) |
+| **H — panel takvimi** | **sıradaki** |
+| I, J, K | bekliyor |
+
+### Ne çalışıyor, ne çalışmıyor
+
+**Çalışıyor:** işletme kaydı, giriş/çıkış, panel (hizmetler, personel,
+çalışma saatleri, ayarlar), müsaitlik motoru, `GET /api/musaitlik`, ve
+**müşterinin randevu alması** — `/r/[slug]` akışı, `POST /api/randevu`,
+iptal linki.
+
+**Çalışmıyor:** işletme sahibi randevuyu panelde göremiyor (Faz H). Bildirim
+ve şifre sıfırlama yok (Faz I).
+
+**Yayında değil:** `main` G ve G2'yi taşıyor ama prod'a deploy edilmedi.
+Canlıdaki sürüm hâlâ Faz G öncesi — yani `/r/<slug>` üretimde 404.
+
+### Bu oturumda ölçülmeyenler
+
+Dürüstçe: `npm run build` ve `cf:onizle` **hiç koşmadı**. Tip kontrolü, lint
+ve 341 testin tamamı yeşil, ama workerd tarafı ölçülmedi. Turnstile'ın
+Cloudflare binding dalı da bu yüzden ölçülmemiş durumda.
+
+### En kolay kaybedilecek üç ayrıntı
+
+- **Turnstile kodu yayında olsa bile `TURNSTILE_MODU=gercek` girilene kadar
+  kapı AÇIK.** Koda bakıp "koruma var" demek yetmiyor.
+- **`cf:onizle`'de sır `.dev.vars`'tan okunuyor, `.env`'den değil.** Yanlış
+  dosyaya yazılan sır sessizce "sır yok" dalına düşürür.
+- **`NEXT_PUBLIC_` önekli her değişken derleme anında gömülüyor.** Site
+  anahtarı `cf:kur` adımında ortamda olmalı; sonradan tanımlamak işe
+  yaramaz.
+
+### Faz H'ye başlarken
+
+Veri katmanı büyük ölçüde hazır: `scoped-db.ts` randevu yazma ve iptal
+metotlarını taşıyor, `randevuTokenIleGetir` join'leri (hizmet, personel,
+müşteri) panelin de ihtiyaç duyacağı şekli gösteriyor.
+
+Durum değiştirme **koşullu UPDATE** olacak (DEĞİŞMEZ 3) — iptalde kullanılan
+desen birebir geçerli. Elle randevu ekleme aynı `EXCLUDE` kısıtına çarpacak,
+yani 40P01 yeniden deneme mantığı orada da gerekli; `randevuOlustur`
+paylaşılabilir.
