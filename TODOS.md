@@ -951,3 +951,103 @@ yok (Faz I).
 - Çalışma saatleri ekranındaki `<input type="time">` işletim sistemi yereline
   göre AM/PM gösterebiliyor (marka kuralı 24 saat). Karar verilmedi:
   native alan mı, 15 dakikalık açılır liste mi.
+
+---
+
+## Faz G — halka açık randevu sayfası
+
+**Dal:** `faz-g/halka-acik-randevu` · **3 commit** (veri katmanı → route'lar →
+arayüz) · **321 test** (23 dosya), bunun **49'u** bu fazın route testleri.
+
+Müşteri artık randevu **alabiliyor**. Oturum sonu notundaki "müşteri hiçbir
+şekilde randevu ALAMIYOR" satırı kapandı.
+
+### Ne geldi
+
+| Parça | Ne yapıyor |
+|---|---|
+| `src/lib/iptal-token.ts` | 160 bitlik iptal sırrı, id'den türetilmiyor |
+| `src/lib/randevu-girdi.ts` | gövde doğrulaması, id'ler Postgres'e gitmeden eleniyor |
+| `musaitlik-sorgu.ts > slotSec()` | istenen anı aynı motorla yeniden sınar |
+| `scoped-db.ts` | `randevuOlustur`, `randevuTokenIleGetir`, `randevuIptalEt` |
+| `POST /api/randevu` | oturumsuz yazma |
+| `POST /api/randevu/iptal` | koşullu UPDATE ile iptal |
+| `/r/[slug]` | hizmet → personel → gün/saat → bilgiler → onay |
+| `/r/[slug]/randevu/[token]` | müşterinin iptal sayfası |
+
+### Kararlar
+
+**Müşteri telefonla tekilleniyor, ama mevcut kaydın adı GÜNCELLENMİYOR.** Bu
+yol oturumsuz: numarayı bilen herkes buraya yazabiliyor. Güncelleseydik bir
+yabancı, işletmenin müşteri kaydındaki adı değiştirebilirdi. İşletme farklı
+bir ad görmek isterse panelden kendi düzeltir.
+
+**Müşteri + randevu tek transaction.** Müşteri yazılıp randevu yazılamazsa
+geriye sahibi olmayan bir müşteri kaydı kalırdı; işletme onu panelde "hiç
+gelmemiş biri" gibi görürdü.
+
+**Personel ve bitiş motordan geliyor, istemciden değil.** Bitişi route'ta
+yeniden hesaplamak, yaz saati geçişinde motorunkinden farklı bir değer
+üretebilirdi ve çakışma kısıtı o farkı görmezdi.
+
+**`simdi` bir kez okunuyor.** Müsaitlik penceresi ile açık randevu sayımı
+aynı ana bakmalı. İki ayrı `new Date()` bugün bir şey bozmuyor ama iki farklı
+"şu an" taşıyan bir akış, ileride sınırdaki bir durumu açıklanamaz hale
+getirir.
+
+**Kapalı, olmayan ve pasif olan aynı cevabı alıyor.** Hangi slug'ların kayıtlı
+olduğunu sızdırmanın faydası yok. IDOR'un görüntüsü de bu olmalı: var olmayan
+id ile başkasının id'si çağırana aynı görünsün.
+
+**Aynı numarayla en çok 3 açık randevu (429).** Bot koruması **değil** —
+takvimi elli randevuyla doldurup hiçbirine gelmeyen kullanımı engelliyor. 3,
+çünkü küçük işletmede meşru müşteri en fazla birkaç randevuyu aynı anda açık
+tutuyor (kesim + boya + eşinin randevusu gibi); dördüncüsü artık olağan değil.
+Sayım transaction içinde ama SERIALIZABLE değil: aynı anda gelen iki istek
+sınırı bir aşabilir. Kabul edildi — bunun bedeli fazladan bir randevu,
+kilitlemenin bedeli ise her yazımda müşteri satırını kilitlemek.
+
+### 40P01 — yarışan iki POST testinin ortaya çıkardığı gerçek hata
+
+İki istek **çakışan** aralıkları aynı anda yazınca Postgres 23P01
+üretemiyor: her işlem önce kendi satırını yazıyor, sonra `EXCLUDE` kısıtını
+doğrularken diğerinin işlemini bekliyor. İkisi birbirini bekleyince Postgres
+birini kurban seçip **40P01 (deadlock_detected)** fırlatıyor — yani "çakıştı"
+değil "sırayı çözemedim" diyor.
+
+Yakalanmadığı sürece yarışı kaybeden müşteri **500 görüyordu**. Şimdi en çok
+3 kez yeniden deneniyor. Neden doğrudan 409 değil: kurban işlem hiçbir şey
+yazmadan geri alınıyor, yani ikinci deneme kesin bir cevap alıyor — saat
+gerçekten doluysa 23P01 ile "dolu", değilse randevu yazılıyor. Doğrudan 409
+demek, yazılabilecek bir randevuyu reddetmek olurdu.
+
+DEĞİŞMEZ 8'in "uygulama katmanı garanti değildir" cümlesinin pratikteki
+karşılığı bu: motor slotu uygun gördü, kısıt reddetti, müşteri doğru mesajı
+gördü.
+
+### Bilerek kapsam dışı
+
+- **Turnstile ve hız sınırı — Faz G2.** `/api/randevu` ve `/api/musaitlik`
+  şu an bot korumasız. Açık randevu sınırı bunun yerini **tutmuyor**:
+  numarayı değiştiren bir bot sınırı görmeden geçer. Ayrı faz, çünkü
+  Cloudflare panelinden site key + secret alınmasını gerektiriyor ve o iş
+  koddan bağımsız.
+- **Panelde randevuyu görmek — Faz H.** İşletme şu an gelen randevuyu
+  yalnızca veritabanında görebiliyor. Faz G'nin uçtan uca elle
+  doğrulamasının "panelde göründüğünü gör" adımı bu yüzden Faz H'ye kaldı.
+- **Bildirim yok — Faz I.** Randevu alındığında müşteriye e-posta gitmiyor;
+  iptal linki yalnızca 201 gövdesinde dönüyor. Müşteri o sayfayı kapatırsa
+  linki kaybediyor.
+- **`npm run build` bu oturumda koşturulmadı.** Tip kontrolü, lint ve 321
+  testin tamamı yeşil; prod build merge öncesi koşturulmalı.
+
+### Elle yapılması gerekenler (Faz G)
+
+- [ ] `npm run build` ve ardından `npm run cf:onizle` ile workerd'de
+      `/r/<slug>` akışını gör.
+- [ ] Uçtan uca elle doğrulama: kaydol → hizmet + çalışma saati tanımla →
+      gizli sekmede `/r/<slug>` → randevu al → iptal linkiyle iptal et.
+      **Aynısı mobil genişlikte** — hedef kitle telefondan giriyor.
+- [ ] `design-review` skill'i (plan.md: Faz G ve H sonrası koşturulur).
+- [ ] Çalışma saatleri ekranındaki `<input type="time">` AM/PM sorunu hâlâ
+      karara bağlanmadı — native alan mı, 15 dakikalık açılır liste mi.

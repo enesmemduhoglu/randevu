@@ -8,7 +8,7 @@
 
 import { uygunSaatler, type Aralik } from "@/lib/musaitlik";
 import type { getHalkaAcikDb } from "@/lib/scoped-db";
-import { gunBasi, gunEkle, type YerelTarih } from "@/lib/zaman";
+import { gunBasi, gunEkle, yerelGun, type YerelTarih } from "@/lib/zaman";
 
 type HalkaAcikDb = NonNullable<Awaited<ReturnType<typeof getHalkaAcikDb>>>;
 
@@ -26,6 +26,34 @@ export type SorguGirdisi = {
   /// Verilmezse hizmeti verebilen TUM personeller deneniyor ("farketmez").
   personelId?: string;
 };
+
+/// Istenen ANIN hala alinabilir olup olmadigini sinar; alinabiliyorsa
+/// randevunun yazilacagi personeli doner.
+///
+/// Neden listeyi yeniden uretiyoruz: musterinin sayfayi actigi an ile "onayla"
+/// dedigi an arasinda dakikalar gecebiliyor. O arada baskasi ayni sloti
+/// almis, isletme calisma saatini degistirmis ya da min bildirim suresi
+/// gecmis olabilir. Ayni hesabi tekrarlamak, iki farkli kural kumesi
+/// yazmaktan guvenli - motor tek.
+///
+/// Bu bir GARANTI DEGIL, erken geri bildirim: gercek koruma veritabanindaki
+/// EXCLUDE kisiti (DEGISMEZ 8). Buradan gecen bir istek yine 409 alabilir.
+export async function slotSec(
+  girdi: Omit<SorguGirdisi, "tarih"> & { baslangic: Date },
+): Promise<PersonelSloti | null> {
+  const { db, baslangic } = girdi;
+
+  // Gun, istenen anin ISLETMENIN dilimindeki karsiligi. Sunucunun dilimine
+  // bakilmiyor (DEGISMEZ 7): UTC bir Worker'da 22:00'daki bir randevu ertesi
+  // gune dusuyor ve o gunun calisma saatleriyle sinanirdi.
+  const tarih = yerelGun(baslangic, db.isletme.saatDilimi);
+
+  const slotlar = await gununSlotlari({ ...girdi, tarih });
+
+  return (
+    slotlar.find((s) => s.baslangic.getTime() === baslangic.getTime()) ?? null
+  );
+}
 
 /// Bir gunun uygun saatlerini, hangi personelle olduguyla birlikte doner.
 export async function gununSlotlari(
