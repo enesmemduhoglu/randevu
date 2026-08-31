@@ -5,6 +5,7 @@ import { ChevronLeftIcon } from "lucide-react";
 import { HataKutusu } from "@/components/kimlik/hata-kutusu";
 import { AdimBasligi } from "@/components/randevu/ortak";
 import { RandevuOzeti } from "@/components/randevu/randevu-ozeti";
+import { TurnstileAlani } from "@/components/randevu/turnstile-alani";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,10 @@ export type MusteriBilgileri = {
   telefon: string;
   eposta: string;
   not: string;
+  /// Turnstile'in forma kendi yazdigi jeton. Anahtar tanimli degilse (yerel
+  /// gelistirme, test) bos kaliyor ve sunucu da ayni kosulda `sahte` modda
+  /// oldugu icin istek geciyor.
+  turnstile: string;
 };
 
 /// Notun sunucudaki ust siniri (randevu-girdi.ts). Burada da yaziyoruz ki
@@ -55,6 +60,9 @@ export function BilgiFormu({
       telefon: String(veri.get("telefon") ?? ""),
       eposta: String(veri.get("eposta") ?? ""),
       not: String(veri.get("not") ?? ""),
+      // Alanin adini Turnstile belirliyor, biz degil: widget onu forma
+      // kendisi ekliyor.
+      turnstile: String(veri.get("cf-turnstile-response") ?? ""),
     });
   }
 
@@ -144,6 +152,11 @@ export function BilgiFormu({
             className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30"
           />
         </div>
+
+        {/* Widget dugmelerin USTUNDE: musteri "onayla"ya basmadan once
+            gorunur olmali, yoksa etkilesim isteyen bir kutu ekranin disinda
+            kalir ve gonderim sebebi anlasilmadan reddedilir. */}
+        <TurnstileAlani hata={hata} />
 
         <div className="flex items-center justify-between gap-3 pt-1">
           <Button
