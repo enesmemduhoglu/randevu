@@ -6,7 +6,7 @@
 // kapanis degiskeni. Yanlis kiracinin verisini istemek icin once bu dosyayi
 // degistirmek gerekiyor - unutmakla olmuyor.
 
-import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNull, lt, or } from "drizzle-orm";
 
 import {
   calismaSaati,
@@ -14,11 +14,13 @@ import {
   isletme,
   kapali,
   kullanici,
+  musteri,
   personel,
   personelHizmet,
   randevu,
 } from "@/db/sema";
 import { getDb } from "@/lib/db";
+import { cakismaIhlaliMi, pgHata } from "@/lib/pg-hata";
 
 export type Rol = "SAHIP" | "PERSONEL" | "MUSTERI";
 
@@ -52,6 +54,32 @@ export type CalismaAraligi = {
   baslangicDk: number;
   bitisDk: number;
 };
+
+/// Halka acik randevu yazmanin girdisi.
+///
+/// `personelId` ve `bitis` istemciden DEGIL musaitlik motorundan geliyor
+/// (bkz. `slotSec`): bitisi cagrildigi yerde yeniden hesaplamak, yaz saati
+/// gecisinde motorunkinden farkli bir deger uretebilir ve cakisma kisiti o
+/// farki gormezdi.
+export type RandevuYazma = {
+  personelId: string;
+  hizmetId: string;
+  baslangic: Date;
+  bitis: Date;
+  musteriAd: string;
+  telefon: string;
+  eposta: string | null;
+  not: string | null;
+  iptalToken: string;
+  /// Acik randevu sinirinin "gelecek" tanimi disaridan veriliyor; bu dosya
+  /// `new Date()` okumuyor ki testler zamani sabitleyebilsin.
+  simdi: Date;
+  enCokAcikRandevu: number;
+  otomatikOnay: boolean;
+};
+
+/// 40P01 = deadlock_detected. Gerekcesi `randevuOlustur`un yaninda.
+const KILITLENME = "40P01";
 
 /// Isletme oturumuna bagli, kiraci filtresi enjekte edilmis veri kapisi.
 export async function getScopedDb(oturum: IsletmeOturumu) {
@@ -383,6 +411,123 @@ export async function getHalkaAcikDb(slug: string) {
 
   const kiraci = sahip.id;
 
+  /// Randevu yazmanin TEK denemesi; yeniden deneme dongusu `randevuOlustur`da.
+  ///
+  /// Ayri bir fonksiyon cunku kilitlenme sonrasi tekrar, transaction'in
+  /// TAMAMINI bastan calistirmak zorunda: yarim bir tekrar, sahibi olmayan bir
+  /// musteri kaydi birakirdi. Metot olarak degil kapanis fonksiyonu olarak
+  /// duruyor - `kiraci` filtresi burada da disaridan verilemiyor.
+  async function randevuYaz(veri: RandevuYazma) {
+    try {
+      return await db.transaction(async (tx) => {
+        // Musteri TELEFONLA tekilleniyor (sema: musteri_isletme_telefon_idx).
+        const [mevcut] = await tx
+          .select({ id: musteri.id })
+          .from(musteri)
+          .where(
+            and(
+              eq(musteri.isletmeId, kiraci),
+              eq(musteri.telefon, veri.telefon),
+            ),
+          )
+          .limit(1);
+
+        let musteriId = mevcut?.id;
+
+        if (!musteriId) {
+          // `onConflictDoNothing`: ayni numarayla ayni anda gelen ikinci
+          // istek benzersizlik ihlaliyle 500 uretmesin. Ikinci istek bos
+          // doner ve asagida kaydi okuyup devam eder.
+          const [yeni] = await tx
+            .insert(musteri)
+            .values({
+              isletmeId: kiraci,
+              ad: veri.musteriAd,
+              telefon: veri.telefon,
+              eposta: veri.eposta,
+            })
+            .onConflictDoNothing()
+            .returning({ id: musteri.id });
+
+          if (yeni) {
+            musteriId = yeni.id;
+          } else {
+            const [yarisiKaybeden] = await tx
+              .select({ id: musteri.id })
+              .from(musteri)
+              .where(
+                and(
+                  eq(musteri.isletmeId, kiraci),
+                  eq(musteri.telefon, veri.telefon),
+                ),
+              )
+              .limit(1);
+            // Buraya dusmek icin satirin insert ile select arasinda
+            // SILINMIS olmasi gerekir. Sessizce "saat dolu" demek yanlis
+            // olurdu: musteriye yanlis sebebi soyleyip gercek sorunu
+            // gizlerdik. Beklenmeyen durum beklenmeyen hata olarak ciksin.
+            if (!yarisiKaybeden) {
+              throw new Error("Musteri kaydi olusturulamadi");
+            }
+            musteriId = yarisiKaybeden.id;
+          }
+        }
+        // MEVCUT MUSTERININ ADI VE NOTU GUNCELLENMIYOR. Bu yol oturumsuz:
+        // numarayi bilen herkes buraya yazabiliyor. Guncelleseydik, bir
+        // yabanci isletmenin musteri kaydindaki adi degistirebilirdi.
+        // Isletme farkli bir ad gormek isterse panelden kendi duzeltir.
+
+        // Ayni musterinin ACIK randevu sayisi sinirli. Bot korumasi degil
+        // (o Faz G2'de Turnstile ve hiz siniriyla geliyor) - takvimi elli
+        // randevuyla doldurup sonra hicbirine gelmeyen kullanimi engelliyor.
+        // Sayim transaction icinde ama SERIALIZABLE degil: ayni anda gelen
+        // iki istek siniri bir asabilir. Kabul edildi, cunku bunun bedeli
+        // fazladan bir randevu; kilitlemenin bedeli ise her randevu
+        // yaziminda musteri satirini kilitlemek.
+        const acikOlanlar = await tx
+          .select({ id: randevu.id })
+          .from(randevu)
+          .where(
+            and(
+              eq(randevu.isletmeId, kiraci),
+              eq(randevu.musteriId, musteriId),
+              inArray(randevu.durum, ["BEKLIYOR", "ONAYLI"]),
+              gte(randevu.baslangic, veri.simdi),
+            ),
+          );
+
+        if (acikOlanlar.length >= veri.enCokAcikRandevu) {
+          return { durum: "sinir" as const, acik: acikOlanlar.length };
+        }
+
+        const [olusan] = await tx
+          .insert(randevu)
+          .values({
+            isletmeId: kiraci,
+            personelId: veri.personelId,
+            hizmetId: veri.hizmetId,
+            musteriId,
+            baslangic: veri.baslangic,
+            bitis: veri.bitis,
+            durum: veri.otomatikOnay ? "ONAYLI" : "BEKLIYOR",
+            kaynak: "MUSTERI",
+            not: veri.not,
+            iptalToken: veri.iptalToken,
+          })
+          .returning();
+
+        return { durum: "tamam" as const, randevu: olusan };
+      });
+    } catch (hata) {
+      // Cakisma kisiti YA DA iki istegin ayni sloti yakalamasi. Ikisi de
+      // "o saat artik bos degil" demek; cagirana ayni gorunuyorlar.
+      // cakismaIhlaliMi HAM hatayi aliyor: kodu Drizzle'in sarmalayicisinin
+      // altindan kendisi cikariyor (bkz. pg-hata.ts).
+      if (cakismaIhlaliMi(hata)) return { durum: "dolu" as const };
+      throw hata;
+    }
+  }
+
   return {
     isletme: sahip,
 
@@ -489,6 +634,107 @@ export async function getHalkaAcikDb(slug: string) {
             or(isNull(kapali.personelId), eq(kapali.personelId, personelId)),
           ),
         );
+    },
+
+    // ---- Randevu yazma ----------------------------------------------------
+
+    /// Randevuyu ve gerekiyorsa musteri kaydini olusturur.
+    ///
+    /// TEK TRANSACTION: musteri yazilip randevu yazilamazsa geriye, sahibi
+    /// olmayan bir musteri kaydi kalirdi. Isletme onu panelde gorur ve hic
+    /// gelmemis birinin kaydi gibi durur.
+    ///
+    /// Cakisma kontrolu BURADA DEGIL: garanti veritabaninin `EXCLUDE USING
+    /// gist` kisitinda (DEGISMEZ 8). Kisit ihlali yakalanip `durum: "dolu"`
+    /// olarak donuyor - cagiran taraf onu 409'a ceviriyor. Drizzle hatayi
+    /// sarmaladigi icin kod `pgHata` ile okunuyor.
+    async randevuOlustur(veri: RandevuYazma) {
+      // KILITLENME YENIDEN DENENIYOR (40P01).
+      //
+      // Iki istek CAKISAN araliklari ayni anda yazarsa Postgres 23P01
+      // uretemiyor: her islem once kendi satirini yaziyor, sonra EXCLUDE
+      // kisitini dogrularken digerinin islemini bekliyor. Ikisi birbirini
+      // bekleyince Postgres birini kurban secip 40P01 firlatiyor - yani
+      // "cakisti" degil "sirayi cozemedim" diyor. Faz G'de yarisan iki POST
+      // testi bunu ortaya cikardi; yakalanmadigi surece yarisi kaybeden
+      // musteri 500 goruyordu.
+      //
+      // Neden yeniden deneme, neden dogrudan 409 degil: kurban islem HICBIR
+      // SEY yazmadan geri aliniyor. Kazanan commit ettikten sonra ikinci
+      // deneme kesin bir cevap aliyor - saat gercekten doluysa 23P01 ile
+      // "dolu", degilse (ornegin cakisma musteri satirindaydi) randevu
+      // yaziliyor. Dogrudan 409 demek, yazilabilecek bir randevuyu
+      // reddetmek olurdu.
+      const EN_COK_DENEME = 3;
+
+      for (let deneme = 1; ; deneme++) {
+        try {
+          return await randevuYaz(veri);
+        } catch (hata) {
+          if (pgHata(hata)?.kod === KILITLENME && deneme < EN_COK_DENEME) {
+            continue;
+          }
+          // Israrli kilitlenme de "o saat artik bos degil" demek: bu
+          // transaction'in paylastigi tek kaynak randevu araligi ve musteri
+          // satiri. Musteriye sunucu hatasi gostermek yerine tekrar secim
+          // yaptiriyoruz.
+          if (pgHata(hata)?.kod === KILITLENME) return { durum: "dolu" as const };
+          throw hata;
+        }
+      }
+    },
+
+    // ---- Iptal ------------------------------------------------------------
+
+    /// Iptal linkinin arkasindaki randevu. Token TEK BASINA yetki tasiyor,
+    /// bu yuzden yine de kiraci filtresi var: baska bir salonun sayfasindan
+    /// gelen token burada bulunamiyor.
+    async randevuTokenIleGetir(token: string) {
+      const [kayit] = await db
+        .select({
+          id: randevu.id,
+          baslangic: randevu.baslangic,
+          bitis: randevu.bitis,
+          durum: randevu.durum,
+          not: randevu.not,
+          hizmetAd: hizmet.ad,
+          hizmetSureDk: hizmet.sureDk,
+          hizmetFiyatKurus: hizmet.fiyatKurus,
+          personelAd: personel.ad,
+          musteriAd: musteri.ad,
+        })
+        .from(randevu)
+        .innerJoin(hizmet, eq(hizmet.id, randevu.hizmetId))
+        .innerJoin(personel, eq(personel.id, randevu.personelId))
+        .innerJoin(musteri, eq(musteri.id, randevu.musteriId))
+        .where(and(eq(randevu.iptalToken, token), eq(randevu.isletmeId, kiraci)))
+        .limit(1);
+
+      return kayit ?? null;
+    },
+
+    /// DEGISMEZ 3: kosullu UPDATE. Beklenen durum `where`'de, once-oku-sonra-
+    /// yaz yok. Ayni linke iki kez basilirsa ikincisi 0 satir etkiliyor ve
+    /// cagiran taraf 409 donuyor - "iptal edildi" mesajini iki kez gostermek
+    /// yerine ne oldugunu soyluyoruz.
+    ///
+    /// Randevu SILINMIYOR: isletme iptali gormek istiyor. Slot da bosaliyor,
+    /// cunku hem EXCLUDE kisiti hem musaitlik motoru yalnizca BEKLIYOR ve
+    /// ONAYLI'yi dolu sayiyor.
+    async randevuIptalEt(token: string) {
+      const sonuc = await db
+        .update(randevu)
+        .set({ durum: "IPTAL" })
+        .where(
+          and(
+            eq(randevu.iptalToken, token),
+            eq(randevu.isletmeId, kiraci),
+            inArray(randevu.durum, ["BEKLIYOR", "ONAYLI"]),
+          ),
+        )
+        .returning({ id: randevu.id });
+
+      return sonuc.length;
     },
 
     /// Saati DOLU sayan randevular.
