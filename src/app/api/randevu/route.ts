@@ -4,6 +4,7 @@ import { slotSec } from "@/lib/musaitlik-sorgu";
 import { checkOrigin } from "@/lib/origin";
 import { randevuAlanlariniDogrula } from "@/lib/randevu-girdi";
 import { getHalkaAcikDb } from "@/lib/scoped-db";
+import { istekIpsi, turnstileDogrula } from "@/lib/turnstile";
 
 // Halka acik randevu yazma.
 //
@@ -48,6 +49,26 @@ export async function POST(istek: Request) {
 
   const govde = await govdeOku(istek);
   if (!govde) return govdeOkunamadi();
+
+  // Bot kapisi SLUG COZUMUNDEN ONCE: buradan gecemeyen istek veritabanina tek
+  // sorgu bile actirmiyor. Kapinin degeri zaten ucuz olmasinda - bir betigin
+  // saniyede yuzlerce istek atmasi Postgres'e degil Cloudflare'e maliyet
+  // yaziyor.
+  //
+  // Acik randevu siniri (asagida, 429) bunun YERINE GECMIYOR: o sinir
+  // numaraya bagli ve numarayi her istekte degistiren bir betik onu hic
+  // gormeden gecer.
+  const kapi = await turnstileDogrula(govde.turnstile, istekIpsi(istek));
+  if (!kapi.gecti) {
+    // Uc sebep de kullaniciya AYNI metni gosteriyor. "Sunucu Cloudflare'e
+    // ulasamadi" demek mesru musteriye yardim etmiyor, botun ise hangi dalda
+    // oldugunu ogretiyor. Yapilabilecek tek sey her durumda ayni: yenile,
+    // tekrar dene.
+    return hata(
+      "Doğrulama tamamlanamadı. Sayfayı yenileyip yeniden deneyin.",
+      403,
+    );
+  }
 
   // Slug tipi burada eleniyor: metin olmayan bir deger `eq(isletme.slug, ...)`
   // icine girseydi Postgres tip hatasi firlatir ve istemcinin hatasi 500'e

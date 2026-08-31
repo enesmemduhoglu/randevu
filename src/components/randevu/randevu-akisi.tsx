@@ -240,6 +240,10 @@ export function RandevuAkisi({
           telefon: bilgiler.telefon,
           eposta: bilgiler.eposta || undefined,
           not: bilgiler.not || undefined,
+          // Bos jeton `undefined` olarak gidiyor: sunucu "eksik" ile "hic
+          // gonderilmemis"i ayni sayiyor, ama bos metin gondermek gövdeye
+          // anlamsiz bir alan koyardi.
+          turnstile: bilgiler.turnstile || undefined,
         }),
       });
 

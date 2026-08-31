@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { tablolariBosalt } from "@/db/test-temizlik";
 import { isletmeKaydiOlustur } from "@/lib/kayit";
@@ -589,4 +589,116 @@ test("sinir BASKA numarayi engellemiyor", async () => {
 
   expect(yanit.status).toBe(201);
   expect(await doluSaatler(a)).toHaveLength(4);
+});
+
+// ---- Turnstile kapisi (Faz G2) ---------------------------------------------
+//
+// Butun dosyanin geri kalani `sahte` modda kosuyor: .env'de TURNSTILE_MODU yok
+// ve kapi geciriyor. Buradaki testler modu TEK TEST icin gercege alip geri
+// sariyor - kapinin acikken de kapaliyken de dogru davrandigini gormek icin.
+
+const ILK_TURNSTILE_MODU = process.env.TURNSTILE_MODU;
+const ILK_TURNSTILE_SIR = process.env.TURNSTILE_SECRET;
+
+/// Turnstile'i gercek moda alir ve siteverify'i taklit eder.
+function turnstileAc(gecerli: boolean) {
+  process.env.TURNSTILE_MODU = "gercek";
+  process.env.TURNSTILE_SECRET = "test-sirri";
+
+  // YALNIZCA siteverify yakalaniyor. Global fetch'i tumden degistirmek, ayni
+  // surecte kosan baska bir seyin agi sessizce kaybetmesine yol acardi.
+  vi.stubGlobal("fetch", async (url: string) => {
+    if (String(url).includes("siteverify")) {
+      return new Response(JSON.stringify({ success: gecerli }), {
+        status: 200,
+      });
+    }
+    throw new Error(`beklenmeyen fetch: ${String(url)}`);
+  });
+}
+
+function turnstileKapat() {
+  if (ILK_TURNSTILE_MODU === undefined) delete process.env.TURNSTILE_MODU;
+  else process.env.TURNSTILE_MODU = ILK_TURNSTILE_MODU;
+  if (ILK_TURNSTILE_SIR === undefined) delete process.env.TURNSTILE_SECRET;
+  else process.env.TURNSTILE_SECRET = ILK_TURNSTILE_SIR;
+  vi.unstubAllGlobals();
+}
+
+test("gercek modda jetonsuz istek 403 ve randevu YAZILMIYOR", async () => {
+  const a = await isletmeKur("A Salonu");
+  turnstileAc(true);
+
+  try {
+    const yanit = await POST(istek(govde(a)));
+
+    expect(yanit.status).toBe(403);
+    // Kapinin gercekten kapali olmasi, yalnizca durum kodunun degismesi
+    // degil: veritabaninda hicbir sey olmamali.
+    expect(await doluSaatler(a)).toHaveLength(0);
+  } finally {
+    turnstileKapat();
+  }
+});
+
+test("gercek modda gecerli jeton 201 aliyor", async () => {
+  const a = await isletmeKur("A Salonu");
+  turnstileAc(true);
+
+  try {
+    const yanit = await POST(istek({ ...govde(a), turnstile: "gecerli" }));
+
+    expect(yanit.status).toBe(201);
+  } finally {
+    turnstileKapat();
+  }
+});
+
+test("Cloudflare jetonu reddederse 403", async () => {
+  const a = await isletmeKur("A Salonu");
+  turnstileAc(false);
+
+  try {
+    const yanit = await POST(istek({ ...govde(a), turnstile: "tekrar" }));
+
+    expect(yanit.status).toBe(403);
+    expect(await doluSaatler(a)).toHaveLength(0);
+  } finally {
+    turnstileKapat();
+  }
+});
+
+test("Turnstile kapisi SLUG COZUMUNDEN once calisiyor", async () => {
+  // Olmayan bir slug + jetonsuz istek 404 degil 403 almali: bot kapisindan
+  // gecemeyen istek veritabanina tek sorgu bile actirmamali.
+  await isletmeKur("A Salonu");
+  turnstileAc(true);
+
+  try {
+    const yanit = await POST(
+      istek({ ...govde(await isletmeKur("B Salonu")), isletme: "yok-boyle" }),
+    );
+
+    expect(yanit.status).toBe(403);
+  } finally {
+    turnstileKapat();
+  }
+});
+
+test("403 govdesi Cloudflare'in sebebini SIZDIRMIYOR", async () => {
+  const a = await isletmeKur("A Salonu");
+  turnstileAc(false);
+
+  try {
+    const yanit = await POST(istek({ ...govde(a), turnstile: "kotu" }));
+    const metin = await hataMetni(yanit);
+
+    // Ne sir, ne Cloudflare'in hata kodlari, ne de hangi dalda kaldigi.
+    expect(metin).not.toContain("test-sirri");
+    expect(metin).not.toContain("turnstile");
+    expect(metin).not.toContain("Turnstile");
+    expect(metin).toContain("Doğrulama tamamlanamadı");
+  } finally {
+    turnstileKapat();
+  }
 });
