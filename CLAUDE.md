@@ -6,7 +6,8 @@ Kucuk isletmeler icin cok kiracili randevu SaaS'i. Next.js 16 App Router,
 Drizzle + Postgres (Supabase), Cloudflare Workers uzerinde yayinlanir.
 
 Ayrintili plan: `docs/plan.md`. Karar gunlugu: `TODOS.md` - bir tasarim kararini
-sorgulamadan once oraya bak, is bitirdiginde oraya yaz.
+sorgulamadan once oraya bak, is bitirdiginde oraya yaz. Yayin hatti, gereken
+sirlar ve prod gocunun sirasi: `docs/yayin.md`.
 
 ## Dil
 
