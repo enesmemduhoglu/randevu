@@ -21,6 +21,7 @@ import {
 } from "@/db/sema";
 import { getDb } from "@/lib/db";
 import { cakismaIhlaliMi, pgHata } from "@/lib/pg-hata";
+import { kaynakDurumlar, type RandevuDurumu } from "@/lib/randevu-durum";
 
 export type Rol = "SAHIP" | "PERSONEL" | "MUSTERI";
 
@@ -55,6 +56,34 @@ export type CalismaAraligi = {
   bitisDk: number;
 };
 
+/// Panel takviminin bir randevusu. Join'li: takvim hucresinde hizmet, personel
+/// ve musteri adi ayni anda gorunuyor - her hucre icin ayri sorgu acmak
+/// takvimde N+1 demekti.
+export type TakvimRandevusu = {
+  id: string;
+  baslangic: Date;
+  bitis: Date;
+  durum: RandevuDurumu;
+  kaynak: "MUSTERI" | "ISLETME";
+  not: string | null;
+  personelId: string;
+  personelAd: string;
+  hizmetId: string;
+  hizmetAd: string;
+  hizmetRenk: string | null;
+  hizmetSureDk: number;
+  /// Randevunun alindigi ANDAKI fiyat degil, hizmetin BUGUNKU fiyati. Randevu
+  /// tablosu tutar tasimiyor; gecmis randevularda fiyat degisimi geriye donuk
+  /// gorunuyor. Kabul edilebilir cunku panel bunu tahsilat kaydi olarak degil
+  /// "bu randevu ne kadarlik" bilgisi olarak gosteriyor - gercek tahsilat
+  /// planda hic yok.
+  hizmetFiyatKurus: number;
+  musteriId: string;
+  musteriAd: string;
+  musteriTelefon: string;
+  musteriEposta: string | null;
+};
+
 /// Halka acik randevu yazmanin girdisi.
 ///
 /// `personelId` ve `bitis` istemciden DEGIL musaitlik motorundan geliyor
@@ -86,6 +115,31 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
   const db = await getDb();
   // Kapanista tutuluyor: asagidaki hicbir metot bunu disaridan almiyor.
   const kiraci = oturum.isletmeId;
+
+  /// Takvim sorgularinin ORTAK secim listesi.
+  ///
+  /// Tek yerde duruyor cunku `randevulariListele` ve `randevuGetir` AYNI
+  /// `TakvimRandevusu` tipini donduruyor: listede olup detayda olmayan bir alan,
+  /// arayuzde ancak randevuya tiklandiginda ortaya cikan bir bosluk uretirdi.
+  const takvimAlanlari = {
+    id: randevu.id,
+    baslangic: randevu.baslangic,
+    bitis: randevu.bitis,
+    durum: randevu.durum,
+    kaynak: randevu.kaynak,
+    not: randevu.not,
+    personelId: randevu.personelId,
+    personelAd: personel.ad,
+    hizmetId: randevu.hizmetId,
+    hizmetAd: hizmet.ad,
+    hizmetRenk: hizmet.renk,
+    hizmetSureDk: hizmet.sureDk,
+    hizmetFiyatKurus: hizmet.fiyatKurus,
+    musteriId: randevu.musteriId,
+    musteriAd: musteri.ad,
+    musteriTelefon: musteri.telefon,
+    musteriEposta: musteri.eposta,
+  };
 
   return {
     async isletmeyiGetir() {
@@ -373,6 +427,104 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
 
         return { durum: "tamam" as const };
       });
+    },
+
+    // ---- Panel takvimi ----------------------------------------------------
+
+    /// Verilen pencereyle KESISEN randevular.
+    ///
+    /// Aralik semantigi kesisme, "icinde olma" DEGIL: `baslangic < ust AND
+    /// bitis > alt`. Gece yarisini asan bir randevu aksi halde iki gunde de
+    /// gorunmezdi - ne bittigi gunde (orada baslamiyor) ne de basladigi gunde
+    /// (orada bitmiyor). Ayni gerekce `musaitlik-sorgu.ts`'te de yazili;
+    /// ikisinin ayni davranmasi sart, yoksa takvimde gorunmeyen bir randevu
+    /// sloti dolduruyor olurdu.
+    ///
+    /// Sinirlar `[)` gibi davraniyor: tam `ust` aninda baslayan ve tam `alt`
+    /// aninda biten randevu DISARIDA. Bitisik randevular ustuste binmesin diye -
+    /// EXCLUDE kisitinin `'[)'` araligiyla ayni kabul (DEGISMEZ 8).
+    ///
+    /// TUM DURUMLAR DONUYOR, IPTAL dahil. Isletme iptal edilmis randevuyu
+    /// gormek istiyor ("musteri gelmedi mi, iptal mi etti"); hangisinin
+    /// gosterilecegi arayuzun filtresi, verinin isi degil.
+    async randevulariListele(
+      alt: Date,
+      ust: Date,
+      secenekler?: { personelId?: string },
+    ): Promise<TakvimRandevusu[]> {
+      const kosul = and(
+        eq(randevu.isletmeId, kiraci),
+        lt(randevu.baslangic, ust),
+        gt(randevu.bitis, alt),
+        // Personel suzgeci kiraci filtresinin YANINA ekleniyor, yerine degil:
+        // yabanci bir personel id'si geldiginde sorgu hata vermiyor, bos liste
+        // donuyor - varligini da sizdirmiyor. `and` undefined'i atiyor, yani
+        // suzgec yokken kosul kendiliginden kisaliyor.
+        secenekler?.personelId
+          ? eq(randevu.personelId, secenekler.personelId)
+          : undefined,
+      );
+
+      return db
+        .select(takvimAlanlari)
+        .from(randevu)
+        .innerJoin(hizmet, eq(hizmet.id, randevu.hizmetId))
+        .innerJoin(personel, eq(personel.id, randevu.personelId))
+        .innerJoin(musteri, eq(musteri.id, randevu.musteriId))
+        .where(kosul)
+        .orderBy(asc(randevu.baslangic));
+    },
+
+    /// Tek randevunun detayi.
+    async randevuGetir(id: string): Promise<TakvimRandevusu | null> {
+      const [kayit] = await db
+        .select(takvimAlanlari)
+        .from(randevu)
+        .innerJoin(hizmet, eq(hizmet.id, randevu.hizmetId))
+        .innerJoin(personel, eq(personel.id, randevu.personelId))
+        .innerJoin(musteri, eq(musteri.id, randevu.musteriId))
+        // Iki kosul birlikte: id tek basina yeterli DEGIL. Baska isletmenin
+        // randevu id'si buraya gelirse bos donuyor, 404'e ceviriliyor.
+        .where(and(eq(randevu.id, id), eq(randevu.isletmeId, kiraci)))
+        .limit(1);
+
+      return kayit ?? null;
+    },
+
+    /// DEGISMEZ 3: kosullu UPDATE. Beklenen durum `where`'de, once-oku-sonra-
+    /// yaz yok. Iki sekme ayni randevuyu ayni anda karara baglarsa ikincisi
+    /// 0 satir etkiliyor ve cagiran taraf 409 donuyor.
+    ///
+    /// KAYNAK DURUM KUMESI CAGIRANDAN ALINMIYOR, burada `kaynakDurumlar` ile
+    /// uretiliyor: gecis kuralinin tek kaynagi `randevu-durum.ts` kalsin diye.
+    /// Kume parametre olsaydi bir route "IPTAL -> ONAYLI"yi kendi basina
+    /// mumkun kilabilirdi ve kural iki yerde yasardi.
+    async randevuDurumunuDegistir(
+      id: string,
+      hedef: RandevuDurumu,
+    ): Promise<number> {
+      const kume = kaynakDurumlar(hedef);
+
+      // BEKLIYOR hicbir gecisin varisi degil, yani kume bos olabiliyor.
+      // Drizzle bos `inArray`'i `false` uretecek sekilde ele aliyor ama bu
+      // surume bagli bir davranis; kazanamayacak sorguyu hic gondermiyoruz.
+      if (kume.length === 0) return 0;
+
+      const sonuc = await db
+        .update(randevu)
+        .set({ durum: hedef })
+        .where(
+          and(
+            eq(randevu.id, id),
+            eq(randevu.isletmeId, kiraci),
+            inArray(randevu.durum, kume),
+          ),
+        )
+        .returning({ id: randevu.id });
+
+      // 0 donuyorsa kayit yok, baska kiraciya ait YA DA durumu artik uygun
+      // degil - uctu de cagirana ayni gorunmeli, yoksa varligi sizdiririz.
+      return sonuc.length;
     },
   };
 }
