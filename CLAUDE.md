@@ -6,7 +6,8 @@ Kucuk isletmeler icin cok kiracili randevu SaaS'i. Next.js 16 App Router,
 Drizzle + Postgres (Supabase), Cloudflare Workers uzerinde yayinlanir.
 
 Ayrintili plan: `docs/plan.md`. Karar gunlugu: `TODOS.md` - bir tasarim kararini
-sorgulamadan once oraya bak, is bitirdiginde oraya yaz.
+sorgulamadan once oraya bak, is bitirdiginde oraya yaz. Yayin hatti, gereken
+sirlar ve prod gocunun sirasi: `docs/yayin.md`.
 
 ## Dil
 
@@ -90,7 +91,7 @@ npm run db:hazirla       # .env'deki veritabanlarini olusturur (Docker Postgres 
 npm run db:goc           # drizzle-kit generate - sema degisiminde SQL uretir
 npm run db:uygula        # drizzle-kit migrate - yerel veritabanina uygular
 npm run db:uygula:prod -- --onayla   # PROD'a (Supabase) uygular
-npm run tip              # tsc --noEmit
+npm run tip              # next typegen + tsc --noEmit
 npm run lint             # eslint
 npm test                 # vitest run - gercek Postgres'e kosar
 npm run build            # next build

@@ -1378,3 +1378,114 @@ Durum değiştirme **koşullu UPDATE** olacak (DEĞİŞMEZ 3) — iptalde kullan
 desen birebir geçerli. Elle randevu ekleme aynı `EXCLUDE` kısıtına çarpacak,
 yani 40P01 yeniden deneme mantığı orada da gerekli; `randevuOlustur`
 paylaşılabilir.
+
+---
+
+## Altyapı — CI/CD
+
+**Kapandı:** GitHub Actions ile doğrulama (`tip` → `lint` → `test` → `cf:kur`),
+main'e merge sonrası onay kapılı Cloudflare yayını ve elle tetiklenen prod göç
+iş akışı. Kullanım ve gereken sırlar: `docs/yayin.md`.
+
+**Harfsiz dal (`altyapi/ci-cd`).** Plandaki I, J, K harfleri bildirim
+altyapısı, müşteri hesabı ve SMS'e ayrılmış durumda; sıradaki fazın harfini
+çalmak plan ile günlüğü kalıcı olarak ayırırdı. `duzeltme/...` dallarında
+kullanılan kalıp izlendi.
+
+### Kararlar
+
+- **Doğrulama ve yayın aynı dosyada (`ci.yml`), göç ayrı (`goc.yml`).**
+  Doğrulama ile yayın ayrı dosyalara bölünseydi ikisi de `on: push` ile aynı
+  anda başlardı ve yayın, testlerin yeşil olduğunu bilemezdi — `needs:` dosya
+  sınırını geçmiyor. Göç ise farklı bir tetikleyiciye sahip, orada böyle bir
+  bağ yok.
+
+- **Yayın onay kapılı, otomatik değil.** `uretim` GitHub Environment'ında
+  zorunlu inceleyici var: iş kuyruğa girer ve "Approve" bekler. Gerekçe
+  günlükte zaten yazılıydı — main uzun süre G ve G2'yi taşıyıp bilerek
+  yayınlanmamıştı. Ayrıca `NEXT_PUBLIC_*` değerleri derlemeye gömülü olduğu
+  için geri alma yeniden derleme demek, yani ucuz değil.
+
+- **Prod göçü hatta değil, ayrı ve elle.** Drizzle migration'larının otomatik
+  geri alma yolu yok. Kodu geri almak eski sürümü yeniden deploy etmek, şemayı
+  geri almak elle SQL yazmak demek — aynı boruya konmamaları bu yüzden. İki
+  kapı var: onay kutusuna `uygula` yazmak (koşum kaydında niyet izi bırakır) ve
+  `uretim` ortam onayı (tetiği çekenin yetkisini doğrular).
+
+- **CI `npm run build` değil `npm run cf:kur` koşuyor.** `cf:kur` önce
+  `next build` çalıştırıyor, yani onun kapsadığı her şeyi kapsıyor; üstüne
+  OpenNext'in worker paketini de üretiyor. Günlükte üst üste üç oturum
+  "workerd tarafı ölçülmedi" notu düşülmüştü — paketleme hatası artık yayın
+  anında değil PR'da çıkıyor.
+
+- **Postgres servisi 5455 portuna eşlendi.** GitHub'ın varsayılanı 5432'ydi;
+  yerel konteynerle aynı portu kullanmak, bağlantı dizesinin
+  `.env.example`'daki satırın birebir aynısı olmasını sağlıyor. İki ortam
+  arasında gidip gelirken "burada port kaçtı" sorusu hiç doğmuyor.
+
+- **CI'da `DATABASE_URL` bilerek tanımsız.** `vitest.setup.ts` onu zaten
+  `TEST_DATABASE_URL`'e eşitliyor. `randevu_test` veritabanını da
+  `vitest.global-setup.ts` kendisi CREATE ediyor, yani `db:hazirla` adımına
+  gerek kalmadı.
+
+- **Node 24'e sabitlendi.** Tercih değil zorunluluk: `scripts/*.ts` ve
+  `vitest.global-setup.ts` `.ts` dosyalarını doğrudan çalıştırıyor (node'un tip
+  soyma desteği).
+
+- **`tip` komutu artık `next typegen && tsc --noEmit`.** Hattın ilk koşumunda
+  çıkan gerçek bir bulgu: `tsc` tek başına `RouteContext`'i bulamıyor, çünkü o
+  tip Next'in ürettiği `.next/types/**` altında duruyor ve `.gitignore`'da.
+  Yerelde yıllardır geçiyordu, çünkü `.next` eski build'lerden artakalıyordu —
+  yani **temiz bir klonda `npm run tip` bugüne kadar kırıktı** ve bunu kimse
+  görmemişti. Düzeltme CI adımına değil komutun kendisine konuldu; CI'a özel
+  bir `typegen` adımı, yerel footgun'u yerinde bırakırdı. Maliyet ~2.7 saniye.
+
+- **CI'ın build adımı sahte `NEXT_PUBLIC_SUPABASE_*` değerleriyle koşuyor.**
+  Hattın ikinci bulgusu: `/giris` build anında prerender ediliyor ve
+  `supabaseSunucu()` çağırıyor, değişkenler yoksa `ayarlar()` fırlatıp build'i
+  düşürüyor. Yani "build ortam değişkeni istemez" varsayımı yanlıştı — bu da
+  ölçümle çıktı, muhakemeyle değil. Sahte değer güvenli, çünkü hiçbir ağ
+  çağrısı yapılmıyor: oturum cookie'si olmadan `getClaims()` token bulamayıp
+  hemen dönüyor ve `cookies()` çağrısı sayfayı zaten dinamiğe düşürüyor.
+  **Bedeli:** bu adım "değerler doğru mu" sorusunu yanıtlamıyor, yalnızca
+  "kod derleniyor ve paketleniyor mu" sorusunu yanıtlıyor.
+
+- **`NEXT_PUBLIC_*` değerleri secret değil repository variable.** Tanımı gereği
+  halka açıklar — tarayıcıya gitmek üzere üretildiler ve kiracı izolasyonu
+  onlara değil `scoped-db` katmanına dayanıyor. Secret olarak saklamak yanlış
+  bir güvenlik hissi verirdi. Yayın işinin ilk adımı varlıklarını kontrol edip
+  eksikse duruyor: eksik bir `NEXT_PUBLIC_*` build'i **düşürmüyor**,
+  `undefined` gömülüyor ve hata canlıda giriş ekranında çıkıyor.
+
+### Bilerek kapsam dışı
+
+- **Dal koruması (branch protection) kurulmadı.** `dogrula` işini main'e merge
+  için zorunlu kılmak repo ayarı, kod değişikliği değil; PR'ın diff'ine
+  girmediği için ayrı ve görünür bir adım olarak bırakıldı.
+
+- **Uçtan uca / tarayıcı testi yok.** Hat yalnızca depodaki mevcut doğrulama
+  setini koşuyor. Playwright eklemek kendi başına bir iş ve `cf:onizle`
+  üzerinde koşan bir smoke testi ancak yayın adresi kararlıyken anlamlı.
+
+- **Yayın sonrası duman testi (canlı adrese istek) yok.** `/saglik` sayfası bu
+  iş için hazır duruyor ama deploy'un DNS'e yayılma süresi belirsiz; sabit bir
+  bekleme koymak yanlış negatif üretirdi.
+
+- **Otomatik geri alma yok.** Yanlış giden bir yayında yol: önceki commit'i
+  main'e al ve yayını yeniden onayla. Cloudflare panelindeki "Rollback" da
+  çalışır ama o, deponun taşıdığı sürümle canlıdaki sürümü ayırır.
+
+- **`wrangler.jsonc`'ye `vars` bloğu eklenmedi.** `TURNSTILE_MODU` ve
+  `BILDIRIM_MODU` üretimde hâlâ tanımsız — yani Turnstile kapısı açık. Bu
+  hattın değil, ayrı bir kararın konusu.
+
+### Elle yapılması gerekenler (CI/CD)
+
+- [ ] `uretim` GitHub Environment'ı oluştur ve **required reviewer** ekle.
+      Ortam yoksa ya da inceleyici tanımlı değilse yayın beklemeden çıkar.
+- [ ] Secret'lar: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+      `SUPABASE_DB_URL`.
+- [ ] Variable'lar: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+      `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.
+- [ ] İlk yayından sonra canlıda `/saglik` ve `/r/<slug>` sayfalarını gözle
+      doğrula — üretimdeki sürüm hâlâ Faz G öncesi, yani `/r/<slug>` şu an 404.
