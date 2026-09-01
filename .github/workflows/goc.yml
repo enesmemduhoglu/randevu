@@ -1,0 +1,64 @@
+# PROD veritabani gocu - YALNIZCA elle tetiklenir.
+#
+# Neden yayin hattinin icinde degil: Drizzle migration'larinin otomatik geri
+# alma yolu yok ve hedef canli musteri verisi. Sema degisikligi, kod
+# yayinlamaktan farkli bir risk sinifi - kodu geri almak eski surumu yeniden
+# deploy etmek, semayi geri almak elle SQL yazmak demek.
+#
+# Sira boyle: once bu is akisini kosturursun, yesil olunca main'e merge edip
+# yayini onaylarsin. Yeni kolonu okuyan kod, kolon yerinde degilken canliya
+# cikmasin.
+
+name: Prod gocu
+
+on:
+  workflow_dispatch:
+    inputs:
+      onay:
+        description: 'PROD semasini degistirmek icin "uygula" yaz'
+        required: true
+        default: ""
+
+jobs:
+  goc:
+    name: Supabase migration
+    runs-on: ubuntu-latest
+
+    # Ikinci kapi. Yazili onayla ust uste geliyor ve bu bilincli: yazilan kelime
+    # kosum kaydinda "bunu isteyerek yaptim" izi birakiyor, ortam korumasi ise
+    # tetigi cekenin yetkisini dogruluyor. Ikisi ayri soruyu yanitliyor.
+    environment:
+      name: uretim
+
+    concurrency:
+      group: prod-goc
+
+    steps:
+      # scripts/prod-goc.ts zaten --onayla bayragi olmadan calismiyor. Bu adim
+      # ayni kapiyi bir adim one aliyor: yanlislikla "Run workflow" tiklandiginda
+      # depo klonlanmadan, tek satirlik anlasilir bir hatayla duruyor.
+      - name: onay kelimesi
+        if: github.event.inputs.onay != 'uygula'
+        run: |
+          echo "Onay kutusuna tam olarak 'uygula' yazilmali. Girilen deger kabul edilmedi."
+          exit 1
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: bagimliliklar
+        run: npm ci
+        env:
+          WRANGLER_SEND_METRICS: "false"
+
+      # Betik hangi host'a baglandigini SIFREYI BASMADAN yazdiriyor (degismez 5).
+      # Baglanti Supavisor SESSION MODE (5432) uzerinden gider; direct baglanti
+      # yalnizca IPv6 cozdugu icin Actions kosucusundan erisilemez.
+      - name: migration'lari uygula
+        run: npm run db:uygula:prod -- --onayla
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
