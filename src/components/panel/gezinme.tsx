@@ -42,7 +42,7 @@ const BOLUMLER: Bolum[] = [
   {
     ogeler: [
       { ad: "Bugün", ikon: CalendarCheckIcon, yol: "/panel", tam: true },
-      { ad: "Takvim", ikon: CalendarDaysIcon },
+      { ad: "Takvim", ikon: CalendarDaysIcon, yol: "/panel/takvim" },
       { ad: "Hizmetler", ikon: ScissorsIcon, yol: "/panel/hizmetler" },
       { ad: "Personel", ikon: UsersIcon, yol: "/panel/personel" },
       { ad: "Çalışma saatleri", ikon: ClockIcon, yol: "/panel/calisma-saatleri" },
