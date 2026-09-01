@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-import { gunAdi, paraBicimle, saatBicimle, sureBicimle } from "@/lib/bicim";
+import { paraBicimle, saatBicimle, sureBicimle } from "@/lib/bicim";
 import { yerelParcalar, type YerelTarih } from "@/lib/zaman";
 
 // Randevu akisinin ortak sozlugu: adimlarin paylastigi tipler, gosterim
@@ -14,11 +14,6 @@ import { yerelParcalar, type YerelTarih } from "@/lib/zaman";
 // Bu yuzden akisin hicbir yerinde `Date#getHours` ya da dilimsiz
 // `toLocaleString` yok; her donusum isletmenin `saatDilimi` alaniyla
 // @/lib/zaman uzerinden gidiyor.
-//
-// Ay adlari elle yazildi, `Intl` ile "tr-TR" uzerinden uretilmedi: bu
-// bilesenler SUNUCUDA da render ediliyor ve Workers'ta tam ICU verisi her
-// zaman yok (ayni gerekce src/lib/bicim.ts'te de yazili). Sunucunun ve
-// tarayicinin farkli ay adi uretmesi hydration uyusmazligi demekti.
 //
 // Dosya `.tsx`: akisin bilesenleri tek klasorde toplandigi icin adim basligi
 // da burada duruyor ve JSX iceriyor.
@@ -74,45 +69,11 @@ export function hizmetBilgisi(hizmet: HizmetOzeti): string {
     : sure;
 }
 
-const AY_ADLARI = [
-  "Ocak",
-  "Şubat",
-  "Mart",
-  "Nisan",
-  "Mayıs",
-  "Haziran",
-  "Temmuz",
-  "Ağustos",
-  "Eylül",
-  "Ekim",
-  "Kasım",
-  "Aralık",
-];
-
-/// 0 = Pazar ... 6 = Cumartesi (bicim.ts > gunAdi ile ayni sira).
-const GUN_KISALTMALARI = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
-
-/// Takvim gununun haftanin hangi gunune denk geldigi. Saat diliminden BAGIMSIZ:
-/// "1 Eylül 2026" her dilimde salidir. Musaitlik motoru da ayni hesabi yapiyor.
-export function haftaninGunu(tarih: YerelTarih): number {
-  return new Date(Date.UTC(tarih.yil, tarih.ay - 1, tarih.gun)).getUTCDay();
-}
-
-/// "Sal" — gun seridindeki rozet icin.
-export function gunKisaAdi(tarih: YerelTarih): string {
-  return GUN_KISALTMALARI[haftaninGunu(tarih)] ?? "";
-}
-
-/// "Eylül 2026" — gun seridinin ustundeki baslik.
-export function ayVeYil(tarih: YerelTarih): string {
-  return `${AY_ADLARI[tarih.ay - 1] ?? ""} ${tarih.yil}`;
-}
-
-/// "1 Eylül 2026, Salı" — secilen gunun tam yazimi.
-export function tarihUzun(tarih: YerelTarih): string {
-  const ay = AY_ADLARI[tarih.ay - 1] ?? "";
-  return `${tarih.gun} ${ay} ${tarih.yil}, ${gunAdi(haftaninGunu(tarih))}`;
-}
+// Gun ve ay yazimlari Faz H'de @/lib/bicim'e tasindi: panel takviminin SUNUCU
+// bileseni de ayni adlari yaziyor ve bu dosya "use client" oldugu icin oradan
+// import edemiyordu. Akisin bilesenleri isimleri buradan almaya devam etsin
+// diye yeniden disa aciliyorlar - cagri yerleri degismedi.
+export { ayVeYil, gunKisaAdi, haftaninGunu, tarihUzun } from "@/lib/bicim";
 
 /// ISO an -> isletmenin dilimindeki "14:30".
 export function saatiGoster(iso: string, saatDilimi: string): string {

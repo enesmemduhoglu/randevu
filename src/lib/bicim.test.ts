@@ -1,12 +1,18 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  ayAdi,
+  ayVeYil,
   gunAdi,
+  gunKisaAdi,
+  gunVeAy,
   HAFTA_SIRASI,
+  haftaninGunu,
   paraBicimle,
   saatBicimle,
   saatiDakikayaCevir,
   sureBicimle,
+  tarihUzun,
   telefonBicimle,
 } from "@/lib/bicim";
 
@@ -146,3 +152,55 @@ describe("telefonBicimle", () => {
     expect(geri).toEqual({ tamam: true, deger: "5321234567" });
   });
 });
+
+// Takvim gunu yazimlari. Faz H'de randevu akisinin "use client" dosyasindan
+// buraya tasindilar; panel takviminin sunucu bileseni de ayni adlari yaziyor.
+// Sunucunun ve tarayicinin farkli ay adi uretmesi hydration uyusmazligi
+// demekti - bu yuzden Intl yok, adlar elle yazili ve burada kilitli.
+describe("takvim gunu yazimlari", () => {
+  test("haftaninGunu takvimden hesaplaniyor, dilimden degil", () => {
+    // "1 Eylül 2026" her saat diliminde salidir. Fonksiyon dilim parametresi
+    // ALMIYOR; alsaydi ayni gun iki ekranda iki farkli gun adi alabilirdi.
+    expect(haftaninGunu({ yil: 2026, ay: 9, gun: 1 })).toBe(2);
+    expect(haftaninGunu({ yil: 2026, ay: 9, gun: 6 })).toBe(0);
+  });
+
+  test("ay adlari Turkce ve 1 tabanli", () => {
+    // 1 = Ocak. Dizinin kendisi 0 tabanli oldugu icin en kolay hata bu.
+    expect(ayAdi(1)).toBe("Ocak");
+    expect(ayAdi(9)).toBe("Eylül");
+    expect(ayAdi(12)).toBe("Aralık");
+  });
+
+  test("sinir disi ay bos dize", () => {
+    expect(ayAdi(0)).toBe("");
+    expect(ayAdi(13)).toBe("");
+  });
+
+  test("gun kisaltmasi gun adiyla ayni sirada", () => {
+    // Ikisi ayri dizi; sira ayrisirsa takvim baslikta "Sal" altinda pazartesi
+    // randevusu gosterirdi.
+    for (let gun = 0; gun < 7; gun++) {
+      expect(gunAdi(gun).startsWith(gunKisaltmasiHarfi(gun))).toBe(true);
+    }
+  });
+
+  test("baslik bicimleri", () => {
+    const tarih = { yil: 2026, ay: 9, gun: 1 };
+    expect(ayVeYil(tarih)).toBe("Eylül 2026");
+    expect(gunVeAy(tarih)).toBe("1 Eylül");
+    expect(tarihUzun(tarih)).toBe("1 Eylül 2026, Salı");
+    expect(gunKisaAdi(tarih)).toBe("Sal");
+  });
+});
+
+/// Kisaltmanin tam adin ilk harfiyle basladigini sinamak icin. "Çar"/"Çarşamba"
+/// gibi Turkce harfler yuzunden dogrudan karsilastirma yapilamiyor.
+function gunKisaltmasiHarfi(gun: number): string {
+  return gunKisaAdi(pazardanItibaren(gun)).slice(0, 1);
+}
+
+/// Verilen haftanin gunune denk gelen bir takvim gunu. 2026 Eylul: 6'si pazar.
+function pazardanItibaren(gun: number) {
+  return { yil: 2026, ay: 9, gun: 6 + gun };
+}

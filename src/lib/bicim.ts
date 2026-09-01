@@ -5,6 +5,8 @@
 // Ayrica bunlar saf fonksiyon oldugu icin sinanabiliyorlar - "1.250,50 ₺"
 // bicimini gozle dogrulamak yerine test kilitliyor.
 
+import type { YerelTarih } from "@/lib/zaman";
+
 /// Kurus -> "350 ₺" / "1.250,50 ₺".
 ///
 /// Kurus sifirsa YAZILMIYOR (marka kurali): fiyat listesinde "350,00 ₺"
@@ -95,3 +97,66 @@ export function gunAdi(haftaninGunu: number): string {
 /// Arayuzde hafta PAZARTESIDEN baslar; veritabaninda 0 = Pazar. Sirayi burada
 /// veriyoruz ki her ekran kendi dizisini yazmasin.
 export const HAFTA_SIRASI = [1, 2, 3, 4, 5, 6, 0] as const;
+
+// TAKVIM GUNU YAZIMLARI.
+//
+// Faz H'de buraya tasindilar. Onceden randevu akisinin `ortak.tsx` dosyasinda
+// duruyorlardi ama o dosya "use client" - panel takviminin SUNUCU bileseni
+// ayni ay adini yazmak icin oradan import edemezdi. Iki yere kopyalamak,
+// bir gun birinde "Agustos" digerinde "Ağustos" yazmasi demekti.
+//
+// Ay adlari elle yazildi, `Intl` ile "tr-TR" uzerinden uretilmedi: ayni
+// gerekce bu dosyanin basinda para bicimi icin de yazili - Workers'ta tam ICU
+// verisi her zaman yok ve sunucunun tarayicidan farkli ay adi uretmesi
+// hydration uyusmazligi demek.
+const AY_ADLARI = [
+  "Ocak",
+  "Şubat",
+  "Mart",
+  "Nisan",
+  "Mayıs",
+  "Haziran",
+  "Temmuz",
+  "Ağustos",
+  "Eylül",
+  "Ekim",
+  "Kasım",
+  "Aralık",
+];
+
+/// 0 = Pazar ... 6 = Cumartesi (GUN_ADLARI ile ayni sira).
+const GUN_KISALTMALARI = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
+
+export function ayAdi(ay: number): string {
+  return AY_ADLARI[ay - 1] ?? "";
+}
+
+export function gunKisaltmasi(haftaninGunu: number): string {
+  return GUN_KISALTMALARI[haftaninGunu] ?? "";
+}
+
+/// Takvim gununun haftanin hangi gunune denk geldigi. Saat diliminden BAGIMSIZ:
+/// "1 Eylül 2026" her dilimde salidir. Musaitlik motoru da ayni hesabi yapiyor.
+export function haftaninGunu(tarih: YerelTarih): number {
+  return new Date(Date.UTC(tarih.yil, tarih.ay - 1, tarih.gun)).getUTCDay();
+}
+
+/// "Sal" — gun seridindeki ve takvim basligindaki rozet.
+export function gunKisaAdi(tarih: YerelTarih): string {
+  return gunKisaltmasi(haftaninGunu(tarih));
+}
+
+/// "Eylül 2026" — ay basligi.
+export function ayVeYil(tarih: YerelTarih): string {
+  return `${ayAdi(tarih.ay)} ${tarih.yil}`;
+}
+
+/// "1 Eylül 2026, Salı" — tek gunun tam yazimi.
+export function tarihUzun(tarih: YerelTarih): string {
+  return `${tarih.gun} ${ayAdi(tarih.ay)} ${tarih.yil}, ${gunAdi(haftaninGunu(tarih))}`;
+}
+
+/// "1 Eylül" — hafta basliginda ve gun hucrelerinde, yil tekrar etmesin diye.
+export function gunVeAy(tarih: YerelTarih): string {
+  return `${tarih.gun} ${ayAdi(tarih.ay)}`;
+}

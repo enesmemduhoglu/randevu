@@ -24,6 +24,27 @@ export const HIZMET_RENKLERI = [
 
 export type HizmetRengi = (typeof HIZMET_RENKLERI)[number];
 
+/// Etiket -> tasarim token'i eslemesi.
+///
+/// Listenin HEMEN YANINDA duruyor cunku ikisi birlikte degismek zorunda: yeni
+/// bir renk eklenip esleme unutulursa o hizmet sessizce renksiz gorunur ve
+/// kimse sebebini aramaz. Faz H'de takvim ayni eslemeyi isteyince ortaya cikan
+/// ihtiyac - onceden kopyasi hizmet listesinde duruyordu.
+///
+/// Sinif adlari TAM yazili, parcalardan birlestirilmiyor: Tailwind kaynagi
+/// metin olarak tariyor ve `bg-durum-${renk}` gibi bir ifadeyi goremiyor.
+export const HIZMET_RENK_SINIFI: Record<HizmetRengi, string> = {
+  terracotta: "bg-primary",
+  teal: "bg-durum-onayli",
+  amber: "bg-durum-bekliyor",
+  tas: "bg-durum-tamamlandi",
+};
+
+/// Renksiz ya da taninmayan hizmet icin notr kenarlik rengi.
+export function hizmetRenkSinifi(renk: string | null | undefined): string {
+  return HIZMET_RENK_SINIFI[renk as HizmetRengi] ?? "bg-border";
+}
+
 export type HizmetAlanlari = {
   ad: string;
   aciklama: string | null;
