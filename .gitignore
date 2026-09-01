@@ -61,3 +61,6 @@ cloudflare-env.d.ts
 # (icinde yalnizca test konteyner adi var), ama settings.local.json kisisel
 # izin kayitlari ve mutlak yollar tutabiliyor.
 .claude/settings.local.json
+
+# Yerel notlar (kullanici acikca "pushlama" dedi) - depoya asla girmez.
+NOTLAR-YEREL.md

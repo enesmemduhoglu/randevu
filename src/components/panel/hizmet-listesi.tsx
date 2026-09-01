@@ -16,16 +16,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { paraBicimle, sureBicimle } from "@/lib/bicim";
+// Renk eslemesi Faz H'de etiket listesinin yanina tasindi: panel takvimi de
+// ayni eslemeyi istiyordu ve iki kopyanin ayrisma riski gercekti.
+import { hizmetRenkSinifi } from "@/lib/hizmet-girdi";
 
 // Liste istemci bileseni cunku form ve onay penceresi durum tutuyor. Verinin
 // kendisi sunucudan geliyor (prop olarak); burada hicbir sorgu yok.
-
-const RENK_SINIFI: Record<string, string> = {
-  terracotta: "bg-primary",
-  teal: "bg-durum-onayli",
-  amber: "bg-durum-bekliyor",
-  tas: "bg-durum-tamamlandi",
-};
 
 export function HizmetListesi({ hizmetler }: { hizmetler: HizmetKaydi[] }) {
   const router = useRouter();
@@ -115,9 +111,7 @@ export function HizmetListesi({ hizmetler }: { hizmetler: HizmetKaydi[] }) {
             >
               <span
                 aria-hidden="true"
-                className={`size-2.5 shrink-0 rounded-full ${
-                  h.renk ? RENK_SINIFI[h.renk] : "bg-border"
-                }`}
+                className={`size-2.5 shrink-0 rounded-full ${hizmetRenkSinifi(h.renk)}`}
               />
 
               <div className="min-w-0 flex-1">
