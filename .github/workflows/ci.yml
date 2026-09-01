@@ -1,0 +1,168 @@
+# Surekli entegrasyon ve yayin.
+#
+# Iki is tek dosyada: `dogrula` her PR'da ve main'e her push'ta kosar,
+# `yayinla` yalnizca main'e push'ta ve `dogrula`yi bekler.
+#
+# Neden ayri iki workflow dosyasi degil: iki dosya da `on: push` ile ayni anda
+# baslar ve yayin, testlerin yesil oldugunu bilemezdi. `needs:` bagini kurmanin
+# tek yolu ayni dosyada durmalari.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Ayni dala ust uste push atilirsa onceki kosum iptal edilir. main bunun
+# disinda: oradaki her kosum bir yayin adayi, yarida kesilmemeli.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # wrangler hem kurulumda (postinstall > wrangler types) hem yayinda telemetri
+  # gonderiyor ve ilk kosumda interaktif soru sorabiliyor. CI'da sessiz kalsin.
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  dogrula:
+    name: tip - lint - test - build
+    runs-on: ubuntu-latest
+
+    services:
+      # Testler gercek Postgres'e kosar, mock'a degil (CLAUDE.md test kurallari):
+      # EXCLUDE kisiti, transaction ve yarisan istek davranisi ancak gercek
+      # motorda kanitlanir. Surum yerel konteynerle ve prod Supabase ile ayni: 17.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        # Port yerel konteynerle ayni tutuldu (5455). Boylece asagidaki baglanti
+        # dizesi .env.example'daki satirin birebir ayni; iki ortam arasinda
+        # gidip gelirken "burada port kacti" sorusu hic dogmuyor.
+        ports:
+          - 5455:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # randevu_test veritabanini vitest.global-setup.ts kendisi CREATE ediyor,
+      # yani ayrica `npm run db:hazirla` kosturmak gerekmiyor.
+      #
+      # DATABASE_URL bilerek TANIMSIZ: vitest.setup.ts onu zaten
+      # TEST_DATABASE_URL'e esitliyor. Ortamda ikinci bir baglanti dizesi
+      # tutmak, "testler hangi veritabanina yaziyor" sorusunu bulandirirdi.
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5455/randevu_test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          # Yerelde de 24 kosuyor. Bu bir tercih degil zorunluluk: scripts/*.ts
+          # ve vitest.global-setup.ts .ts dosyalarini dogrudan calistiriyor
+          # (node'un tip soyma destegi), daha eski bir surumde kosum kirilir.
+          node-version: "24"
+          cache: npm
+
+      # postinstall `wrangler types` kosturup cloudflare-env.d.ts'i uretiyor.
+      # O dosya .gitignore'da oldugu icin depodan gelmiyor; tip kontrolu ondan
+      # once kosarsa binding tipleri bulunamaz.
+      - name: bagimliliklar
+        run: npm ci
+
+      - name: tip kontrolu
+        run: npm run tip
+
+      # Degismez 1'i (src/app altinda ham db yok) zorlayan eslint kurali burada
+      # kosuyor - lint bu depoda bicim isi degil, izolasyon kapisi.
+      - name: lint
+        run: npm run lint
+
+      - name: testler
+        run: npm test
+
+      # `npm run build` degil `cf:kur`: bu komut once `next build` kosuyor, yani
+      # onun kapsadigi her seyi kapsiyor, ustune OpenNext'in worker paketini de
+      # uretiyor. Fark onemli - depoda tekrar tekrar "workerd tarafi olculmedi"
+      # diye not dusuldu; paketleme hatasi artik yayin aninda degil PR'da cikar.
+      #
+      # Bu ciktinin kendisi ATILIYOR. Yayin isi kendi build'ini kosuyor, cunku
+      # NEXT_PUBLIC_* degiskenleri derleme aninda gomuluyor ve burada yoklar.
+      - name: worker paketi
+        run: npm run cf:kur
+
+  yayinla:
+    name: Cloudflare Workers yayini
+    needs: dogrula
+    # PR'lardan yayin cikmaz; yalnizca main'e dusen commit'ten.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    # Onay kapisi. `uretim` ortaminda zorunlu inceleyici tanimli: is kuyruga
+    # girer ve GitHub'da "Approve" beklenir. Kazayla merge edilen bir PR tek
+    # basina canliya cikamaz, ama dogru merge tek tikla cikar.
+    environment:
+      name: uretim
+      url: https://randevu.enesmemduhoglu.tech
+
+    # Iki yayin ust uste binerse Worker'in hangi surumu tasidigi belirsizlesir.
+    # Kuyruk sirali ve cancel-in-progress YOK: yarida kesilen bir deploy en kotu
+    # sonuc, beklemek ondan iyidir.
+    concurrency:
+      group: yayin
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: "false"
+
+      # Bunlar secret degil repository VARIABLE olarak duruyor, cunku hepsi
+      # tanimi geregi halka acik: anon anahtari ve Turnstile site anahtari
+      # tarayiciya gitmek uzere uretildi (bkz. .env.example). Kiraci izolasyonu
+      # bu anahtarlara degil sunucudaki scoped-db katmanina dayaniyor.
+      #
+      # Ama BURADA olmak zorundalar: NEXT_PUBLIC_ onekli her degisken DERLEME
+      # aninda gomuluyor. Yalnizca calisma aninda (wrangler vars) tanimlamak
+      # gec kalir - tarayiciya bos deger gider.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: bagimliliklar
+        run: npm ci
+
+      # Derleme aninda gomulen degiskenler eksikse build sessizce "tanimsiz"
+      # gomuyor ve hata canlida, giris ekraninda ortaya cikiyor. Erken ve
+      # anlasilir patlamak yegdir.
+      - name: derleme degiskenleri var mi
+        run: |
+          eksik=""
+          for ad in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_SITE_URL; do
+            if [ -z "${!ad}" ]; then eksik="$eksik $ad"; fi
+          done
+          if [ -n "$eksik" ]; then
+            echo "Eksik repository variable:$eksik"
+            echo "Ayarlar > Secrets and variables > Actions > Variables altina ekle."
+            exit 1
+          fi
+
+      # cf:yayinla = opennextjs-cloudflare build + deploy. Wrangler'in cikti
+      # verdigi "Total Upload / gzip" satiri plandaki boyut olcumu: ucretsiz
+      # plan sinirinin (3 MiB gzip) her yayinda neresinde oldugumuz burada
+      # gorunur.
+      - name: derle ve yayinla
+        run: npm run cf:yayinla
