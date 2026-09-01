@@ -92,9 +92,25 @@ jobs:
       # diye not dusuldu; paketleme hatasi artik yayin aninda degil PR'da cikar.
       #
       # Bu ciktinin kendisi ATILIYOR. Yayin isi kendi build'ini kosuyor, cunku
-      # NEXT_PUBLIC_* degiskenleri derleme aninda gomuluyor ve burada yoklar.
+      # NEXT_PUBLIC_* degiskenleri derleme aninda gomuluyor.
       - name: worker paketi
         run: npm run cf:kur
+        env:
+          # Degerler SAHTE ve oyle kalmali. Gerekcesi: /giris sayfasi build
+          # aninda prerender ediliyor ve supabaseSunucu() cagiriyor; degiskenler
+          # yoksa ayarlar() firlatiyor ve build dusuyor (hattin ilk kosumunda
+          # olculdu, varsayilmadi).
+          #
+          # Sahte deger guvenli, cunku hicbir ag cagrisi yapilmiyor: oturum
+          # cookie'si olmadan getClaims() token bulamayip hemen donuyor, ustelik
+          # `cookies()` cagrisi sayfayi zaten dinamige dusuruyor. Istemci
+          # yalnizca KURULUYOR, kullanilmiyor.
+          #
+          # Bedeli bilinsin: bu adim "degiskenler dogru mu" sorusunu YANITLAMAZ,
+          # yalnizca "kod derleniyor ve paketleniyor mu" sorusunu yanitlar.
+          # Gercek degerlerin varligini yayin isi kendi adiminda kontrol ediyor.
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-sahte.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-sahte-anon-anahtari
 
   yayinla:
     name: Cloudflare Workers yayini

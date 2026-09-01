@@ -1440,6 +1440,16 @@ kullanılan kalıp izlendi.
   görmemişti. Düzeltme CI adımına değil komutun kendisine konuldu; CI'a özel
   bir `typegen` adımı, yerel footgun'u yerinde bırakırdı. Maliyet ~2.7 saniye.
 
+- **CI'ın build adımı sahte `NEXT_PUBLIC_SUPABASE_*` değerleriyle koşuyor.**
+  Hattın ikinci bulgusu: `/giris` build anında prerender ediliyor ve
+  `supabaseSunucu()` çağırıyor, değişkenler yoksa `ayarlar()` fırlatıp build'i
+  düşürüyor. Yani "build ortam değişkeni istemez" varsayımı yanlıştı — bu da
+  ölçümle çıktı, muhakemeyle değil. Sahte değer güvenli, çünkü hiçbir ağ
+  çağrısı yapılmıyor: oturum cookie'si olmadan `getClaims()` token bulamayıp
+  hemen dönüyor ve `cookies()` çağrısı sayfayı zaten dinamiğe düşürüyor.
+  **Bedeli:** bu adım "değerler doğru mu" sorusunu yanıtlamıyor, yalnızca
+  "kod derleniyor ve paketleniyor mu" sorusunu yanıtlıyor.
+
 - **`NEXT_PUBLIC_*` değerleri secret değil repository variable.** Tanımı gereği
   halka açıklar — tarayıcıya gitmek üzere üretildiler ve kiracı izolasyonu
   onlara değil `scoped-db` katmanına dayanıyor. Secret olarak saklamak yanlış
