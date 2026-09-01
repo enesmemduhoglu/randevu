@@ -1432,6 +1432,14 @@ kullanılan kalıp izlendi.
   `vitest.global-setup.ts` `.ts` dosyalarını doğrudan çalıştırıyor (node'un tip
   soyma desteği).
 
+- **`tip` komutu artık `next typegen && tsc --noEmit`.** Hattın ilk koşumunda
+  çıkan gerçek bir bulgu: `tsc` tek başına `RouteContext`'i bulamıyor, çünkü o
+  tip Next'in ürettiği `.next/types/**` altında duruyor ve `.gitignore`'da.
+  Yerelde yıllardır geçiyordu, çünkü `.next` eski build'lerden artakalıyordu —
+  yani **temiz bir klonda `npm run tip` bugüne kadar kırıktı** ve bunu kimse
+  görmemişti. Düzeltme CI adımına değil komutun kendisine konuldu; CI'a özel
+  bir `typegen` adımı, yerel footgun'u yerinde bırakırdı. Maliyet ~2.7 saniye.
+
 - **`NEXT_PUBLIC_*` değerleri secret değil repository variable.** Tanımı gereği
   halka açıklar — tarayıcıya gitmek üzere üretildiler ve kiracı izolasyonu
   onlara değil `scoped-db` katmanına dayanıyor. Secret olarak saklamak yanlış

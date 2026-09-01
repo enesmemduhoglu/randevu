@@ -12,7 +12,7 @@
     "db:uygula": "drizzle-kit migrate",
     "test": "vitest run",
     "test:izle": "vitest",
-    "tip": "tsc --noEmit",
+    "tip": "next typegen && tsc --noEmit",
     "db:uygula:prod": "node scripts/prod-goc.ts",
     "cf:kur": "opennextjs-cloudflare build",
     "cf:onizle": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
