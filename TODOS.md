@@ -1168,6 +1168,157 @@ Cloudflare hesabı gerekmiyor.
 
 ---
 
+## Faz H — panel takvimi
+
+**Dal:** `faz-h/panel-takvimi` · **406 test** (28 dosya), bunun **65'i** bu
+fazın. `npm run tip`, `npm run lint`, `npm test` ve **`npm run build`** yeşil.
+
+Faz G'den beri açık duran engel kapandı: işletme sahibi gelen randevuyu artık
+panelde görüyor ve durumunu değiştirebiliyor.
+
+### Faz ikiye bölündü
+
+`plan.md` Faz H'yi beş iş olarak tarif ediyordu: gün/hafta/ay görünümü, randevu
+detayı, durum değiştirme, **elle randevu ekleme**, **müşteri listesi ve
+geçmişi**. Son ikisi ayrıldı — **Faz H2**. Sebep kapsam değil incelenebilirlik:
+elle randevu ekleme müsaitlik motorunu panel tarafına bağlamayı gerektiriyor
+(aşağıda) ve o kendi başına bir mimari karar; aynı PR'a koymak takvimin
+diff'ini okunamaz yapardı.
+
+### Kararlar
+
+**Geçiş kuralı tek dosyada: `src/lib/randevu-durum.ts`.** Arayüz hangi
+düğmeleri göstereceğini `GECISLER`'den, veritabanı koşullu UPDATE'in
+`where`'ini `kaynakDurumlar()`'dan alıyor ve ikincisi birincisinden
+**türetiliyor**. İki liste elle yazılsaydı birine eklenen geçiş diğerinde
+unutulabilirdi ve hata "düğme görünüyor ama basınca hep 409 dönüyor" şeklinde,
+sebebi hiçbir yerde yazılı olmadan ortaya çıkardı.
+
+**Kaynak durum kümesi `scoped-db`'ye parametre olarak GEÇMİYOR.**
+`randevuDurumunuDegistir(id, hedef)` kümeyi kendisi üretiyor. Parametre olsaydı
+bir route "IPTAL → ONAYLI"yı kendi başına mümkün kılabilirdi ve kural iki yerde
+yaşardı.
+
+**Üç durum terminal: IPTAL, TAMAMLANDI, GELMEDI.** Bu bir ürün tercihi değil,
+kısıt. İptali geri açmak slotu yeniden doldurmak demek ve o slot bu arada
+başkasına verilmiş olabilir — `EXCLUDE` kısıtı 23P01 ile reddeder. Doğru
+davranış önce müsaitlik motoruna sormak, gerekirse yeni saat önermek; yani
+"elle randevu ekleme" işi. Faz H2'ye bırakıldı, şimdilik geri alma yolu "yeni
+randevu aç".
+
+**BEKLIYOR'dan doğrudan TAMAMLANDI/GELMEDI'ye geçilebiliyor.** Otomatik onay
+kapalıyken işletme onaylamayı unutuyor ama müşteri yine geliyor. Önce
+"onayla" demeye zorlamak, olmuş bir randevuyu olmamış gibi kaydettirirdi.
+
+**Aralık semantiği KESİŞME, "içinde olma" değil.** `randevulariListele`
+`baslangic < ust AND bitis > alt` kullanıyor. Gece yarısını aşan bir randevu
+"içinde olma" ile hiçbir günde görünmezdi — ne bittiği günde (orada
+başlamıyor) ne başladığı günde (orada bitmiyor). `musaitlik-sorgu.ts` zaten
+aynı kabulü yapıyordu; ikisinin ayrışması, takvimde görünmeyen bir randevunun
+slotu doldurması demekti. Sınırlar `[)`: tam `ust`'te başlayan ve tam `alt`'ta
+biten kayıt dışarıda, `EXCLUDE` kısıtının `'[)'` aralığıyla aynı kabul.
+
+**Liste TÜM durumları döndürüyor, IPTAL dahil.** İşletme iptali görmek istiyor
+("müşteri gelmedi mi, iptal mi etti"); hangisinin gösterileceği arayüzün
+filtresi, verinin işi değil.
+
+**Yol adı `/api/randevular` (çoğul), `/api/randevu` değil.** Halka açık ve
+oturumsuz olan yollar tekil kalıyor. Ayrımı adreste tutmak, bir gün bu iki
+sınıfın yanlışlıkla aynı kapıyı paylaşmasını zorlaştırıyor — panel yolunu
+`/api/randevu/[id]/durum` yazsaydık oturumsuz bir yolun altına oturumlu bir yol
+aşılamış olurduk.
+
+**409 açıklaması randevunun MEVCUT durumunu söylüyor, istenen hedefi değil.**
+Kullanıcının aradığı cevap "neden olmadı" ve cevap her zaman "kayıt artık başka
+bir durumda" — çoğunlukla başka bir sekmede ya da müşteri iptal linkini
+kullandığı için. 409'dan sonra çekmece bilerek **açık** kalıyor ve
+`router.refresh()` çağrılıyor: mesaj okunsun, düğmeler gerçek duruma göre
+yeniden çizilsin.
+
+**Takvim durumu URL'de, bileşende değil.** `?gorunum=&tarih=&personel=`.
+`useState` daha az kod olurdu; URL üç somut şey kazandırıyor: adres
+paylaşılabiliyor, yer imine konabiliyor ve tarayıcının geri tuşu çalışıyor (ay
+görünümünden bir güne inip geri dönmek refleks). Veri zaten sunucudan geldiği
+için ayrıca fetch de yazılmıyor. Gezinme `<Link>` ile — orta tıkla yeni sekme
+ve adres kopyalama `onClick`+`push` ile kaybolurdu; `router.push` yalnızca
+personel açılır listesinde, çünkü onun verecek bir `href`'i yok.
+
+**Hafta görünümü İKİ AYRI DÜZEN.** Masaüstünde yedi sütun, telefonda güne göre
+gruplanmış dikey liste. Tek responsive ızgara denenmedi: 360 pikselde sütun
+başına ~48 piksel düşüyor, içine ne müşteri adı ne 44 piksellik dokunma hedefi
+sığıyor ve kalan tek çıkış yatay kaydırma oluyordu. Hedef kitle telefondan
+giriyor; onların düzeni ikinci sınıf olmamalı.
+
+**Ay penceresi tam haftalara yuvarlanıyor.** Ayın ilk günü çarşambaysa satırın
+ilk üç hücresi önceki ayın günleriyle doluyor. Boş bırakmak, işletmenin o
+haftanın pazartesi randevusunu görmeden hafta planı yapmasına yol açardı.
+Ay görünümünde hücre randevu SAYISI değil ilk randevuların kendisini
+gösteriyor: "3 randevu" günün dolu mu boş mu olduğunu söylüyor ama 09:00'ın mı
+18:00'in mi dolu olduğunu söylemiyor — plan yapan kişinin sorduğu soru bu.
+
+**Hafta pazartesiden başlıyor.** Kodda daha önce alınmış bir karar yoktu;
+`bicim.ts > HAFTA_SIRASI` arayüzü zaten öyle diziyordu, `takvim-araligi.ts` onu
+takvime taşıdı. Veritabanındaki `haftaninGunu` 0 = Pazar olarak kalıyor.
+
+**Gün/ay adları `ortak.tsx`'ten `bicim.ts`'e taşındı.** `ortak.tsx` "use
+client"; panel takviminin **sunucu** bileşeni aynı ay adını yazmak için oradan
+import edemiyordu. İki kopya tutmak, bir gün birinde "Agustos" diğerinde
+"Ağustos" yazması demekti. `ortak.tsx` isimleri yeniden dışa açıyor, çağrı
+yerleri değişmedi.
+
+**Hizmet rengi eşlemesi `hizmet-girdi.ts`'e, etiket listesinin yanına
+taşındı.** Kopyası hizmet listesindeydi; takvim üçüncü kopyayı isteyince tek
+kaynağa indi. Liste ile eşleme birlikte değişmek zorunda — yeni renk eklenip
+eşleme unutulursa hizmet sessizce renksiz görünür.
+
+**Detaydaki ücret hizmetin BUGÜNKÜ fiyatı.** `randevu` tablosu tutar
+taşımıyor, yani geçmiş randevularda fiyat değişimi geriye dönük görünüyor.
+Kabul edildi: panel bunu tahsilat kaydı olarak değil "bu randevu ne kadarlık"
+bilgisi olarak gösteriyor ve gerçek tahsilat planda hiç yok.
+
+**Şema göçü YOK.** Faz E'nin şeması takvimi olduğu gibi taşıyor;
+`randevu_isletme_baslangic_idx` zaten "bu işletmenin şu tarih aralığındaki
+randevuları" için konmuştu.
+
+### Bilerek kapsam dışı
+
+- **Elle randevu ekleme ve müşteri listesi — Faz H2.** Ekleme, `musaitlik.ts`'i
+  panel tarafına bağlamayı gerektiriyor ve `musaitlik-sorgu.ts` şu an
+  `getHalkaAcikDb`'ye kilitli: `getScopedDb`'de `kapaliAraliklariListele`,
+  `doluRandevulariListele` ve `hizmetiVerenPersoneller` **yok**. İki yol var —
+  sorgu katmanını yapısal bir arayüze gevşetmek, ya da eksik üç metodu
+  `getScopedDb`'ye eklemek. Karar Faz H2'nin ilk işi.
+- **Kapalı aralıklar (izin/tatil) takvimde görünmüyor.** `kapali` tablosu
+  duruyor ama takvim yalnızca randevu çiziyor; işletme izin günlerini panelde
+  göremiyor. Ayrı iş, çünkü kendi CRUD ekranı da yok.
+- **Randevunun saatini/personelini panelden değiştirme yok.** `EXCLUDE`
+  kısıtına çarpacağı için müsaitlik kontrolü gerektiriyor — elle eklemeyle aynı
+  aile, aynı faz.
+- **Route'un mutlu yol / 401 / IDOR testleri route dosyasında değil.** Depodaki
+  kalıp: vitest'in node ortamında `cookies()` bağlamı yok, o yüzden route
+  testleri yalnızca CSRF dilimini sınıyor; iş mantığı `scoped-db-randevu.test.ts`'te
+  (17 test, IDOR ve koşullu UPDATE dahil).
+- **`cf:onizle` bu oturumda koşturulmadı.** `npm run build` koştu ve temiz,
+  ama workerd tarafı yine ölçülmedi.
+
+### Elle yapılması gerekenler (Faz H)
+
+- [ ] Uçtan uca: kaydol → hizmet + çalışma saati → gizli sekmede `/r/<slug>` →
+      randevu al → **panelde `/panel/takvim`'de göründüğünü gör** → onayla →
+      iptal linkiyle iptal et → panelde iptal göründüğünü gör.
+      **Aynısı mobil genişlikte.**
+- [ ] Yarışan iki sekme: aynı randevuyu iki sekmede aç, birinde onayla,
+      diğerinde onayla — ikincisi 409 ve Türkçe açıklama almalı, çekmece açık
+      kalmalı.
+- [ ] `npm run cf:onizle` ile takvimi workerd'de gör (Intl/ICU riski: ay adları
+      elle yazılı ama `yerelParcalar` `Intl`e dayanıyor).
+- [ ] `design-review` skill'i (plan.md: Faz G ve H sonrası koşturulur).
+- [ ] `/panel` giriş ekranındaki "Randevu sayfanız" kartı hâlâ "Sayfa hazır
+      olduğunda" diyor ve adresi düz metin gösteriyor — Faz G'den kalma bayat
+      metin, sayfa artık **var**. Ayrı düzeltme.
+
+---
+
 ## Oturum sonu durumu — 31 Ağustos 2026
 
 **Canlı:** https://randevu.enesmemduhoglu.tech (G öncesi sürüm) ·
