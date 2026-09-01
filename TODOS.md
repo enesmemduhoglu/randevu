@@ -1481,11 +1481,23 @@ kullanılan kalıp izlendi.
 
 ### Elle yapılması gerekenler (CI/CD)
 
-- [ ] `uretim` GitHub Environment'ı oluştur ve **required reviewer** ekle.
-      Ortam yoksa ya da inceleyici tanımlı değilse yayın beklemeden çıkar.
-- [ ] Secret'lar: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
-      `SUPABASE_DB_URL`.
-- [ ] Variable'lar: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-      `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.
+- [x] `uretim` GitHub Environment'ı kuruldu: required reviewer + deployment
+      branch policy `main`. İkincisi asıl olarak `goc`'u koruyor —
+      `workflow_dispatch` herhangi bir daldan tetiklenebiliyor.
+- [x] Secret'lar: `CLOUDFLARE_ACCOUNT_ID`, `SUPABASE_DB_URL` girildi
+      (değerler `.env`'den ve `wrangler whoami`'den alındı).
+- [x] Variable'lar: `NEXT_PUBLIC_SUPABASE_URL`,
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL` girildi.
+- [ ] **`CLOUDFLARE_API_TOKEN` eksik — yayını bloke eden tek şey.** Yerelde
+      yok: `wrangler` OAuth ile giriş yapmış ve o jeton kısa ömürlü, CI'da
+      kullanılamaz. Cloudflare panelinden *Edit Cloudflare Workers* şablonuyla
+      üretilip `gh secret set CLOUDFLARE_API_TOKEN` ile girilmeli. Şablonun
+      Hyperdrive iznini kapsamaması olası; deploy yetki hatası verirse
+      **Hyperdrive: Edit** eklenir.
+- [ ] `NEXT_PUBLIC_TURNSTILE_SITE_KEY` girilmedi, çünkü **widget hiç
+      oluşturulmamış** (Faz G2'nin açık maddesi, bkz. yukarısı). Yayını
+      durdurmuyor: `yayinla`nın kontrol adımı bu değişkeni aramıyor ve
+      `TURNSTILE_MODU` üretimde zaten tanımsız, yani kapı bugünkü davranışıyla
+      açık kalıyor.
 - [ ] İlk yayından sonra canlıda `/saglik` ve `/r/<slug>` sayfalarını gözle
       doğrula — üretimdeki sürüm hâlâ Faz G öncesi, yani `/r/<slug>` şu an 404.

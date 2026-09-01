@@ -65,9 +65,16 @@ durur. Kontrol var, çünkü eksik bir `NEXT_PUBLIC_*` build'i **düşürmüyor*
 
 ### Environment
 
-`uretim` adında bir GitHub Environment gerekiyor ve içinde **required
-reviewers** tanımlı olmalı. Onay kapısı budur; ortam yoksa ya da inceleyici
-tanımlı değilse yayın beklemeden çıkar.
+`uretim` ortamı kurulu. İki koruma taşıyor:
+
+- **Required reviewers** — onay kapısı bu. Ortam yoksa ya da inceleyici
+  tanımlı değilse yayın beklemeden çıkar. (GitHub, bir workflow'un başvurduğu
+  ortamı yoksa **korumasız olarak kendiliğinden oluşturuyor** — yani ortamı
+  silmek koruma eklemek değil, kaldırmak anlamına gelir.)
+- **Deployment branch policy: yalnızca `main`** — ortama bağlı bir iş başka
+  daldan koşamaz. Asıl kazanç `goc` tarafında: `workflow_dispatch` herhangi
+  bir daldan tetiklenebiliyor ve bu kural, prod şemasına gözden geçirilmemiş
+  bir daldaki migration'ın uygulanmasını engelliyor.
 
 ## Runtime sırları hattın dışında
 
