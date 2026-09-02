@@ -1583,6 +1583,33 @@ düşen bir yayın ilk denemede görülüyor.
 doğrulandı), site anahtarı `gh variable set` ile repository variable oldu.
 Derlenmiş istemci paketinde site anahtarı görüldü — yani widget artık çiziliyor.
 
+### Tuzak: `vars` eklemek tip kontrolünü kırdı, ama yalnızca CI'da
+
+PR #13 yerelde dört kapıdan da geçtikten sonra CI'da `tip` adımında düştü.
+Sebep: `cloudflare-env.d.ts` **üretilen** bir dosya ve `.gitignore`'da.
+Yerelde en son `npm install` sırasında üretilmişti, yani `vars` bloğu eklenmeden
+önceki haliyle duruyordu. CI ise `npm ci` → `postinstall` → `wrangler types`
+zinciriyle onu yeniden üretti ve yeni tipler geldi.
+
+`wrangler types` varsayılan olarak `vars` değerlerini **literal** tipe
+çeviriyordu (`TURNSTILE_MODU: "gercek"`) ve `ProcessEnv`'e zorunlu alan olarak
+yazıyordu. İki sonuç: testlerdeki `process.env.TURNSTILE_MODU = "sahte"` artık
+tip hatası, `delete process.env.TURNSTILE_MODU` de öyle (TS2790).
+
+Çözüm iki parça:
+
+- `--strict-vars=false` (`cf:tip` ve `postinstall`) → `vars` değerleri `string`
+  olarak üretiliyor. Literal tip burada **yanlış bir söz**: `vars` bir derleme
+  sabiti değil, çalışma zamanı yapılandırması ve `.dev.vars` ile `process.env`
+  onu meşru şekilde eziyor.
+- `src/lib/test-ortam.ts > ortamiSil()` → `delete` için gereken cast tek bir
+  yerde. Tip aslında doğruydu (üretimde o değişken hep var); testin taklit
+  ettiği şey üretim değil, değişkenin hiç tanımlı olmadığı yerel/vitest ortamı.
+
+**Ders:** üretilen ve gitignore'da olan bir dosya, yereli CI'dan sessizce
+ayırabiliyor. `wrangler.jsonc` değiştiren bir işten sonra `npm run cf:tip`
+koşturmadan "tip temiz" demek yanlış güven veriyor.
+
 ### Yan bulgu: yerel `cf:yayinla` sırrı pakete gömüyor
 
 Ölçüldü: `.env` varken `next build` onu `.open-next/server-functions/default/.env`

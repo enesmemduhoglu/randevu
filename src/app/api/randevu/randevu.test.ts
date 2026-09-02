@@ -4,6 +4,7 @@ import { tablolariBosalt } from "@/db/test-temizlik";
 import { isletmeKaydiOlustur } from "@/lib/kayit";
 import { getHalkaAcikDb, getScopedDb, type ScopedDb } from "@/lib/scoped-db";
 import { hataMetni, sahteIstek } from "@/lib/test-istek";
+import { ortamiSil } from "@/lib/test-ortam";
 import { gunBasi, gunEkle, yerelDenUtc, yerelGun } from "@/lib/zaman";
 
 import { POST } from "./route";
@@ -618,7 +619,7 @@ function turnstileAc(gecerli: boolean) {
 }
 
 function turnstileKapat() {
-  if (ILK_TURNSTILE_MODU === undefined) delete process.env.TURNSTILE_MODU;
+  if (ILK_TURNSTILE_MODU === undefined) ortamiSil("TURNSTILE_MODU");
   else process.env.TURNSTILE_MODU = ILK_TURNSTILE_MODU;
   if (ILK_TURNSTILE_SIR === undefined) delete process.env.TURNSTILE_SECRET;
   else process.env.TURNSTILE_SECRET = ILK_TURNSTILE_SIR;
