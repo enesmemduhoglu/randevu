@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { ayarAlanlariniDogrula, telefonDogrula } from "@/lib/ayar-girdi";
+import { ILLER, ILLER_ALFABETIK, trKarsilastir } from "@/lib/dizin-girdi";
 
 const GECERLI = {
   ad: "Işıl Güzellik",
@@ -111,5 +112,63 @@ describe("ayarAlanlariniDogrula", () => {
     expect(ayarAlanlariniDogrula({ ...GECERLI, adres: "a".repeat(301) }).tamam).toBe(
       false,
     );
+  });
+
+  test("dizin alanlari bos gecilebiliyor", () => {
+    // Isletme profilini kademeli dolduruyor; bu alanlarin zorunlu oldugu tek
+    // an dizine cikma ani ve o kontrol `yayindaAyarla`da.
+    const sonuc = ayarAlanlariniDogrula(GECERLI);
+    expect(sonuc.tamam && sonuc.deger.il).toBeNull();
+    expect(sonuc.tamam && sonuc.deger.ilce).toBeNull();
+    expect(sonuc.tamam && sonuc.deger.kategori).toBeNull();
+  });
+
+  test("dizin alanlari kapali listeye karsi dogrulaniyor", () => {
+    const sonuc = ayarAlanlariniDogrula({
+      ...GECERLI,
+      il: "İstanbul",
+      ilce: "  Kadıköy  ",
+      kategori: "Kuaför",
+    });
+    expect(sonuc.tamam && sonuc.deger.il).toBe("İstanbul");
+    // Ilce serbest metin ama kirpiliyor.
+    expect(sonuc.tamam && sonuc.deger.ilce).toBe("Kadıköy");
+    expect(sonuc.tamam && sonuc.deger.kategori).toBe("Kuaför");
+
+    expect(ayarAlanlariniDogrula({ ...GECERLI, il: "Paris" }).tamam).toBe(false);
+    expect(
+      ayarAlanlariniDogrula({ ...GECERLI, kategori: "Uzay İstasyonu" }).tamam,
+    ).toBe(false);
+    expect(
+      ayarAlanlariniDogrula({ ...GECERLI, ilce: "a".repeat(61) }).tamam,
+    ).toBe(false);
+  });
+});
+
+describe("ILLER_ALFABETIK", () => {
+  test("81 ilin tamami duruyor", () => {
+    // Siralama bir filtre degil; bir il dusseydi panelde secilemez olurdu.
+    expect(ILLER_ALFABETIK).toHaveLength(ILLER.length);
+    expect([...ILLER_ALFABETIK].sort()).toEqual([...ILLER].sort());
+  });
+
+  test("Turkce harf sirasi Intl'e degil kendi tablomuza dayaniyor", () => {
+    // `localeCompare(…, "tr")` kullanilsaydi workerd'in eksik ICU'su sunucuda
+    // baska, tarayicida baska sira uretip hidrasyonu bozabilirdi.
+    expect(trKarsilastir("Isparta", "İstanbul")).toBeLessThan(0);
+    expect(trKarsilastir("Çanakkale", "Denizli")).toBeLessThan(0);
+    expect(trKarsilastir("Şanlıurfa", "Tekirdağ")).toBeLessThan(0);
+    expect(trKarsilastir("Ordu", "Osmaniye")).toBeLessThan(0);
+
+    // Dorduncu harf ayirt ediyor: a, s'den once.
+    expect(trKarsilastir("Karabük", "Kars")).toBeLessThan(0);
+
+    // Biri digerinin oneki ise kisa olan once.
+    expect(trKarsilastir("Kar", "Kars")).toBeLessThan(0);
+  });
+
+  test("ilk ve son il beklenen yerde", () => {
+    expect(ILLER_ALFABETIK[0]).toBe("Adana");
+    expect(ILLER_ALFABETIK.at(-1)).toBe("Zonguldak");
   });
 });

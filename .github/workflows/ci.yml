@@ -119,12 +119,25 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
-    # Onay kapisi. `uretim` ortaminda zorunlu inceleyici tanimli: is kuyruga
-    # girer ve GitHub'da "Approve" beklenir. Kazayla merge edilen bir PR tek
-    # basina canliya cikamaz, ama dogru merge tek tikla cikar.
-    environment:
-      name: uretim
-      url: https://randevu.enesmemduhoglu.tech
+    # ONAY KAPISI YOK - merge eden yayinlamis olur.
+    #
+    # Onceden `environment: uretim` vardi ve o ortamda zorunlu inceleyici
+    # tanimliydi; is kuyruga girip "Approve" bekliyordu. Kaldirildi, cunku
+    # kapinin dayandigi varsayim yanlisti: "geri alma yeniden derleme demek,
+    # yani ucuz degil". Cloudflare her yayinin SURUMUNU sakliyor
+    # (`wrangler versions list` ile goruluyor), yani kod geri alinabilir ve
+    # yeniden derleme gerektirmiyor:
+    #
+    #   npx wrangler rollback [surum-id]
+    #
+    # Ortam bagi bilerek dosyadan KALDIRILDI, ortamin ayarindan degil: kapi
+    # gorunmez bir depo ayarinda degil, PR'da incelenen bir dosyada dursun.
+    # Ayni gerekceyle hiz sinirlari da WAF kurali degil `wrangler.jsonc`'de
+    # (bkz. Faz L). `environment:` satiri geri konursa kapi geri gelir.
+    #
+    # DIKKAT: bu ucuzluk YALNIZCA KOD icin gecerli. Sema geri alinamiyor -
+    # `scripts/prod-goc.ts` tek yon. Bu yuzden goc hala ayri bir is akisi ve
+    # geri alma SQL'i PR aciklamasina elle yazilmaya devam ediyor.
 
     # Iki yayin ust uste binerse Worker'in hangi surumu tasidigi belirsizlesir.
     # Kuyruk sirali ve cancel-in-progress YOK: yarida kesilen bir deploy en kotu

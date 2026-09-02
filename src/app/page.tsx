@@ -39,6 +39,20 @@ export default function KokSayfa() {
               <Link href="/giris">Giriş yap</Link>
             </Button>
           </div>
+
+          {/* Dizin bu sayfanin tek MUSTERI yonlu baglantisi: kok sayfaya gelen
+              herkes isletme sahibi degil ve gelen musteriye "kayit ol" demek
+              onu urunun yanlis tarafina goturur. */}
+          <p className="text-sm text-muted-foreground">
+            Randevu almak için{" "}
+            <Link
+              href="/dizin"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              işletme dizinine
+            </Link>{" "}
+            bakabilirsiniz.
+          </p>
         </div>
       </main>
     </div>

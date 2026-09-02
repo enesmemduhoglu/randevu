@@ -1741,8 +1741,364 @@ gece yarısına yakın bitişler bir gün kaymış görünürdü.
 
 ### Elle yapılması gerekenler (Faz L3)
 
-- [ ] Prod göçü: `npm run db:uygula:prod -- --onayla` ya da `goc` iş akışı.
+- [x] **Prod göçü uygulandı** (2 Eylül 2026). Ama SIRA TERSTİ ve bu bir olay
+      oldu: PR #16 merge edilip **deploy edildikten sonra** göç uygulandı.
+      Arada üretimdeki kod, veritabanında olmayan iki kolonu `select`
+      ediyordu — Drizzle açık kolon listesi ürettiği için `isletme` ve
+      `musteri` okuyan her sorgu `column does not exist` ile düşüyordu.
+      Ayrıntı ve alınan ders: aşağıda "Sıra bozulunca" bölümünde.
 - [ ] Uçtan uca: randevu al → panelde "Gelmedi" işaretle → aynı numarayla
       tekrar randevu almayı dene, tarihli 429 mesajını gör → ayarı 0 yapıp
       tekrar dene, geçtiğini gör.
 - [ ] Ayarlar ekranındaki yeni alanı mobil genişlikte gözle doğrula.
+
+---
+
+## Sıra bozulunca — 2 Eylül 2026
+
+Faz L3'ün göçü prod'a **deploy'dan sonra** uygulandı. `docs/yayin.md` sırayı
+zaten yazıyordu (önce göç, sonra deploy); eksik olan bilgi değil, sırayı
+**zorlayan** bir şeydi.
+
+### Neden sessiz kaldı
+
+Deploy sonrası bakılan iki şey de yeşildi:
+
+| Kontrol | Sonuç | Neden yanıltıcı |
+|---|---|---|
+| `/` | 200 | Kök sayfa hiç sorgu yapmıyor |
+| `/saglik` | 200 | Yalnızca `select version()` koşuyor — şemaya bakmıyor |
+| Supabase `list_migrations` | `[]` | O tablo Supabase CLI'ın (`supabase_migrations`); Drizzle kendi günlüğünü `drizzle.__drizzle_migrations`'ta tutuyor |
+
+Gerçek durum ancak `information_schema.columns` sorgulanınca göründü:
+`isletme` 14 kolon taşıyordu ve `gelmedi_kisiti_gun` aralarında yoktu.
+
+**Drizzle bu hatayı yumuşatmıyor, sertleştiriyor.** `select()` açık kolon
+listesi üretiyor; yani eksik bir kolon "o alan `undefined` gelir" değil,
+`isletme` ya da `musteri` okuyan **her sorgunun** düşmesi demek —
+`scoped-db.ts`'te beş çağrı noktası. Yani panelin ve randevu sayfasının
+tamamı. Sessiz bozulma değil, görünmeyen bir tam durma.
+
+### Alınan ders
+
+`/saglik`'in 200 dönmesi bir şema kanıtı **değil**. Bir yayının sağlıklı
+olduğunu söyleyen kontrol, uygulamanın gerçekten okuduğu bir tabloya
+dokunmalı; `select version()` yalnızca "Postgres ayakta" diyor.
+
+### Bilerek yapılmayan
+
+- **Göçü Supabase MCP `apply_migration` ile uygulamak.** Uygulardı ama
+  `drizzle.__drizzle_migrations`'a satır yazmazdı; bir sonraki
+  `db:uygula:prod` 0003'ü yeniden koşup "column already exists" ile düşerdi.
+  Doğru araç `scripts/prod-goc.ts`.
+- **Göçü dal üzerindeyken koşmak.** `prod-goc.ts` `./drizzle` klasörünün
+  TAMAMINI uyguluyor; `faz-m/dizin` üzerindeyken koşulsaydı henüz merge
+  edilmemiş `0004_dizin.sql` de prod'a giderdi. Önce `origin/main`'e detach
+  edildi, sonra dala dönüldü.
+- **Deploy öncesi şema kontrolü betiği.** Prod'daki son migration hash'iyle
+  `drizzle/meta/_journal.json`'ı karşılaştırıp uyuşmazlıkta deploy'u durduran
+  bir adım doğru çözüm ve kullanıcıya önerildi; henüz yazılmadı.
+
+---
+
+## Faz M — pazaryeri dizini
+
+**Kapandı:** şema ve kapalı listeler, kiracı-üstü okuma katmanı, panelde dizin
+profili ve yayına çıkma anahtarı, halka açık `/dizin` sayfası.
+
+**456 test** (31 dosya). `npm run tip`, `npm run lint`, `npm test`,
+`npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1634 KiB
+gzip** (3 MiB sınırının 1400 KiB altında). Göç: `drizzle/0004_dizin.sql`.
+
+### Değişmez 1 burada esniyor — ve karşılığı
+
+Bu deponun merkezi değişmezi "her sorgu bir kiracıya kapsanır".
+`getScopedDb(oturum)` ve `getHalkaAcikDb(slug)` kiracıyı bir **kapanış
+değişkeninde** tutuyor, yani çağıran taraf onu veremiyor. Bir dizin ise tanımı
+gereği kiracı-üstü: amacı bütün işletmeleri listelemek.
+
+Kapsama olmadığı için karşılığı, sızabilecek yüzeyin daraltılması
+(`src/lib/dizin.ts`):
+
+1. Yalnızca `isletme` ve `hizmet` okunuyor. `randevu`, `musteri`, `kullanici`,
+   `bildirim_kuyrugu` bu dosyada **hiç geçmiyor**.
+2. `hizmet` yalnızca **toplama** olarak: adet ve en düşük fiyat. Tek tek hizmet
+   satırı dönmüyor — kart "4 hizmet, 300 ₺'den başlıyor" diyor, işletmenin
+   fiyat listesini dizine kopyalamıyor.
+3. Dönen tip (`DizinKarti`) **elle yazılmış ve kapalı**. `$inferSelect`
+   kullanılmadı: şemaya yarın eklenen bir kolon buradan sessizce sızmasın.
+4. Çağıran taraf tablo ya da kolon adı **veremiyor**; il ve kategori kapalı
+   listeye karşı doğrulanıyor.
+5. Salt okunur. Bu dosyaya asla yazma metodu eklenmeyecek.
+
+**Bunların hiçbiri niyet beyanı olarak bırakılmadı.** `degismezler.test.ts`
+dosyanın metnini tarıyor: izinli import listesi, yasaklı tablo adlarının hiç
+geçmemesi, iki görünürlük koşulunun varlığı, yazma metodu olmaması. Yorumlar
+**soyularak** taranıyor — dosyanın kendi başlığı yasaklı tabloları kuralı
+anlatmak için anıyor; ham metin taransaydı test kendi gerekçesinin yazılmasını
+cezalandırırdı.
+
+Gerekçe geçmişten: aynı şey Faz B'de bir kez yaşandı (Prisma'dan Drizzle'a
+geçerken kiracı kapısı sessizce zorlanamaz hale geldi ve iki faz incelemeye
+bağlı kaldı).
+
+### Kararlar
+
+- **`yayinda` `aktif`ten AYRI.** `aktif=false` randevu sayfasını tümden
+  kapatıyor, `yayinda=false` yalnızca dizinden gizliyor — doğrudan linki olan
+  müşteri randevu almaya devam ediyor. Tek alana sıkıştırmak, "Instagram'dan
+  gelenler girsin ama dizinde olmayayım" diyen işletmeyi imkânsız kılardı.
+  Panel kartı bu ayrımı açıkça yazıyor; yazmasaydı işletme kendini yanlışlıkla
+  randevuya kapatırdı.
+
+- **`yayindaAyarla` ayrı bir metot, `ayarlariGuncelle`nin alanı değil.** Yayına
+  çıkış ön koşullu (il, kategori, en az bir hizmet, personel, çalışma saati);
+  aynı sette gelseydi bir istek `{ ad: "…", yayinda: true }` gönderip kontrolü
+  atlayabilirdi — alan yazılır, koşul bakılmazdı. **Kapatmak koşulsuz:**
+  işletme kendini her an dizinden çekebilmeli.
+
+- **Eksikler sayılarak dönüyor, tek bir "olmadı" ile değil.** Neyi
+  tamamlaması gerektiğini söylemeyen bir ret, ayarlar ekranında tıkanmış
+  kullanıcı demek. Route ham anahtar döndürüyor (`il`, `hizmet`, …), cümleyi
+  arayüz kuruyor: her eksiğin yanında gidilecek bir ekran var ve o bağlantı
+  route'ta bilinmiyor.
+
+- **Eksik profil 409, 400 değil.** İstek biçimsel olarak doğru, kaydın bugünkü
+  durumuyla çatışıyor. 400 deseydik istemci gövdesini düzeltmeye çalışırdı;
+  düzeltilmesi gereken gövde değil işletme profili.
+
+- **il/kategori `pgEnum` ya da ayrı tablo DEĞİL**, düz `text` + kapalı TS
+  listesi — `ayar-girdi.ts > SAAT_DILIMLERI` emsali. Bunlar durum makinesi
+  değil referans alanı. `pgEnum` olsalardı her yeni kategori bir `ALTER TYPE
+  … ADD VALUE` göçü (ve o değerin aynı transaction'da kullanılamaması tuzağı)
+  isterdi. Ayrı tablo olsalardı her dizin sorgusuna bir join eklerdi.
+  **Bedeli:** DB geçersiz bir değeri engellemiyor. Kabul edildi, çünkü bu
+  alanlar tek bir yoldan yazılıyor (panel ayarları) ve o yol doğrulamadan
+  geçiyor.
+
+- **İlçe serbest metin ve FİLTRE DEĞİL.** ~1000 ilçenin il eşlemesini doğru
+  tutmak ayrı bir veri yatırımı; ilçe yalnızca kartta görünen bir etiket ve
+  yanlış yazılmış bir ilçe hiçbir sorgunun sonucunu bozmuyor. Filtre olsaydı
+  normalize etmek zorunlu olurdu. Ayarlar ekranı bunu kullanıcıya da söylüyor
+  ("Kartınızda görünür; aramayı etkilemez") — söylenmeseydi listede bulunmak
+  için doldurması gerektiğini sanırdı.
+
+- **Geçersiz filtre değeri filtreyi DÜŞÜRÜYOR, boş sonuç üretmiyor.** Bozuk bir
+  URL parametresi yüzünden boş sayfa göstermek kullanıcıya hiçbir şey
+  anlatmıyor. Arayüz seçili filtreyi göstermediği için ne olduğu görünüyor.
+
+- **Filtre seçenekleri sabit listenin tamamı değil, DİZİNDE GERÇEKTEN İŞLETMESİ
+  OLAN il ve kategoriler.** 81 ilin 78'i boş bir dizinde kullanıcı tek tek
+  deneyip boş sonuç görürdü. Dolu olanları göstermek listeyi hem kısaltıyor hem
+  dürüst kılıyor.
+
+- **Sıralama ada göre ve bu GEÇİCİ.** Gerçek sıralama (yakınlık, doluluk, puan)
+  bir ürün kararı ve henüz verilmedi; rastgele ya da id sırası ise aynı
+  sorgunun iki çağrısında farklı sıra üretip sayfalamayı bozardı.
+
+- **Sayfa üst sınırı 200.** Derin `OFFSET` Postgres'te pahalılaşıyor ve dizinde
+  binlerce sayfa gezmenin meşru bir kullanımı yok; sınır kazıyıcının maliyetini
+  de sabitliyor. Arayüz aynı sınırda duruyor — durmasaydı "Sonraki" sessizce
+  aynı sayfayı getirirdi.
+
+- **Filtre düz bir GET formu, istemci bileşeni değil.** Bu sayfa ürünü hiç
+  tanımayan bir müşteriye açılan ilk ekran ve tek işi bir işletme bulmak;
+  JavaScript'e bağlamak yavaş bağlantıda boş bir sayfa ve çalışmayan bir arama
+  kutusu demek. GET formunda gönderim URL'e giriyor, sonuç paylaşılabiliyor ve
+  geri tuşu çalışıyor. Sayfa numarası forma **konmuyor**: yeni bir filtreyle 7.
+  sayfada kalmak boş sonuç göstermek olurdu, alan olmadığı için gönderimde
+  kendiliğinden düşüyor.
+
+- **İki ayrı boş durum.** Araması tutmayan kullanıcıyla dizinin gerçekten boş
+  olduğu gün aynı cümleyi görmemeli: ilkinde yapacak bir şey var (filtreyi
+  temizle), ikincisinde yok — ve olmadığını söylemek, kullanıcıyı olmayan bir
+  sonucu aramaya bırakmaktan dürüst.
+
+- **Sayım yalnızca filtreliyken gösteriliyor.** Filtresiz listede "142 işletme"
+  kullanıcıya hiçbir şey söylemiyor; filtreliyken aramanın işe yarayıp
+  yaramadığını söylüyor.
+
+- **`/dizin` `force-dynamic` ama gerekçesi `/r/[slug]`inkinden FARKLI.** Orada
+  önbelleksizlik şart: sayfa bir yazma kararını besliyor ve bayat bir hizmet
+  listesi müşteriyi hiç alınamayacak bir slota götürür. Dizin yalnızca bir
+  liste; yine de dinamik, çünkü bir dakikalık bayat liste dizinden yeni çıkmış
+  bir işletmeyi göstermeye devam ederdi.
+
+### Ortaya çıkan iki gerçek hata
+
+**1. Arama Türkçe'nin doğru küçük yazımını bulmuyordu.** Postgres'in `ilike`i
+küçültmeyi veritabanı collation'ıyla yapıyor ve orada "I"nın küçülmüşü noktalı
+"i". Yani "Işıl Güzellik" kaydı `işıl` aramasını buluyordu ama Türkçe'de o adın
+**doğru küçük yazımı olan** `ışıl` aramasını bulmuyordu; ASCII yazan ziyaretçi
+(`isil`) de hiçbir şey bulamıyordu. Beş yazımdan ikisi boş dönüyordu.
+
+Çözüm yeni bir kolon, `unaccent` uzantısı ya da ifade indeksi **değil**: zaten
+duran `slug`. Kayıt anında `slugUret` ile ASCII'ye katlanıyor
+(`Işıl Güzellik` → `isil-guzellik`) ve üzerinde benzersizlik indeksi var;
+aramayı aynı fonksiyondan geçirmek yetti. `ad` üzerindeki koşul kaldırılmadı,
+yanına eklendi: slug noktalama ve boşlukları da tireye çeviriyor, yani `&` ya
+da kesme işareti içeren adlarda ham metin eşleşmesi hâlâ daha iyi sonuç
+veriyor.
+
+`slugUret` kendi dosyasına taşındı (`src/lib/slug.ts`). `kayit.ts`'te bırakıp
+oradan import etmek, kiracı-üstü dizine bir veritabanı modülünü bağımlılık
+yapardı.
+
+**Bu hata elle doğrulamada çıktı, testte değil** — mevcut arama testi
+`"berber"` ve `"NISAN"` gibi ASCII adlar kullanıyordu ve ikisi de geçiyordu.
+
+**2. İl listesi `localeCompare(…, "tr")` ile sıralanamıyor.** 81 il panelde
+plaka sırasında gösterilemez, ama liste hem sunucuda (workerd) hem tarayıcıda
+**aynı** sırayı üretmek zorunda ve workerd'in ICU derlemesi tam değil — iki
+taraf farklı sıralarsa React hidrasyonda uyuşmazlık görüyor. Elle yazılmış harf
+tablosu (`trKarsilastir`), `SAAT_DILIMLERI` ve `paraBicimle`nin emsalini
+izliyor.
+
+### Bilerek kapsam dışı
+
+- **Sıralama seçeneği yok** (ada göre sabit). Gerçek sıralama sinyali
+  (yakınlık, doluluk, puan) ürün kararı; puan için değerlendirme sistemi, konum
+  için koordinat gerekiyor ve ikisi de bu fazda yok.
+- **Harita ve konum araması yok.** İşletmenin koordinatı şemada yok; adres
+  serbest metin. Coğrafi arama ayrı bir veri yatırımı (geocoding + PostGIS).
+- **Dizin sayfası `robots`/`sitemap` ile beslenmiyor.** Arama motoru
+  görünürlüğü ayrı bir konu ve bugün dizinde üç işletme var; boş bir dizini
+  indekslettirmenin faydası yok.
+- **Hız sınırı konmadı.** `/dizin` bir okuma yolu ve `/api/musaitlik`in aksine
+  ucuz; kazıyıcının maliyeti sayfa üst sınırıyla zaten sabitlenmiş durumda.
+  Trafik geldiğinde Faz L'nin `hiz-siniri.ts`'i bu yola da bağlanabilir.
+- **Kategori listesi küçük başladı** (dokuz kalem). Doldurulamayacak kadar çok
+  boş kategoriyle açılan bir dizin boş görünür; talep geldikçe büyür ve göç
+  gerektirmiyor.
+- **İşletmenin dizindeki görünümünü önizlemesi yok.** Kart, kayıtlı alanlardan
+  kuruluyor ve ayarlar ekranı hepsini gösteriyor; ayrı bir önizleme ekranı bu
+  fazın kazancına değmezdi.
+
+### Doğrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` — **456 test geçti** (31 dosya, gerçek Postgres)
+  - `dizin.test.ts` 16 (görünürlük kapısı, filtreler, toplama, Türkçe arama)
+  - `degismezler.test.ts` +4 (dizin.ts'in şeklini zorlayan tarama)
+  - `ayar-girdi.test.ts` +5 (dizin alanları ve il sıralaması)
+  - `dizin.test.ts` (route) 3 — CSRF dilimi
+- `npm run build` başarılı, 34 route
+- `cf:kur` + `wrangler deploy --dry-run`: **1634.49 KiB gzip**
+- **Elle (`next dev`, tohumlanmış `randevu_dev`):** `/dizin` 200 ve yalnızca
+  `yayinda=true` olan üç işletmeyi listeliyor (dördüncüsü yayında değil ve
+  görünmüyor); `?il=İstanbul` ikiye, `?kategori=Berber` bire iniyor;
+  `?il=Paris` (listede olmayan değer) filtreyi düşürüp tam listeyi veriyor;
+  `?arama=%` ve `?arama=_` boş dönüyor (joker kaçışı); `?sayfa=999` boş;
+  `Işıl / ışıl / işıl / isil / ISIL` yazımlarının **beşi de** aynı kaydı
+  buluyor
+
+### Elle yapılması gerekenler (Faz M)
+
+- [x] **Prod göçü uygulandı — bu sefer DEPLOY'DAN ÖNCE** (2 Eylül 2026 19:22
+      UTC, `npm run db:uygula:prod -- --onayla`). Doğrulandı: dört kolon
+      yerinde (`yayinda` NOT NULL DEFAULT false), `isletme_dizin_idx` ve
+      `isletme_yayin_alanlari_tam` mevcut, journal 5 satır, iki mevcut işletme
+      korundu ve ikisi de `yayinda=false` — yani dizine kendileri girene kadar
+      görünmüyorlar. Canlıdaki (henüz eski) kod etkilenmedi: `/`, `/r/berber`,
+      `/r/demo-guzellik-salonu` 200.
+
+      > **`goc` iş akışı bu göç için KULLANILAMADI** ve bu bir yapılandırma
+      > çelişkisi: `goc`, `uretim` ortamına bağlı ve o ortamın deployment
+      > branch policy'si yalnızca `main`'e izin veriyor. Ama iş akışının kendi
+      > başlığı "önce bu iş akışını koştur, sonra merge et" diyor — yani göç
+      > henüz `main`'de olmayan bir dosyayı uygulamak zorunda. İki kural aynı
+      > anda sağlanamıyor.
+      >
+      > Bu sefer `docs/yayin.md`'nin ikinci yolu (yerelden `db:uygula:prod`)
+      > kullanıldı; L3'ün elle listesi de ikisini eşdeğer sayıyordu. **Kalıcı
+      > çözüm aynı gün verildi:** aşağıdaki "Onay kapıları kaldırıldı"
+      > bölümü.
+- [ ] Uçtan uca: ayarlarda il + kategori doldur → "Dizine ekle" → `/dizin`'de
+      kartı gör → "Dizinden çıkar" → kartın kaybolduğunu ama `/r/<slug>`in
+      hâlâ çalıştığını gör.
+- [ ] Eksik profille "Dizine ekle" → 409 ve eksikler listesi ekranda görünüyor
+      mu, bağlantılar doğru ekrana gidiyor mu.
+- [ ] `/dizin` ve ayarlardaki yeni bölümü **mobil genişlikte** ve **koyu
+      temada** gözle doğrula. Bu oturumda tarayıcı eklentisi bağlanamadığı için
+      görsel doğrulama yapılmadı; kontroller HTTP üzerinden yapıldı.
+
+### Bilinen yerel gürültü
+
+`randevu_dev`'deki `agdas-berber` kaydının adı bozuk kodlanmış
+(`Çağdaş Berber` yerine tek bayt hatalı bir dize) ve slug'ı `agdas-berber`.
+Önceki bir oturumun elle tohumundan kalma; kod hatası değil. `cagdas` araması
+bu yüzden bu kaydı bulmuyor, `agdas` buluyor.
+
+---
+
+## Onay kapıları kaldırıldı — 2 Eylül 2026
+
+**Merge eden yayınlamış olur.** `yayinla` işi artık beklemiyor, `goc` işi de
+herhangi bir daldan onaysız koşuyor. Kullanıcı kararı: *"pr'ı merge ettikten
+sonra otomatik deploy gerçekleşsin, zaten bir sorun olduğunda önceki deploya
+dönebiliriz."*
+
+### Kaldırılan kapının dayandığı varsayım yanlıştı
+
+`docs/yayin.md` onay kapısını şöyle gerekçelendiriyordu: *"`NEXT_PUBLIC_*`
+değerleri derlemeye gömülü olduğu için geri alma 'yeniden derleme' demek — yani
+ucuz değil."*
+
+Ölçüldü, varsayılmadı: `npx wrangler versions list` üç ayrı sürümü listeliyor
+ve `wrangler rollback` bunlardan birine dönüyor. Yani **geri alma yeniden
+derleme değil**, saklanmış bir sürüme geçiş. Cümle Faz B'de yazıldığında
+Cloudflare'in sürüm geçmişi bu depoda hiç denenmemişti.
+
+### İki kapı, iki farklı sebep
+
+| Kapı | Neden kaldırıldı |
+|---|---|
+| `yayinla` → `environment: uretim` | Dayandığı varsayım yanlıştı (üstte). Rollback ucuz. |
+| `goc` → `environment: uretim` | **Çelişkiliydi ve uygulanamazdı** (altta). |
+
+`goc`'un ortam bağı bir hataydı: `uretim` ortamının branch policy'si yalnızca
+`main`'e izin veriyor, ama iş akışının kendi başlığı *"önce bu iş akışını
+koştur, sonra merge et"* diyor — yani göç, tanımı gereği henüz `main`'de
+**olmayan** bir dosyayı uygulamak zorunda. İki kural aynı anda sağlanamıyordu.
+
+Faz M'de görüldü: `0004_dizin.sql` yalnızca dalda duruyordu ve iş akışı onu
+uygulayamadı. L3'te fark edilmemişti, çünkü o göç yanlışlıkla merge *sonrası*
+koşulmuştu — **hatanın kendisi çelişkiyi gizlemişti**.
+
+### Kapı dosyadan kaldırıldı, ortam ayarından değil
+
+`uretim` ortamı GitHub'da hâlâ duruyor; ona başvuran bir iş kalmadığı için
+hiçbir şeyi etkilemiyor. `environment:` satırları `ci.yml` ve `goc.yml`'dan
+silindi.
+
+Gerekçe: kapı görünmez bir depo ayarında değil, PR'da **incelenen** bir dosyada
+dursun. Aynı gerekçeyle hız sınırları da WAF kuralı değil `wrangler.jsonc`'de
+(Faz L) — ve Faz L'nin bulgusu tam da buydu: `wrangler.jsonc`'de `vars` bloğunun
+**yokluğu** kod incelemesinde görünmüyordu ve bot kapısı aylarca sessizce
+açıktı. Bir ayarın varlığı ya da yokluğu, ancak baktığın dosyada duruyorsa
+okunabilir.
+
+Yan fayda: ortam secret'ı hiç kullanılmıyordu (`CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`, `SUPABASE_DB_URL` üçü de **repository** secret'ı), yani
+bağı kaldırmak hiçbir sırrı kırmadı. Kontrol edildi, denenmedi.
+
+### Kaybedilen ve bilerek kabul edilen
+
+- **Kazayla merge edilen bir PR artık doğrudan canlıya çıkıyor.** Karşılığı
+  rollback'in ucuz olması. Asıl koruma zaten `dogrula` işiydi: tip, lint, 456
+  test ve `cf:kur` yeşil olmadan `yayinla` hiç başlamıyor.
+- **GitHub'ın Deployments sekmesindeki ortam geçmişi** artık dolmuyor. Yayın
+  geçmişinin gerçek kaynağı zaten Cloudflare'in sürüm listesi.
+
+### Değişmeyen: şema hâlâ tek yön
+
+Rollback'in ucuzluğu **yalnızca kod için** geçerli. `scripts/prod-goc.ts` ileri
+gider, geri gitmez; bir yayını geri almak şemayı geri almıyor. Bu yüzden:
+
+- `goc` hâlâ ayrı bir iş akışı ve hâlâ `"uygula"` yazılmasını istiyor. O kapı
+  kaldırılmadı: koşum kaydında "bunu isteyerek yaptım" izi bırakıyor.
+- Geri alınması gerekebilecek bir göç yazarken **geri alma SQL'i PR
+  açıklamasına elle yazılmaya devam ediyor**.
+- Sıra artık "önce göç, sonra **merge**" — "sonra yayın" değil. Merge anı yayın
+  anı olduğu için aradaki pencere kapandı; göç merge'den önce koşmazsa kolon
+  yokken kod canlıya çıkar.

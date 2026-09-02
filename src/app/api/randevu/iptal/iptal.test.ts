@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
 
 import { tablolariBosalt } from "@/db/test-temizlik";
-import { isletmeKaydiOlustur, slugUret } from "@/lib/kayit";
+import { isletmeKaydiOlustur } from "@/lib/kayit";
+import { slugUret } from "@/lib/slug";
 import {
   getHalkaAcikDb,
   getScopedDb,

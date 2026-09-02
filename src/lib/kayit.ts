@@ -6,35 +6,7 @@ import { eq } from "drizzle-orm";
 import { isletme, kullanici, personel } from "@/db/sema";
 import { getDb } from "@/lib/db";
 import { benzersizIhlaliMi } from "@/lib/pg-hata";
-
-const TURKCE_HARFLER: Record<string, string> = {
-  ç: "c", Ç: "c", ğ: "g", Ğ: "g", ı: "i", İ: "i",
-  ö: "o", Ö: "o", ş: "s", Ş: "s", ü: "u", Ü: "u",
-};
-
-/// Isletme adindan URL'de kullanilabilir slug uretir.
-///
-/// Turkce harfleri ELLE esliyoruz: normalize("NFD") ile aksan ayirma yontemi
-/// i-noktasiz ve I-noktali harfleri dogru cozmuyor - noktasiz i tek kod
-/// noktasi, ayrilabilir bir aksani yok. Kutuphanesiz ve dogru olan yol bu tablo.
-///
-/// NFD adimi yine de duruyor: Turkce olmayan aksanli adlar icin (ornegin
-/// "Cafe Nero" yazilisi "Café Nero" ise) harfin kendisi korunuyor, yoksa
-/// tamamen dusup slug'i bozardi.
-export function slugUret(ad: string): string {
-  return ad
-    .split("")
-    .map((h) => TURKCE_HARFLER[h] ?? h)
-    .join("")
-    .toLowerCase()
-    .normalize("NFD")
-    // U+0300-U+036F: birlesik aksan isaretleri. Acik kacis dizisiyle
-    // yaziliyor cunku gorunmez karakterler kaynakta kirilgan.
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-}
+import { slugUret } from "@/lib/slug";
 
 export type KayitGirdisi = {
   authUserId: string;

@@ -248,6 +248,9 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
       maksIleriGun?: number;
       otomatikOnay?: boolean;
       gelmediKisitiGun?: number;
+      il?: string | null;
+      ilce?: string | null;
+      kategori?: string | null;
     }) {
       const sonuc = await db
         .update(isletme)
@@ -255,6 +258,75 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
         .where(eq(isletme.id, kiraci))
         .returning({ id: isletme.id });
       return sonuc.length;
+    },
+
+    /// Isletmeyi dizine (pazaryeri) sokar ya da cikarir.
+    ///
+    /// NEDEN `ayarlariGuncelle`nin bir alani DEGIL: yayina cikmak on kosullu.
+    /// Ayni sette gelseydi bir istek `{ ad: "...", yayinda: true }` gonderip
+    /// kontrolu atlayabilirdi - alan yazilir, kosul bakilmazdi.
+    ///
+    /// Kapatmak kosulsuz: isletme kendini her an dizinden cekebilmeli.
+    ///
+    /// Eksik alanlar SAYILARAK donuyor, tek bir "olmadi" ile degil: kullaniciya
+    /// neyi tamamlamasi gerektigini soylemeyen bir ret, ayarlar ekraninda
+    /// tikanmis bir kullanici demek.
+    async yayindaAyarla(
+      yayinda: boolean,
+    ): Promise<
+      | { durum: "tamam" }
+      | { durum: "eksik"; eksikler: string[] }
+    > {
+      if (!yayinda) {
+        await db
+          .update(isletme)
+          .set({ yayinda: false })
+          .where(eq(isletme.id, kiraci));
+        return { durum: "tamam" };
+      }
+
+      const [profil] = await db
+        .select({ il: isletme.il, kategori: isletme.kategori })
+        .from(isletme)
+        .where(eq(isletme.id, kiraci))
+        .limit(1);
+
+      // Randevu alinamayan bir isletme dizinde yer kaplayip tiklanamaz olurdu.
+      // Kosullar `/r/[slug]` sayfasinin "randevu alinamiyor" bos durumuyla ayni
+      // uc sey: hizmet, personel, calisma saati.
+      const [hizmetSayisi] = await db
+        .select({ adet: sql<number>`count(*)` })
+        .from(hizmet)
+        .where(and(eq(hizmet.isletmeId, kiraci), eq(hizmet.aktif, true)));
+
+      const [personelSayisi] = await db
+        .select({ adet: sql<number>`count(*)` })
+        .from(personel)
+        .where(and(eq(personel.isletmeId, kiraci), eq(personel.aktif, true)));
+
+      const [saatSayisi] = await db
+        .select({ adet: sql<number>`count(*)` })
+        .from(calismaSaati)
+        .where(eq(calismaSaati.isletmeId, kiraci));
+
+      const eksikler: string[] = [];
+      if (!profil?.il) eksikler.push("il");
+      if (!profil?.kategori) eksikler.push("kategori");
+      if (Number(hizmetSayisi?.adet ?? 0) === 0) eksikler.push("hizmet");
+      if (Number(personelSayisi?.adet ?? 0) === 0) eksikler.push("personel");
+      if (Number(saatSayisi?.adet ?? 0) === 0) eksikler.push("calisma-saati");
+
+      if (eksikler.length > 0) return { durum: "eksik", eksikler };
+
+      // DB'de de bir CHECK var (isletme_yayin_alanlari_tam). Buradaki kontrol
+      // kullaniciya ANLASILIR geri bildirim icin; garanti oradaki kisit
+      // (DEGISMEZ 8'in ruhu: uygulama unutabilir, kisit unutmaz).
+      await db
+        .update(isletme)
+        .set({ yayinda: true })
+        .where(eq(isletme.id, kiraci));
+
+      return { durum: "tamam" };
     },
 
     // ---- Hizmetler --------------------------------------------------------

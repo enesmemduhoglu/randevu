@@ -116,6 +116,64 @@ describe("Faz L - kalkanin uretimde acik oldugu", () => {
   });
 });
 
+describe("DEGISMEZ 12 - dizin kapsamsiz okuyor, karsiligi dar olmasi", () => {
+  // `src/lib/dizin.ts` bu deponun tek KIRACI-USTU sorgusu: pazaryeri dizini
+  // tanimi geregi butun isletmeleri listeliyor, yani DEGISMEZ 1'in kapsama
+  // guvencesi orada yok.
+  //
+  // Karsiligi, sizabilecek yuzeyin dar TUTULMASI. "Dar tutuldu" bir niyet
+  // beyani olarak kalirsa alti ay sonra biri karta "son randevu tarihi" ekler
+  // ve dizin sessizce musteri verisi donmeye baslar. Bu test o adimi kirmizi
+  // yapiyor.
+  const dizin = readFileSync(
+    join(process.cwd(), "src", "lib", "dizin.ts"),
+    "utf-8",
+  );
+
+  /// YORUMLAR SOYULUYOR. Dosyanin kendi basligi yasakli tablolari ADIYLA
+  /// aniyor - kuralin ne oldugunu anlatmak icin, tam da bu testin korudugu
+  /// seyi. Ham metni tarasaydik dogru yazilmis bir aciklama testi kirmiziya
+  /// dusururdu ve caresi aciklamayi silmek olurdu; yani test, kendi
+  /// gerekcesinin yazilmasini cezalandirirdi.
+  const kod = dizin
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+
+  test("yalnizca izinli tablolari import ediyor", () => {
+    const eslesme = /import\s*\{([^}]*)\}\s*from\s*["']@\/db\/sema["']/.exec(kod);
+    const importlar = (eslesme?.[1] ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // `hizmet` yalnizca TOPLAMA icin (adet, en dusuk fiyat) - tek tek hizmet
+    // satiri donmuyor. Bu listeye ekleme yapmak bilincli bir karar olmali.
+    expect(importlar.sort()).toEqual(["hizmet", "isletme"]);
+  });
+
+  test("kisisel veri tasiyan tablolara hic dokunmuyor", () => {
+    // Import listesi degil, DOSYA METNI taraniyor: biri `@/db/sema`yi yildizla
+    // import edip `sema.musteri` yazsa yukaridaki test gecerdi.
+    for (const yasak of ["musteri", "randevu", "kullanici", "bildirimKuyrugu"]) {
+      expect(kod.includes(yasak)).toBe(false);
+    }
+  });
+
+  test("yalnizca yayindaki ve aktif isletmeleri donuyor", () => {
+    // Bu iki kosul dizinin gorunurluk kapisi. Biri silinirse yayina hic
+    // cikmamis ya da kapatilmis isletmeler listede belirir.
+    expect(kod).toContain("eq(isletme.yayinda, true)");
+    expect(kod).toContain("eq(isletme.aktif, true)");
+  });
+
+  test("yazma metodu yok - salt okunur", () => {
+    // Kapsamsiz bir yazma yolu, yanlis kiraciya yazmanin en kisa yolu olurdu.
+    for (const yazma of [".insert(", ".update(", ".delete(", "transaction("]) {
+      expect(kod.includes(yazma)).toBe(false);
+    }
+  });
+});
+
 describe("DEGISMEZ 1 - src/app altinda ham veritabani yok", () => {
   // Bunu eslint `no-restricted-imports` da zorluyor. Burada tekrar edilmesinin
   // sebebi: eslint yapilandirmasi bir gun degisirse (ornegin kural adi ya da

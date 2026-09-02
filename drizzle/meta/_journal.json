@@ -29,6 +29,13 @@
       "when": 1788366849042,
       "tag": "0003_gelmedi-kisiti",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788376938877,
+      "tag": "0004_dizin",
+      "breakpoints": true
     }
   ]
 }
