@@ -1994,11 +1994,28 @@ izliyor.
 
 ### Elle yapılması gerekenler (Faz M)
 
-- [ ] **Prod göçü — DEPLOY'DAN ÖNCE.** `npm run db:uygula:prod -- --onayla`,
-      `origin/main` üzerindeyken. Göç eklemeli (dört kolon, kısmi indeks, bir
-      CHECK); geri alma dört `drop column`, bir `drop index`, bir
-      `drop constraint`. Sıranın neden pazarlık konusu olmadığı yukarıda
-      "Sıra bozulunca" bölümünde.
+- [x] **Prod göçü uygulandı — bu sefer DEPLOY'DAN ÖNCE** (2 Eylül 2026 19:22
+      UTC, `npm run db:uygula:prod -- --onayla`). Doğrulandı: dört kolon
+      yerinde (`yayinda` NOT NULL DEFAULT false), `isletme_dizin_idx` ve
+      `isletme_yayin_alanlari_tam` mevcut, journal 5 satır, iki mevcut işletme
+      korundu ve ikisi de `yayinda=false` — yani dizine kendileri girene kadar
+      görünmüyorlar. Canlıdaki (henüz eski) kod etkilenmedi: `/`, `/r/berber`,
+      `/r/demo-guzellik-salonu` 200.
+
+      > **`goc` iş akışı bu göç için KULLANILAMADI** ve bu bir yapılandırma
+      > çelişkisi: `goc`, `uretim` ortamına bağlı ve o ortamın deployment
+      > branch policy'si yalnızca `main`'e izin veriyor. Ama iş akışının kendi
+      > başlığı "önce bu iş akışını koştur, sonra merge et" diyor — yani göç
+      > henüz `main`'de olmayan bir dosyayı uygulamak zorunda. İki kural aynı
+      > anda sağlanamıyor.
+      >
+      > Bu sefer `docs/yayin.md`'nin ikinci yolu (yerelden `db:uygula:prod`)
+      > kullanıldı; L3'ün elle listesi de ikisini eşdeğer sayıyordu. **Kalıcı
+      > çözüm bir karar gerektiriyor** ve verilmedi: ya `goc`'un ortam
+      > bağlantısı kaldırılıp yerine yazılı onay + `CODEOWNERS` konur, ya da
+      > sıra "merge et → `yayinla`yı ONAYLAMA → `goc` koştur → yayını onayla"
+      > olarak değiştirilip belgelenir. İkincisi mevcut kapılarla çalışıyor,
+      > çünkü deploy zaten elle onay bekliyor.
 - [ ] Uçtan uca: ayarlarda il + kategori doldur → "Dizine ekle" → `/dizin`'de
       kartı gör → "Dizinden çıkar" → kartın kaybolduğunu ama `/r/<slug>`in
       hâlâ çalıştığını gör.
