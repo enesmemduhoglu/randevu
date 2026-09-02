@@ -50,6 +50,16 @@ export const isletme = pgTable(
     // is yuku, ve musteri "onaylandi mi" diye beklemek istemiyor.
     otomatikOnay: boolean("otomatik_onay").notNull().default(true),
 
+    // Randevusuna gelmeyen musteri kac gun boyunca bu isletmeden yeni randevu
+    // alamiyor. 0 = kisit kapali.
+    //
+    // Neden isletme ayari ve neden sabit degil: kaporasi olmayan kucuk
+    // isletmede gelmeyen musterinin tek maliyeti bos kalan saat, ve o saatin
+    // degeri isletmeden isletmeye degisiyor. Varsayilan 30 gun: bir kez
+    // gelmeyen musteriyi kalici olarak kaybetmeyecek kadar kisa, bos saatin
+    // tekrarini engelleyecek kadar uzun.
+    gelmediKisitiGun: integer("gelmedi_kisiti_gun").notNull().default(30),
+
     aktif: boolean("aktif").notNull().default(true),
     olusturmaTarihi: timestamp("olusturma_tarihi", { withTimezone: true })
       .notNull()
@@ -300,6 +310,22 @@ export const musteri = pgTable(
 
     kullaniciId: uuid("kullanici_id").references(() => kullanici.id, {
       onDelete: "set null",
+    }),
+
+    // Bu ana kadar musteri BU isletmeden yeni randevu alamiyor. NULL = kisit
+    // yok. Randevusuna gelmedigi isaretlendiginde ileri atiliyor.
+    //
+    // DEGISMEZ 7: timestamptz. Kisit "30 gun sonra" gibi bir sure, tekrar eden
+    // bir duvar saati kurali degil - saat dilimi cevrimi gerektirmiyor,
+    // yalnizca gosterirken isletmenin dilimine ceviriliyor.
+    //
+    // Neden `musteri` tablosunda ve sayilan bir alan degil: kisit KIRACIYA
+    // OZEL. Ayni telefon numarasi baska bir salonda ayri bir musteri satiri
+    // (musteri_isletme_telefon_idx), yani bir isletmedeki kisit digerine
+    // sizmiyor. "Gelmedi randevularini say" seklinde turetilseydi isletme
+    // affetmek istedigi bir musteriyi affedemezdi - gecmisi silmesi gerekirdi.
+    randevuKisitiBitis: timestamp("randevu_kisiti_bitis", {
+      withTimezone: true,
     }),
 
     olusturmaTarihi: timestamp("olusturma_tarihi", { withTimezone: true })

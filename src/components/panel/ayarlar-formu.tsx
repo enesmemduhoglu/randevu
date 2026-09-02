@@ -21,6 +21,7 @@ export type AyarKaydi = {
   minOnceBildirimDk: number;
   maksIleriGun: number;
   otomatikOnay: boolean;
+  gelmediKisitiGun: number;
 };
 
 // Ayarlar formu. Sunucudan gelen degerler `defaultValue` ile veriliyor, yani
@@ -51,6 +52,7 @@ export function AyarlarFormu({ ayarlar }: { ayarlar: AyarKaydi }) {
       slotAraligiDk: veri.get("slotAraligiDk"),
       minOnceBildirimDk: veri.get("minOnceBildirimDk"),
       maksIleriGun: veri.get("maksIleriGun"),
+      gelmediKisitiGun: veri.get("gelmediKisitiGun"),
       // Isaretli degilse FormData alani hic tasimiyor.
       otomatikOnay: veri.get("otomatikOnay") === "on",
     };
@@ -224,6 +226,22 @@ export function AyarlarFormu({ ayarlar }: { ayarlar: AyarKaydi }) {
           />
           <p className="text-xs text-muted-foreground">
             Müşteriler en fazla bu kadar gün sonrasına randevu alabilir.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="gelmediKisitiGun">Gelmedi kısıtı (gün)</Label>
+          <Input
+            id="gelmediKisitiGun"
+            name="gelmediKisitiGun"
+            inputMode="numeric"
+            defaultValue={ayarlar.gelmediKisitiGun}
+            disabled={gonderiliyor}
+            className="h-10"
+          />
+          <p className="text-xs text-muted-foreground">
+            Randevusuna gelmediğini işaretlediğiniz müşteri bu kadar gün
+            boyunca sizden yeni randevu alamaz. 0 yazarsanız kısıt uygulanmaz.
           </p>
         </div>
 

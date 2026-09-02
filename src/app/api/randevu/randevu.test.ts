@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { tablolariBosalt } from "@/db/test-temizlik";
+import { tarihUzun } from "@/lib/bicim";
 import { isletmeKaydiOlustur } from "@/lib/kayit";
 import { getHalkaAcikDb, getScopedDb, type ScopedDb } from "@/lib/scoped-db";
 import { hataMetni, sahteIstek } from "@/lib/test-istek";
@@ -590,6 +591,71 @@ test("sinir BASKA numarayi engellemiyor", async () => {
 
   expect(yanit.status).toBe(201);
   expect(await doluSaatler(a)).toHaveLength(4);
+});
+
+// ---- Gelmedi kisiti (Faz L3) -----------------------------------------------
+//
+// Kisitin kendi kurallari (sinir, kiraci izolasyonu, ayarin 0 olmasi)
+// scoped-db-randevu.test.ts'te. Burada aranan tek sey UCTAN UCA baglanti:
+// isletme "gelmedi" dedikten sonra AYNI numaranin bu route'tan randevu
+// alamamasi ve cevabin kullanilabilir bir Turkce metin olmasi.
+
+/// Randevuyu isletme oturumuyla GELMEDI'ye alir - kisiti yazan tek yol.
+async function gelmediIsaretle(k: Kurulum) {
+  const [kayit] = await k.db.randevulariListele(GUN_BASI, ERTESI_GUN);
+  expect(await k.db.randevuDurumunuDegistir(kayit.id, "GELMEDI")).toBe(1);
+}
+
+test("gelmedi isaretlenen numara 429 aliyor ve mesaj tarih tasiyor", async () => {
+  const a = await isletmeKur("A Salonu");
+  await basari(await POST(istek(govde(a))));
+  await gelmediIsaretle(a);
+
+  const yanit = await POST(istek(govde(a, { baslangic: SAAT_14 })));
+
+  expect(yanit.status).toBe(429);
+
+  // Mesaj kisitin BITIS TARIHINI tasimali: "sonra tekrar deneyin" diyen ama
+  // ne zaman oldugunu soylemeyen bir cevap musteriyi telefona yoneltir.
+  // Varsayilan 30 gun; tarih isletmenin diliminde yaziliyor.
+  const bitis = yerelGun(new Date(Date.now() + 30 * 86_400_000), ISTANBUL);
+  const metin = await hataMetni(yanit);
+  expect(metin).toContain(tarihUzun(bitis));
+
+  // SEBEP SIZDIRILMIYOR: bu yol oturumsuz, yani bir numara yazip cevaba bakan
+  // herkes o kisinin gelmedigini ogrenirdi.
+  expect(metin).not.toContain("gelmedi");
+  expect(metin).not.toContain("Gelmedi");
+
+  expect(await doluSaatler(a)).toHaveLength(0);
+});
+
+test("kisit BASKA numarayi engellemiyor", async () => {
+  const a = await isletmeKur("A Salonu");
+  await basari(await POST(istek(govde(a))));
+  await gelmediIsaretle(a);
+
+  const yanit = await POST(
+    istek(
+      govde(a, {
+        baslangic: SAAT_14,
+        ad: "Fatma Demir",
+        telefon: "5329998877",
+      }),
+    ),
+  );
+
+  expect(yanit.status).toBe(201);
+});
+
+test("kisit ayari 0 iken gelmedi isaretlemek randevu almayi engellemiyor", async () => {
+  const a = await isletmeKur("A Salonu");
+  await a.db.ayarlariGuncelle({ gelmediKisitiGun: 0 });
+  await basari(await POST(istek(govde(a))));
+  await gelmediIsaretle(a);
+
+  // Kaporali ya da musterisine guvenen isletme bu korumayi tumden kapatabilir.
+  expect((await POST(istek(govde(a, { baslangic: SAAT_14 })))).status).toBe(201);
 });
 
 // ---- Turnstile kapisi (Faz G2) ---------------------------------------------
