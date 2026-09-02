@@ -57,7 +57,7 @@ export const SAYFA_BOYUTU = 24;
 /// Derin sayfalama Postgres'te `OFFSET` ile pahalilasiyor ve dizinde binlerce
 /// sayfa gezmenin mesru bir kullanimi yok. Ust sinir, kaziyicinin maliyetini
 /// de sabitliyor.
-const EN_COK_SAYFA = 200;
+export const EN_COK_SAYFA = 200;
 
 /// LIKE'in joker karakterleri kacisiliyor. Kacilmasaydi `%` yazan bir ziyaretci
 /// butun satirlari eslestirebilirdi - sonuc sizinti degil ama sorgu maliyeti
