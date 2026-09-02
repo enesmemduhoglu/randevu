@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 
+import { ortamiSil } from "@/lib/test-ortam";
 import { istekIpsi, turnstileDogrula } from "@/lib/turnstile";
 
 // Veritabani yok: bu katman yalnizca env okuyup Cloudflare'e HTTP acıyor.
@@ -13,7 +14,7 @@ const ILK_SIR = process.env.TURNSTILE_SECRET;
 afterEach(() => {
   // Env geri sariliyor: vitest ayni surecte birden cok dosya kosuyor ve sizan
   // bir degisken baska bir dosyayi sessizce etkiler (bkz. origin.test.ts).
-  if (ILK_MOD === undefined) delete process.env.TURNSTILE_MODU;
+  if (ILK_MOD === undefined) ortamiSil("TURNSTILE_MODU");
   else process.env.TURNSTILE_MODU = ILK_MOD;
   if (ILK_SIR === undefined) delete process.env.TURNSTILE_SECRET;
   else process.env.TURNSTILE_SECRET = ILK_SIR;
@@ -51,7 +52,7 @@ test("sahte modda kapi hep geciriyor ve aga hic cikmiyor", async () => {
 
 test("mod tanimsizsa sahte kabul ediliyor", async () => {
   // Yeni gelistiricinin ilk gunu: .env'de anahtar yokken randevu alinabilmeli.
-  delete process.env.TURNSTILE_MODU;
+  ortamiSil("TURNSTILE_MODU");
   const cagrilar = fetchTakli(basarili(false));
 
   expect(await turnstileDogrula(null, null)).toEqual({ gecti: true });

@@ -14,6 +14,50 @@
   "observability": {
     "enabled": true
   },
+  // TURNSTILE_MODU BURADA OLMAK ZORUNDA.
+  //
+  // turnstile.ts yalnizca "gercek" yazan degeri gercek sayiyor; tanimsizken
+  // `sahte`ye dusuyor ve kapi KOSULSUZ geciriyor. Bu blok yokken uretim tam
+  // olarak o durumdaydi: bot kapisi yazilmis, test edilmis, canlida acik
+  // duruyordu. Kimse fark etmedi cunku sessizce acik kalan bir kapinin
+  // gorunur bir belirtisi yok.
+  //
+  // Sir DEGIL, yalnizca bir mod anahtari - sir olan TURNSTILE_SECRET ve o
+  // `wrangler secret put` ile giriliyor, buraya yazilmiyor (DEGISMEZ 5).
+  //
+  // Bu satirin silinmesini `src/lib/degismezler.test.ts` yakaliyor: yapilandirma
+  // da kod gibi sinaniyor, cunku bu hata tam olarak "kimsenin bakmadigi yerde
+  // sessizce kayboldu" bicimindeydi.
+  "vars": {
+    "TURNSTILE_MODU": "gercek"
+  },
+  // Workers'in yerel hiz sinirlayicisi. Panel WAF kurali yerine burada olmasinin
+  // sebebi: bu dosya PR'da inceleniyor ve `wrangler dev` ile yerelde de kosuyor.
+  // Panelde elle acilan bir kural depoda hicbir iz birakmaz ve "acik miydi"
+  // sorusunun cevabi yalnizca birinin hafizasinda kalir.
+  //
+  // Sayac KOLO BASINA ve yaklasik: Cloudflare bunu kuresel olarak toplamiyor.
+  // Yani sinir kesin bir muhasebe degil, ucuz bir kalkan - amaci tek makineden
+  // gelen betigi yavaslatmak, kuresel bir kotayi zorlamak degil.
+  //
+  // `period` yalnizca 10 ya da 60 kabul ediyor (wrangler sema kisiti).
+  "ratelimits": [
+    {
+      // Randevu YAZMA. Mesru musteri bir randevu aliyor, hatali denemeyle
+      // birlikte birkac istek atiyor; dakikada 5 fazlasiyla yeterli.
+      "name": "RANDEVU_SINIRI",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      // Musaitlik OKUMA. Gun seridinde gezinen musteri her tikta bir istek
+      // atiyor, yani sinir yazmadan cok daha gevsek olmali; buradaki amac
+      // takvimi kazimaya calisan betigi durdurmak.
+      "name": "MUSAITLIK_SINIRI",
+      "namespace_id": "1002",
+      "simple": { "limit": 60, "period": 60 }
+    }
+  ],
   // workers.dev KAPALI, tek adres custom domain.
   //
   // Iki sebep: (1) bu hesapta workers.dev alt alan adi kayitli degil ve
