@@ -84,6 +84,26 @@ e-posta sablonlari `src/lib/marka.ts`'ten okur.
 yalnizca `randevu.enesmemduhoglu.tech` host'una bagli kalir;
 `.enesmemduhoglu.tech` yazmak oturumu kokteki baska projeyle paylasmak demektir.
 
+**12. Kiraci-ustu okuma yalnizca `src/lib/dizin.ts`'te ve dar.** Pazaryeri dizini
+tanimi geregi butun isletmeleri listeliyor, yani DEGISMEZ 1'in kapsamasi orada
+YOK. Karsiligi, sizabilecek yuzeyin daraltilmasi:
+
+- Yalnizca `isletme` ve `hizmet` okunuyor. `randevu`, `musteri`, `kullanici`,
+  `bildirim_kuyrugu` bu dosyada GECMIYOR - kisisel veri buradan cikamaz.
+- `hizmet` yalnizca TOPLAMA olarak (adet, en dusuk fiyat). Tek tek hizmet satiri
+  donmuyor.
+- Donen tip elle yazilmis ve kapali. `$inferSelect` kullanilmadi: semaya yarin
+  eklenen bir kolon buradan sessizce sizmasin.
+- Cagiran taraf tablo ya da kolon adi VEREMIYOR; il ve kategori kapali listeye
+  karsi dogrulaniyor.
+- SALT OKUNUR. Bu dosyaya asla yazma metodu eklenmeyecek.
+
+> **Zorlayan: `src/lib/degismezler.test.ts`** dosyanin metnini tariyor - izinli
+> import listesi, yasakli tablo adlarinin hic gecmemesi, iki gorunurluk
+> kosulunun varligi, yazma metodu olmamasi. Yorumlar SOYULARAK taraniyor:
+> dosyanin kendi basligi yasakli tablolari kurali anlatmak icin aniyor ve ham
+> metin taransaydi test kendi gerekcesinin yazilmasini cezalandirirdi.
+
 ## Komutlar
 
 ```bash
