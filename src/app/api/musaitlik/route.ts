@@ -1,5 +1,7 @@
+import { hizSiniriAsildiMi } from "@/lib/hiz-siniri";
 import { gununSlotlari } from "@/lib/musaitlik-sorgu";
 import { getHalkaAcikDb } from "@/lib/scoped-db";
+import { istekIpsi } from "@/lib/turnstile";
 import { tarihAyristir, tarihMetni } from "@/lib/zaman";
 
 // Bir isletmenin bir gunundeki uygun randevu saatleri.
@@ -11,8 +13,7 @@ import { tarihAyristir, tarihMetni } from "@/lib/zaman";
 //
 // GET, yani durum degistirmiyor: `checkOrigin` GEREKMIYOR (DEGISMEZ 2 yalnizca
 // mutasyonlar icin). Kotuye kullanim - baska bir salonun doluluk takvimini
-// kazimak - CSRF ile degil hiz siniriyla engelleniyor; Cloudflare kurali
-// Faz G'de bu yola konacak.
+// kazimak - CSRF ile degil hiz siniriyla engelleniyor (Faz L, hiz-siniri.ts).
 //
 // Yanit ONBELLEKLENMIYOR. Musaitlik yazma kararini besliyor: bir saniye bayat
 // veri, dolu bir sloti bos gosterip musteriyi 409'a goturur. Hyperdrive'in
@@ -25,6 +26,13 @@ function hata(mesaj: string, durum: number): Response {
 }
 
 export async function GET(istek: Request) {
+  // Sinir EN BASTA: buradan gecemeyen istek ne URL ayristiriyor ne veritabanina
+  // dokunuyor. Yazma yolundan (dakikada 5) cok daha gevsek - gun seridinde
+  // gezinen mesru musteri her tikta bir istek atiyor.
+  if (await hizSiniriAsildiMi("MUSAITLIK_SINIRI", istekIpsi(istek))) {
+    return hata("Çok fazla istek gönderildi. Biraz bekleyin.", 429);
+  }
+
   const parametreler = new URL(istek.url).searchParams;
 
   const slug = parametreler.get("isletme");

@@ -1,4 +1,5 @@
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
+import { hizSiniriAsildiMi } from "@/lib/hiz-siniri";
 import { iptalTokenUret } from "@/lib/iptal-token";
 import { slotSec } from "@/lib/musaitlik-sorgu";
 import { checkOrigin } from "@/lib/origin";
@@ -47,6 +48,18 @@ export async function POST(istek: Request) {
   const csrf = checkOrigin(istek);
   if (csrf) return csrf;
 
+  // Hiz siniri TURNSTILE'DAN ONCE: sinirlayici bir binding cagrisi, Turnstile
+  // ise Cloudflare'e giden bir ag istegi. Ucuz kapi once.
+  //
+  // Turnstile'in YERINE GECMIYOR: gecerli bir jetonu dongude yeniden kullanan
+  // betik o kapidan gecer, buradan gecemez.
+  const ip = istekIpsi(istek);
+  if (await hizSiniriAsildiMi("RANDEVU_SINIRI", ip)) {
+    // 429 govdesi sinirin ne oldugunu SOYLEMIYOR. Mesru kullaniciya sayilar
+    // yardim etmiyor, betige ise tam olarak ne kadar bekleyecegini ogretiyor.
+    return hata("Çok fazla deneme yapıldı. Biraz bekleyip tekrar deneyin.", 429);
+  }
+
   const govde = await govdeOku(istek);
   if (!govde) return govdeOkunamadi();
 
@@ -58,7 +71,7 @@ export async function POST(istek: Request) {
   // Acik randevu siniri (asagida, 429) bunun YERINE GECMIYOR: o sinir
   // numaraya bagli ve numarayi her istekte degistiren bir betik onu hic
   // gormeden gecer.
-  const kapi = await turnstileDogrula(govde.turnstile, istekIpsi(istek));
+  const kapi = await turnstileDogrula(govde.turnstile, ip);
   if (!kapi.gecti) {
     // Uc sebep de kullaniciya AYNI metni gosteriyor. "Sunucu Cloudflare'e
     // ulasamadi" demek mesru musteriye yardim etmiyor, botun ise hangi dalda
