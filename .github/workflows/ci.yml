@@ -176,6 +176,28 @@ jobs:
             exit 1
           fi
 
+      # BOT KAPISININ IKI YAKASI BIRLIKTE ACILIR.
+      #
+      # Sunucu tarafi (wrangler.jsonc > vars > TURNSTILE_MODU="gercek") jeton
+      # istiyor; istemci tarafi jetonu ancak NEXT_PUBLIC_TURNSTILE_SITE_KEY
+      # varsa uretebiliyor - anahtar yoksa `turnstile-alani.tsx` widget'i HIC
+      # cizmiyor. Ikisi ayrisirsa canlida HER randevu 403 alir.
+      #
+      # Bu adim o kombinasyonu yayina hic birakmiyor. Faz L oncesinde iki yaka
+      # da KAPALIYDI ve simetri sessizce dogruydu; modu acan degisiklik o
+      # simetriyi bir dosyaya bagimli hale getirdi, o yuzden burada zorlaniyor.
+      - name: turnstile iki yakasi tutarli mi
+        run: |
+          mod=$(grep -o '"TURNSTILE_MODU"[[:space:]]*:[[:space:]]*"[^"]*"' wrangler.jsonc | grep -o '"[^"]*"$' | tr -d '"')
+          if [ "$mod" = "gercek" ] && [ -z "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" ]; then
+            echo "TURNSTILE_MODU=gercek ama NEXT_PUBLIC_TURNSTILE_SITE_KEY bos."
+            echo "Bu haliyle yayinlanirsa canli sitede her randevu 403 alir."
+            echo "Yapilacak: Cloudflare > Turnstile'da widget olustur, site"
+            echo "anahtarini repository variable olarak gir, gizli anahtari da"
+            echo "'wrangler secret put TURNSTILE_SECRET' ile Worker'a gir."
+            exit 1
+          fi
+
       # cf:yayinla = opennextjs-cloudflare build + deploy. Wrangler'in cikti
       # verdigi "Total Upload / gzip" satiri plandaki boyut olcumu: ucretsiz
       # plan sinirinin (3 MiB gzip) her yayinda neresinde oldugumuz burada
