@@ -1583,6 +1583,28 @@ düşen bir yayın ilk denemede görülüyor.
 doğrulandı), site anahtarı `gh variable set` ile repository variable oldu.
 Derlenmiş istemci paketinde site anahtarı görüldü — yani widget artık çiziliyor.
 
+### Yayın sonrası ölçüm: hız sınırı yereldekinden çok daha gevşek
+
+Deploy sonrası canlıda ölçüldü (5/dk sınırı, `POST /api/randevu`):
+
+| Ortam | İlk 429 |
+|---|---|
+| Yerel workerd | 6. istek |
+| **Üretim** | **22. istek**, sonrası kesintili (429, 403, 429) |
+
+Kod doğru, binding bağlı (deploy logunda `env.RANDEVU_SINIRI (5 requests/60s)`).
+Fark Cloudflare'in belgelendirdiği davranış: sayaç her isolate'in yerel
+önbelleğinde ve kolo başına — *"permissive, eventually consistent... not an
+accurate accounting system"*.
+
+**Kabul edildi:** bu kapı kısa patlamayı durdurmuyor, sürekli seli yavaşlatıyor.
+Korkulan tehdit (takvimi dolduran betik) dakikalarca istek atmak zorunda, yani
+kapsanıyor. Kesin kota gerekirse KV/Durable Object gerekir, bedeli her istekte
+bir yazma.
+
+**Ders:** yerel `cf:onizle` ölçümü bu binding için üretimi temsil etmiyor.
+"Yerelde 6. istekte tetikledi" demek, üretim hakkında yanlış güven veriyordu.
+
 ### Tuzak: `vars` eklemek tip kontrolünü kırdı, ama yalnızca CI'da
 
 PR #13 yerelde dört kapıdan da geçtikten sonra CI'da `tip` adımında düştü.

@@ -16,6 +16,13 @@ const eslintConfig = defineConfig([
     ".open-next/**",
     ".wrangler/**",
     "cloudflare-env.d.ts",
+    // Alt-agent'larin izole worktree'leri depo dizininin ICINDE aciliyor ve
+    // kendi .open-next / .wrangler ciktilarini uretiyor. Yukaridaki desenler
+    // KOK seviyesinde eslestigi icin onlari yakalamiyordu: yerel `npm run lint`
+    // otuz bin sahte sorun donduruyordu. CI temiz checkout'ta kostugundan bunu
+    // hic gormuyor - yani bozulan sey yalnizca YEREL kapiydi ve sessizce
+    // bozuluyordu.
+    ".claude/worktrees/**",
   ]),
 
   // DEGISMEZ 1 — kiraci izolasyonu.

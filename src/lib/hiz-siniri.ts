@@ -9,6 +9,23 @@
 // NEDEN OKUMA YOLU DA SINIRLI: `/api/musaitlik` oturumsuz ve bir isletmenin
 // butun bos saatlerini donuyor. Sinirsiz birakmak, rakibin ya da bir kaziyicinin
 // takvimin tamamini surekli cekmesini bedava kiliyor.
+//
+// NE KADAR SIKI OLDUGU - URETIMDE OLCULDU (Faz L, 5/dk sinirinda):
+//   yerel workerd  -> 6. istekte 429. Tek isolate, sayac aninda tutuyor.
+//   uretim         -> ILK 429 22. ISTEKTE, sonrasi kesintili (429, 403, 429).
+//
+// Fark Cloudflare'in belgelendirdigi davranis: sayac her isolate'in YEREL
+// onbelleginde ve kolo basina tutuluyor; dokumantasyonun kendi ifadesiyle
+// "permissive, eventually consistent... not an accurate accounting system".
+//
+// SONUCU BILEREK KABUL EDILDI: bu kapi kisa bir patlamayi DURDURMUYOR, surekli
+// bir seli yavaslatiyor. Korkulan tehdit zaten ikincisi - takvimi dolduran bir
+// betik saniyelerce degil dakikalarca istek atmak zorunda. Kesin bir kota
+// gerekseydi durum tutan bir yapi (KV/Durable Object) gerekirdi ve bedeli her
+// istekte bir yazma olurdu.
+//
+// Yerelde olculen sayiya bakip "sinir sikidir" varsaymak yanlis olur; bu
+// yorumun burada durmasinin sebebi tam olarak o varsayimi engellemek.
 
 /// Binding adlari wrangler.jsonc'deki `ratelimits[].name` ile birebir ayni
 /// olmak zorunda. Union tipi olmasi, cagiranin var olmayan bir sinirlayici
