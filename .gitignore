@@ -62,5 +62,16 @@ cloudflare-env.d.ts
 # izin kayitlari ve mutlak yollar tutabiliyor.
 .claude/settings.local.json
 
+# Alt-agent'larin izole git worktree'leri. Depo dizininin ICINDE aciliyorlar,
+# yani izlenmezlerse `git add -A` ile kazara commit'lenebiliyorlar - icinde
+# .open-next ve .wrangler build ciktilariyla birlikte.
+#
+# Ikinci ve daha sinsi etkisi: eslint bu dizinleri tariyordu ve YEREL `npm run
+# lint` binlerce sahte hata veriyordu (globalIgnores'daki `.open-next/**` kok
+# seviyesinde eslesiyor, worktree'nin icindekiyle degil). CI temiz checkout'ta
+# kostugu icin bunu gormuyordu; yani yerel lint sessizce ise yaramaz hale
+# geliyordu.
+.claude/worktrees/
+
 # Yerel notlar (kullanici acikca "pushlama" dedi) - depoya asla girmez.
 NOTLAR-YEREL.md
