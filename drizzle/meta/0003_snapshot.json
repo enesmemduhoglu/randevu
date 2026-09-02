@@ -1,0 +1,1433 @@
+{
+  "id": "147d7880-4a2c-44df-b51c-9915fac3a795",
+  "prevId": "85274e3c-1079-4bc1-bc4f-b5f1e99b55ad",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.bildirim_kuyrugu": {
+      "name": "bildirim_kuyrugu",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "randevu_id": {
+          "name": "randevu_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tur": {
+          "name": "tur",
+          "type": "bildirim_turu",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sablon": {
+          "name": "sablon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "planlanan_zaman": {
+          "name": "planlanan_zaman",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gonderim_zamani": {
+          "name": "gonderim_zamani",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "durum": {
+          "name": "durum",
+          "type": "bildirim_durum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'BEKLIYOR'"
+        },
+        "hata_metni": {
+          "name": "hata_metni",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "onizleme_html": {
+          "name": "onizleme_html",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "bildirim_kuyrugu_planlanan_idx": {
+          "name": "bildirim_kuyrugu_planlanan_idx",
+          "columns": [
+            {
+              "expression": "durum",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "planlanan_zaman",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "bildirim_kuyrugu_randevu_id_idx": {
+          "name": "bildirim_kuyrugu_randevu_id_idx",
+          "columns": [
+            {
+              "expression": "randevu_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bildirim_kuyrugu_isletme_id_isletme_id_fk": {
+          "name": "bildirim_kuyrugu_isletme_id_isletme_id_fk",
+          "tableFrom": "bildirim_kuyrugu",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "bildirim_kuyrugu_randevu_id_randevu_id_fk": {
+          "name": "bildirim_kuyrugu_randevu_id_randevu_id_fk",
+          "tableFrom": "bildirim_kuyrugu",
+          "tableTo": "randevu",
+          "columnsFrom": [
+            "randevu_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.calisma_saati": {
+      "name": "calisma_saati",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "personel_id": {
+          "name": "personel_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "haftanin_gunu": {
+          "name": "haftanin_gunu",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "baslangic_dk": {
+          "name": "baslangic_dk",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bitis_dk": {
+          "name": "bitis_dk",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "calisma_saati_isletme_id_idx": {
+          "name": "calisma_saati_isletme_id_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "calisma_saati_personel_gun_idx": {
+          "name": "calisma_saati_personel_gun_idx",
+          "columns": [
+            {
+              "expression": "personel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "haftanin_gunu",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "calisma_saati_isletme_id_isletme_id_fk": {
+          "name": "calisma_saati_isletme_id_isletme_id_fk",
+          "tableFrom": "calisma_saati",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "calisma_saati_personel_id_personel_id_fk": {
+          "name": "calisma_saati_personel_id_personel_id_fk",
+          "tableFrom": "calisma_saati",
+          "tableTo": "personel",
+          "columnsFrom": [
+            "personel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.hizmet": {
+      "name": "hizmet",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ad": {
+          "name": "ad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "aciklama": {
+          "name": "aciklama",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sure_dk": {
+          "name": "sure_dk",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fiyat_kurus": {
+          "name": "fiyat_kurus",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "renk": {
+          "name": "renk",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sira": {
+          "name": "sira",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "aktif": {
+          "name": "aktif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "guncelleme_tarihi": {
+          "name": "guncelleme_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "hizmet_isletme_id_idx": {
+          "name": "hizmet_isletme_id_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "hizmet_isletme_id_isletme_id_fk": {
+          "name": "hizmet_isletme_id_isletme_id_fk",
+          "tableFrom": "hizmet",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.isletme": {
+      "name": "isletme",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ad": {
+          "name": "ad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telefon": {
+          "name": "telefon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "adres": {
+          "name": "adres",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hakkinda": {
+          "name": "hakkinda",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saat_dilimi": {
+          "name": "saat_dilimi",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Europe/Istanbul'"
+        },
+        "slot_araligi_dk": {
+          "name": "slot_araligi_dk",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 15
+        },
+        "min_once_bildirim_dk": {
+          "name": "min_once_bildirim_dk",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 120
+        },
+        "maks_ileri_gun": {
+          "name": "maks_ileri_gun",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 60
+        },
+        "otomatik_onay": {
+          "name": "otomatik_onay",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "gelmedi_kisiti_gun": {
+          "name": "gelmedi_kisiti_gun",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 30
+        },
+        "aktif": {
+          "name": "aktif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "guncelleme_tarihi": {
+          "name": "guncelleme_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "isletme_aktif_idx": {
+          "name": "isletme_aktif_idx",
+          "columns": [
+            {
+              "expression": "aktif",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "isletme_slug_unique": {
+          "name": "isletme_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.kapali": {
+      "name": "kapali",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "personel_id": {
+          "name": "personel_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "baslangic": {
+          "name": "baslangic",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bitis": {
+          "name": "bitis",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "aciklama": {
+          "name": "aciklama",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "kapali_isletme_id_idx": {
+          "name": "kapali_isletme_id_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kapali_aralik_idx": {
+          "name": "kapali_aralik_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "baslangic",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "bitis",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "kapali_isletme_id_isletme_id_fk": {
+          "name": "kapali_isletme_id_isletme_id_fk",
+          "tableFrom": "kapali",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kapali_personel_id_personel_id_fk": {
+          "name": "kapali_personel_id_personel_id_fk",
+          "tableFrom": "kapali",
+          "tableTo": "personel",
+          "columnsFrom": [
+            "personel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.kullanici": {
+      "name": "kullanici",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "auth_user_id": {
+          "name": "auth_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "eposta": {
+          "name": "eposta",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ad": {
+          "name": "ad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telefon": {
+          "name": "telefon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rol": {
+          "name": "rol",
+          "type": "rol",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "guncelleme_tarihi": {
+          "name": "guncelleme_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "kullanici_auth_user_id_idx": {
+          "name": "kullanici_auth_user_id_idx",
+          "columns": [
+            {
+              "expression": "auth_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kullanici_isletme_id_idx": {
+          "name": "kullanici_isletme_id_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "kullanici_isletme_id_isletme_id_fk": {
+          "name": "kullanici_isletme_id_isletme_id_fk",
+          "tableFrom": "kullanici",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.musteri": {
+      "name": "musteri",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ad": {
+          "name": "ad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telefon": {
+          "name": "telefon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "eposta": {
+          "name": "eposta",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "not": {
+          "name": "not",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kullanici_id": {
+          "name": "kullanici_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "randevu_kisiti_bitis": {
+          "name": "randevu_kisiti_bitis",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "guncelleme_tarihi": {
+          "name": "guncelleme_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "musteri_isletme_telefon_idx": {
+          "name": "musteri_isletme_telefon_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "telefon",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "musteri_kullanici_id_idx": {
+          "name": "musteri_kullanici_id_idx",
+          "columns": [
+            {
+              "expression": "kullanici_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "musteri_isletme_id_isletme_id_fk": {
+          "name": "musteri_isletme_id_isletme_id_fk",
+          "tableFrom": "musteri",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "musteri_kullanici_id_kullanici_id_fk": {
+          "name": "musteri_kullanici_id_kullanici_id_fk",
+          "tableFrom": "musteri",
+          "tableTo": "kullanici",
+          "columnsFrom": [
+            "kullanici_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.personel": {
+      "name": "personel",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ad": {
+          "name": "ad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unvan": {
+          "name": "unvan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kullanici_id": {
+          "name": "kullanici_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sira": {
+          "name": "sira",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "aktif": {
+          "name": "aktif",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "guncelleme_tarihi": {
+          "name": "guncelleme_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "personel_isletme_id_idx": {
+          "name": "personel_isletme_id_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "personel_kullanici_id_idx": {
+          "name": "personel_kullanici_id_idx",
+          "columns": [
+            {
+              "expression": "kullanici_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "personel_isletme_id_isletme_id_fk": {
+          "name": "personel_isletme_id_isletme_id_fk",
+          "tableFrom": "personel",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "personel_kullanici_id_kullanici_id_fk": {
+          "name": "personel_kullanici_id_kullanici_id_fk",
+          "tableFrom": "personel",
+          "tableTo": "kullanici",
+          "columnsFrom": [
+            "kullanici_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.personel_hizmet": {
+      "name": "personel_hizmet",
+      "schema": "",
+      "columns": {
+        "personel_id": {
+          "name": "personel_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hizmet_id": {
+          "name": "hizmet_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "personel_hizmet_isletme_id_idx": {
+          "name": "personel_hizmet_isletme_id_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "personel_hizmet_hizmet_id_idx": {
+          "name": "personel_hizmet_hizmet_id_idx",
+          "columns": [
+            {
+              "expression": "hizmet_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "personel_hizmet_personel_id_personel_id_fk": {
+          "name": "personel_hizmet_personel_id_personel_id_fk",
+          "tableFrom": "personel_hizmet",
+          "tableTo": "personel",
+          "columnsFrom": [
+            "personel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "personel_hizmet_hizmet_id_hizmet_id_fk": {
+          "name": "personel_hizmet_hizmet_id_hizmet_id_fk",
+          "tableFrom": "personel_hizmet",
+          "tableTo": "hizmet",
+          "columnsFrom": [
+            "hizmet_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "personel_hizmet_isletme_id_isletme_id_fk": {
+          "name": "personel_hizmet_isletme_id_isletme_id_fk",
+          "tableFrom": "personel_hizmet",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "personel_hizmet_personel_id_hizmet_id_pk": {
+          "name": "personel_hizmet_personel_id_hizmet_id_pk",
+          "columns": [
+            "personel_id",
+            "hizmet_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.randevu": {
+      "name": "randevu",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "isletme_id": {
+          "name": "isletme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "personel_id": {
+          "name": "personel_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hizmet_id": {
+          "name": "hizmet_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "musteri_id": {
+          "name": "musteri_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "baslangic": {
+          "name": "baslangic",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bitis": {
+          "name": "bitis",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "durum": {
+          "name": "durum",
+          "type": "randevu_durum",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'BEKLIYOR'"
+        },
+        "kaynak": {
+          "name": "kaynak",
+          "type": "randevu_kaynak",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'MUSTERI'"
+        },
+        "not": {
+          "name": "not",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "iptal_token": {
+          "name": "iptal_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "olusturma_tarihi": {
+          "name": "olusturma_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "guncelleme_tarihi": {
+          "name": "guncelleme_tarihi",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "randevu_iptal_token_idx": {
+          "name": "randevu_iptal_token_idx",
+          "columns": [
+            {
+              "expression": "iptal_token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "randevu_isletme_baslangic_idx": {
+          "name": "randevu_isletme_baslangic_idx",
+          "columns": [
+            {
+              "expression": "isletme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "baslangic",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "randevu_personel_baslangic_idx": {
+          "name": "randevu_personel_baslangic_idx",
+          "columns": [
+            {
+              "expression": "personel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "baslangic",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "randevu_musteri_id_idx": {
+          "name": "randevu_musteri_id_idx",
+          "columns": [
+            {
+              "expression": "musteri_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "randevu_isletme_id_isletme_id_fk": {
+          "name": "randevu_isletme_id_isletme_id_fk",
+          "tableFrom": "randevu",
+          "tableTo": "isletme",
+          "columnsFrom": [
+            "isletme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "randevu_personel_id_personel_id_fk": {
+          "name": "randevu_personel_id_personel_id_fk",
+          "tableFrom": "randevu",
+          "tableTo": "personel",
+          "columnsFrom": [
+            "personel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "randevu_hizmet_id_hizmet_id_fk": {
+          "name": "randevu_hizmet_id_hizmet_id_fk",
+          "tableFrom": "randevu",
+          "tableTo": "hizmet",
+          "columnsFrom": [
+            "hizmet_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "randevu_musteri_id_musteri_id_fk": {
+          "name": "randevu_musteri_id_musteri_id_fk",
+          "tableFrom": "randevu",
+          "tableTo": "musteri",
+          "columnsFrom": [
+            "musteri_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.bildirim_durum": {
+      "name": "bildirim_durum",
+      "schema": "public",
+      "values": [
+        "BEKLIYOR",
+        "GONDERILDI",
+        "HATA"
+      ]
+    },
+    "public.bildirim_turu": {
+      "name": "bildirim_turu",
+      "schema": "public",
+      "values": [
+        "EPOSTA",
+        "SMS"
+      ]
+    },
+    "public.randevu_durum": {
+      "name": "randevu_durum",
+      "schema": "public",
+      "values": [
+        "BEKLIYOR",
+        "ONAYLI",
+        "IPTAL",
+        "TAMAMLANDI",
+        "GELMEDI"
+      ]
+    },
+    "public.randevu_kaynak": {
+      "name": "randevu_kaynak",
+      "schema": "public",
+      "values": [
+        "MUSTERI",
+        "ISLETME"
+      ]
+    },
+    "public.rol": {
+      "name": "rol",
+      "schema": "public",
+      "values": [
+        "SAHIP",
+        "PERSONEL",
+        "MUSTERI"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

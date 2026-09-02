@@ -22,6 +22,13 @@
       "when": 1788082912824,
       "tag": "0002_hizmet-randevu-ve-cakisma-kisiti",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788366849042,
+      "tag": "0003_gelmedi-kisiti",
+      "breakpoints": true
     }
   ]
 }
