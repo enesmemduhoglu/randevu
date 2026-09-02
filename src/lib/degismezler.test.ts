@@ -78,6 +78,44 @@ describe("DEGISMEZ 2 - kapi yardimcisinin kendisi", () => {
   });
 });
 
+describe("Faz L - kalkanin uretimde acik oldugu", () => {
+  // NEDEN YAPILANDIRMA DA SINANIYOR: bu dosyanin geri kalani kodu tariyor,
+  // ama Faz L'yi doguran hata KODDA DEGILDI. `turnstile.ts` dogru yazilmisti;
+  // `wrangler.jsonc`'de `vars` blogu hic olmadigi icin TURNSTILE_MODU uretimde
+  // tanimsiz kaldi, mod `sahte`ye dustu ve bot kapisi aylarca kosulsuz gecirdi.
+  //
+  // Kod incelemesi bunu yakalamaz: eksik olan sey bir satir degil, bir satirin
+  // YOKLUGU. Yokluk ancak arayan bir test tarafindan goruluyor.
+  const wrangler = readFileSync(
+    join(process.cwd(), "wrangler.jsonc"),
+    "utf-8",
+  );
+
+  test("Turnstile uretimde gercek modda", () => {
+    // turnstile.ts YALNIZCA "gercek" yazan degeri gercek sayiyor; baska her
+    // deger - ve tanimsizlik - kapiyi aciyor.
+    expect(wrangler).toMatch(/"TURNSTILE_MODU"\s*:\s*"gercek"/);
+  });
+
+  test("hiz sinirlayici binding'leri wrangler.jsonc'de tanimli", () => {
+    // Binding tanimli degilse `hiz-siniri.ts` sessizce geciriyor - bilerek,
+    // cunku yerelde binding yok. Tam da bu gevseklik yuzunden yoklugun
+    // uretimde fark edilmeden kalmasi mumkun; bu test o yolu kapatiyor.
+    const siniriMetni = readFileSync(
+      join(process.cwd(), "src", "lib", "hiz-siniri.ts"),
+      "utf-8",
+    );
+
+    for (const ad of ["RANDEVU_SINIRI", "MUSAITLIK_SINIRI"]) {
+      expect(wrangler).toContain(`"name": "${ad}"`);
+      // Iki dosya AYRISMASIN: wrangler'daki binding adiyla koddaki union
+      // uyesi ayni olmak zorunda, yoksa `env[ad]` undefined doner ve sinir
+      // hicbir uyari vermeden yok olur.
+      expect(siniriMetni).toContain(ad);
+    }
+  });
+});
+
 describe("DEGISMEZ 1 - src/app altinda ham veritabani yok", () => {
   // Bunu eslint `no-restricted-imports` da zorluyor. Burada tekrar edilmesinin
   // sebebi: eslint yapilandirmasi bir gun degisirse (ornegin kural adi ya da
