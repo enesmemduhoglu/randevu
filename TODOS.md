@@ -2011,11 +2011,8 @@ izliyor.
       >
       > Bu sefer `docs/yayin.md`'nin ikinci yolu (yerelden `db:uygula:prod`)
       > kullanıldı; L3'ün elle listesi de ikisini eşdeğer sayıyordu. **Kalıcı
-      > çözüm bir karar gerektiriyor** ve verilmedi: ya `goc`'un ortam
-      > bağlantısı kaldırılıp yerine yazılı onay + `CODEOWNERS` konur, ya da
-      > sıra "merge et → `yayinla`yı ONAYLAMA → `goc` koştur → yayını onayla"
-      > olarak değiştirilip belgelenir. İkincisi mevcut kapılarla çalışıyor,
-      > çünkü deploy zaten elle onay bekliyor.
+      > çözüm aynı gün verildi:** aşağıdaki "Onay kapıları kaldırıldı"
+      > bölümü.
 - [ ] Uçtan uca: ayarlarda il + kategori doldur → "Dizine ekle" → `/dizin`'de
       kartı gör → "Dizinden çıkar" → kartın kaybolduğunu ama `/r/<slug>`in
       hâlâ çalıştığını gör.
@@ -2031,3 +2028,77 @@ izliyor.
 (`Çağdaş Berber` yerine tek bayt hatalı bir dize) ve slug'ı `agdas-berber`.
 Önceki bir oturumun elle tohumundan kalma; kod hatası değil. `cagdas` araması
 bu yüzden bu kaydı bulmuyor, `agdas` buluyor.
+
+---
+
+## Onay kapıları kaldırıldı — 2 Eylül 2026
+
+**Merge eden yayınlamış olur.** `yayinla` işi artık beklemiyor, `goc` işi de
+herhangi bir daldan onaysız koşuyor. Kullanıcı kararı: *"pr'ı merge ettikten
+sonra otomatik deploy gerçekleşsin, zaten bir sorun olduğunda önceki deploya
+dönebiliriz."*
+
+### Kaldırılan kapının dayandığı varsayım yanlıştı
+
+`docs/yayin.md` onay kapısını şöyle gerekçelendiriyordu: *"`NEXT_PUBLIC_*`
+değerleri derlemeye gömülü olduğu için geri alma 'yeniden derleme' demek — yani
+ucuz değil."*
+
+Ölçüldü, varsayılmadı: `npx wrangler versions list` üç ayrı sürümü listeliyor
+ve `wrangler rollback` bunlardan birine dönüyor. Yani **geri alma yeniden
+derleme değil**, saklanmış bir sürüme geçiş. Cümle Faz B'de yazıldığında
+Cloudflare'in sürüm geçmişi bu depoda hiç denenmemişti.
+
+### İki kapı, iki farklı sebep
+
+| Kapı | Neden kaldırıldı |
+|---|---|
+| `yayinla` → `environment: uretim` | Dayandığı varsayım yanlıştı (üstte). Rollback ucuz. |
+| `goc` → `environment: uretim` | **Çelişkiliydi ve uygulanamazdı** (altta). |
+
+`goc`'un ortam bağı bir hataydı: `uretim` ortamının branch policy'si yalnızca
+`main`'e izin veriyor, ama iş akışının kendi başlığı *"önce bu iş akışını
+koştur, sonra merge et"* diyor — yani göç, tanımı gereği henüz `main`'de
+**olmayan** bir dosyayı uygulamak zorunda. İki kural aynı anda sağlanamıyordu.
+
+Faz M'de görüldü: `0004_dizin.sql` yalnızca dalda duruyordu ve iş akışı onu
+uygulayamadı. L3'te fark edilmemişti, çünkü o göç yanlışlıkla merge *sonrası*
+koşulmuştu — **hatanın kendisi çelişkiyi gizlemişti**.
+
+### Kapı dosyadan kaldırıldı, ortam ayarından değil
+
+`uretim` ortamı GitHub'da hâlâ duruyor; ona başvuran bir iş kalmadığı için
+hiçbir şeyi etkilemiyor. `environment:` satırları `ci.yml` ve `goc.yml`'dan
+silindi.
+
+Gerekçe: kapı görünmez bir depo ayarında değil, PR'da **incelenen** bir dosyada
+dursun. Aynı gerekçeyle hız sınırları da WAF kuralı değil `wrangler.jsonc`'de
+(Faz L) — ve Faz L'nin bulgusu tam da buydu: `wrangler.jsonc`'de `vars` bloğunun
+**yokluğu** kod incelemesinde görünmüyordu ve bot kapısı aylarca sessizce
+açıktı. Bir ayarın varlığı ya da yokluğu, ancak baktığın dosyada duruyorsa
+okunabilir.
+
+Yan fayda: ortam secret'ı hiç kullanılmıyordu (`CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`, `SUPABASE_DB_URL` üçü de **repository** secret'ı), yani
+bağı kaldırmak hiçbir sırrı kırmadı. Kontrol edildi, denenmedi.
+
+### Kaybedilen ve bilerek kabul edilen
+
+- **Kazayla merge edilen bir PR artık doğrudan canlıya çıkıyor.** Karşılığı
+  rollback'in ucuz olması. Asıl koruma zaten `dogrula` işiydi: tip, lint, 456
+  test ve `cf:kur` yeşil olmadan `yayinla` hiç başlamıyor.
+- **GitHub'ın Deployments sekmesindeki ortam geçmişi** artık dolmuyor. Yayın
+  geçmişinin gerçek kaynağı zaten Cloudflare'in sürüm listesi.
+
+### Değişmeyen: şema hâlâ tek yön
+
+Rollback'in ucuzluğu **yalnızca kod için** geçerli. `scripts/prod-goc.ts` ileri
+gider, geri gitmez; bir yayını geri almak şemayı geri almıyor. Bu yüzden:
+
+- `goc` hâlâ ayrı bir iş akışı ve hâlâ `"uygula"` yazılmasını istiyor. O kapı
+  kaldırılmadı: koşum kaydında "bunu isteyerek yaptım" izi bırakıyor.
+- Geri alınması gerekebilecek bir göç yazarken **geri alma SQL'i PR
+  açıklamasına elle yazılmaya devam ediyor**.
+- Sıra artık "önce göç, sonra **merge**" — "sonra yayın" değil. Merge anı yayın
+  anı olduğu için aradaki pencere kapandı; göç merge'den önce koşmazsa kolon
+  yokken kod canlıya çıkar.

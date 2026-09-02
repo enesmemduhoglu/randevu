@@ -188,13 +188,26 @@ npx vitest run src/lib/dizin.test.ts  # tek dosya
 ## Yayın
 
 GitHub Actions üç iş akışı taşıyor: `dogrula` (her PR), `yayinla` (yalnızca
-`main`, onay kapısı arkasında) ve `goc` (elle tetiklenen prod migration'ı).
+`main`, **beklemeden**) ve `goc` (elle tetiklenen prod migration'ı).
 
-**Şema değişikliği varsa sıra: önce göç, sonra yayın.** Yeni kolonu okuyan kod,
+**Merge eden yayınlamış olur** — onay tıklaması yok. Bir sorun çıkarsa kod geri
+alınabiliyor, çünkü Cloudflare her yayının sürümünü saklıyor:
+
+```bash
+npx wrangler versions list
+npx wrangler rollback <surum-id>
+```
+
+**Şema değişikliği varsa sıra: önce göç, sonra merge.** Yeni kolonu okuyan kod,
 kolon yerinde değilken canlıya çıkmamalı — Drizzle açık kolon listesi ürettiği
 için eksik bir kolon "o alan `undefined` gelir" değil, o tabloyu okuyan **her
 sorgunun düşmesi** demek. Bu sıra bir kez bozuldu; ne olduğu ve neden fark
 edilmediği `TODOS.md > "Sıra bozulunca"` bölümünde.
+
+Göç `workflow_dispatch` ile **PR'ın dalından** koşturulur; merge anı artık yayın
+anı olduğu için "merge sonrası göçü koştururum" diye bir pencere yok. Ve
+rollback'in ucuzluğu yalnızca kod için geçerli: `scripts/prod-goc.ts` tek yön,
+bir yayını geri almak şemayı geri almıyor.
 
 Ayrıntı, gereken sırlar ve ortam değişkenleri: **`docs/yayin.md`**.
 

@@ -5,9 +5,11 @@
 # yayinlamaktan farkli bir risk sinifi - kodu geri almak eski surumu yeniden
 # deploy etmek, semayi geri almak elle SQL yazmak demek.
 #
-# Sira boyle: once bu is akisini kosturursun, yesil olunca main'e merge edip
-# yayini onaylarsin. Yeni kolonu okuyan kod, kolon yerinde degilken canliya
-# cikmasin.
+# Sira boyle: once bu is akisini DALDAN kosturursun, yesil olunca main'e merge
+# edersin. Yeni kolonu okuyan kod, kolon yerinde degilken canliya cikmasin.
+#
+# "Daldan" onemli: merge ANINDA yayin cikiyor (CI'daki onay kapisi kaldirildi),
+# yani goc icin merge sonrasini beklemek diye bir pencere artik YOK.
 
 name: Prod gocu
 
@@ -24,11 +26,21 @@ jobs:
     name: Supabase migration
     runs-on: ubuntu-latest
 
-    # Ikinci kapi. Yazili onayla ust uste geliyor ve bu bilincli: yazilan kelime
-    # kosum kaydinda "bunu isteyerek yaptim" izi birakiyor, ortam korumasi ise
-    # tetigi cekenin yetkisini dogruluyor. Ikisi ayri soruyu yanitliyor.
-    environment:
-      name: uretim
+    # ORTAM BAGI YOK - ve bunun sebebi bir CELISKI.
+    #
+    # Onceden `environment: uretim` vardi. O ortamin deployment branch policy'si
+    # yalnizca `main`'e izin veriyor; ama bu dosyanin kendi basligi "once bu is
+    # akisini kosturursun, YESIL OLUNCA main'e merge edersin" diyor - yani goc,
+    # tanimi geregi henuz main'de OLMAYAN bir dosyayi uygulamak zorunda. Iki
+    # kural ayni anda saglanamiyordu.
+    #
+    # Celiski Faz M'de goruldu: 0004 yalnizca dalda duruyordu ve bu is akisi onu
+    # uygulayamadi. L3'te fark edilmemisti, cunku o goc (yanlislikla) merge
+    # SONRASI kosulmustu - yani hatanin kendisi celiskiyi gizlemisti.
+    #
+    # Geriye kalan tek kapi asagidaki yazili onay ve bu YETERLI: kosum kaydinda
+    # "bunu isteyerek yaptim" izi birakiyor ve is akisini tetikleyebilmek zaten
+    # depoya yazma yetkisi istiyor.
 
     concurrency:
       group: prod-goc

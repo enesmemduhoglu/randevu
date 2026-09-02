@@ -7,31 +7,53 @@ GitHub Actions üç iş akışı taşıyor. İkisi `.github/workflows/ci.yml` i�
 | İş akışı | Ne zaman koşar | Ne yapar |
 |---|---|---|
 | `dogrula` | Her PR, main'e her push | `npm ci` → tip → lint → test → `cf:kur` |
-| `yayinla` | Yalnızca main'e push, `dogrula` yeşilse | Onay bekler, sonra Cloudflare'e deploy |
-| `goc` | Yalnızca elle (`workflow_dispatch`) | Supabase'e migration uygular |
+| `yayinla` | Yalnızca main'e push, `dogrula` yeşilse | **Beklemeden** Cloudflare'e deploy |
+| `goc` | Yalnızca elle (`workflow_dispatch`), **her daldan** | Supabase'e migration uygular |
 
 ## Yayın nasıl çıkar
 
-1. PR merge edilir → `dogrula` koşar.
-2. Yeşilse `yayinla` işi **kuyruğa girer ve bekler**. Actions sekmesinde
-   "Review deployments" çıkar.
-3. `uretim` ortamının inceleyicisi onaylar → `npm run cf:yayinla` koşar.
+**Merge eden yayınlamış olur.** PR merge edilir → `dogrula` koşar → yeşilse
+`yayinla` beklemeden deploy eder. Onay tıklaması yok.
 
-Onay kapısı bilerek var: main'e düşen her commit'in canlıya çıkması gerekmiyor
-ve `NEXT_PUBLIC_*` değerleri derlemeye gömülü olduğu için geri alma "yeniden
-derleme" demek — yani ucuz değil.
+Önceden `uretim` ortamına bağlı bir onay kapısı vardı. Kaldırıldı, çünkü
+dayandığı varsayım yanlıştı: *"`NEXT_PUBLIC_*` değerleri derlemeye gömülü
+olduğu için geri alma yeniden derleme demek"*. Cloudflare her yayının
+**sürümünü saklıyor**, yani kod geri alınabilir ve yeniden derleme
+gerektirmiyor:
+
+```bash
+npx wrangler versions list        # sürüm geçmişi
+npx wrangler rollback <surum-id>  # önceki sürüme dön
+```
+
+Kapı dosyadan kaldırıldı, ortamın ayarından değil — böylece `ci.yml`'a bakan
+biri kapının olmadığını görüyor. `environment:` satırı geri konursa kapı geri
+gelir.
 
 ## Şema değişikliği varsa
 
-Sıra **önce göç, sonra yayın**. Yeni kolonu okuyan kod, kolon yerinde değilken
+Sıra **önce göç, sonra merge**. Yeni kolonu okuyan kod, kolon yerinde değilken
 canlıya çıkmamalı.
 
-1. Actions → **Prod gocu** → Run workflow → onay kutusuna `uygula` yaz.
-2. Ortam onayı verilir, migration koşar.
-3. Sonra PR merge edilir ve yayın onaylanır.
+1. Actions → **Prod gocu** → Run workflow, **PR'ın dalını seç** → onay kutusuna
+   `uygula` yaz.
+2. Migration koşar.
+3. Yeşilse PR merge edilir; yayın kendiliğinden çıkar.
 
-Geri alma yolu **yok**: `scripts/prod-goc.ts` yalnızca ileri gider. Geri alınması
-gerekebilecek bir göç yazarken geri alma SQL'i PR açıklamasına elle yazılır.
+**Dalı seçmek şart.** Göç, tanımı gereği henüz `main`'de olmayan bir dosyayı
+uyguluyor. Bir dönem `goc` işi `uretim` ortamına bağlıydı ve o ortam yalnızca
+`main`'e izin veriyordu — yani iş akışının kendi tarifi uygulanamaz haldeydi.
+Faz M'de görüldü ve ortam bağı kaldırıldı. (L3'te fark edilmemişti çünkü o göç
+yanlışlıkla merge *sonrası* koşulmuştu; hatanın kendisi çelişkiyi gizlemişti.)
+
+**Merge sonrasını beklemek diye bir pencere artık YOK:** onay kapısı
+kalktığından beri merge anı yayın anı. Göç merge'den önce koşmazsa, kolon
+yokken kod canlıya çıkar.
+
+Geri alma yolu **yok**: `scripts/prod-goc.ts` yalnızca ileri gider. Kodun geri
+alınabilir olması bunu değiştirmiyor — bir yayını geri almak şemayı geri
+almıyor. Geri alınması gerekebilecek bir göç yazarken geri alma SQL'i PR
+açıklamasına elle yazılır.
 
 ## Gereken ayarlar
 
@@ -65,16 +87,24 @@ durur. Kontrol var, çünkü eksik bir `NEXT_PUBLIC_*` build'i **düşürmüyor*
 
 ### Environment
 
-`uretim` ortamı kurulu. İki koruma taşıyor:
+**Hiçbir iş artık bir ortama bağlı değil.** `uretim` ortamı GitHub'da hâlâ
+duruyor (zorunlu inceleyici ve `main`-only branch policy'siyle) ama ona
+başvuran bir iş kalmadı, yani hiçbir şeyi etkilemiyor. Silinebilir; bırakmanın
+tek maliyeti ayarlar sayfasında ölü bir kayıt.
 
-- **Required reviewers** — onay kapısı bu. Ortam yoksa ya da inceleyici
-  tanımlı değilse yayın beklemeden çıkar. (GitHub, bir workflow'un başvurduğu
-  ortamı yoksa **korumasız olarak kendiliğinden oluşturuyor** — yani ortamı
-  silmek koruma eklemek değil, kaldırmak anlamına gelir.)
-- **Deployment branch policy: yalnızca `main`** — ortama bağlı bir iş başka
-  daldan koşamaz. Asıl kazanç `goc` tarafında: `workflow_dispatch` herhangi
-  bir daldan tetiklenebiliyor ve bu kural, prod şemasına gözden geçirilmemiş
-  bir daldaki migration'ın uygulanmasını engelliyor.
+Geri istenirse ilgili işe `environment: uretim` satırını eklemek yeterli. Ama
+`goc` için eklenmemeli — o kombinasyon çalışmıyor, sebebi yukarıda "Şema
+değişikliği varsa" bölümünde.
+
+> GitHub, bir workflow'un başvurduğu ortam yoksa onu **korumasız olarak
+> kendiliğinden oluşturuyor** — yani bir ortamı silmek koruma eklemek değil,
+> kaldırmak anlamına gelir. Kapıyı dosyadan kaldırmayı seçmemizin bir sebebi
+> de bu: ayar sayfasındaki bir kaydın varlığı ya da yokluğu, koşan şeyin ne
+> olduğunu okunaklı biçimde anlatmıyor.
+
+Yayın için tek gereken hâlâ `CLOUDFLARE_API_TOKEN` ve `CLOUDFLARE_ACCOUNT_ID`;
+ikisi de **repository** secret'ı, ortam secret'ı değil (bu yüzden ortam bağını
+kaldırmak hiçbir sırrı kırmadı).
 
 ## Runtime sırları hattın dışında
 
