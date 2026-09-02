@@ -32,6 +32,7 @@ export type AyarAlanlari = {
   minOnceBildirimDk: number;
   maksIleriGun: number;
   otomatikOnay: boolean;
+  gelmediKisitiGun: number;
 };
 
 export function ayarAlanlariniDogrula(
@@ -80,6 +81,17 @@ export function ayarAlanlariniDogrula(
   });
   if (!maksIleri.tamam) return maksIleri;
 
+  // 0 gecerli ve "kisit kapali" demek. Ust sinir 365 gun: daha uzunu pratikte
+  // omurluk yasak ve o bir urun karari degil, isletmenin telefonda vermesi
+  // gereken bir karar. Alt sinirin 0 olmasi sart - kaporali calisan isletme
+  // bu koruma icin hic bedel odememeli.
+  const gelmediKisiti = tamsayiDogrula(
+    govde.gelmediKisitiGun,
+    "Gelmedi kısıtı",
+    { enAz: 0, enCok: 365 },
+  );
+  if (!gelmediKisiti.tamam) return gelmediKisiti;
+
   return {
     tamam: true,
     deger: {
@@ -91,6 +103,7 @@ export function ayarAlanlariniDogrula(
       slotAraligiDk: slot.deger,
       minOnceBildirimDk: minOnce.deger,
       maksIleriGun: maksIleri.deger,
+      gelmediKisitiGun: gelmediKisiti.deger,
       // Kutucuk isaretli degilse tarayici alani hic gondermiyor; yoklugu
       // "kapali" demek.
       otomatikOnay: govde.otomatikOnay === true || govde.otomatikOnay === "true",

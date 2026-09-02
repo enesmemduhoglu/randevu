@@ -25,6 +25,7 @@ export default async function AyarlarSayfasi() {
         minOnceBildirimDk: isletme.minOnceBildirimDk,
         maksIleriGun: isletme.maksIleriGun,
         otomatikOnay: isletme.otomatikOnay,
+        gelmediKisitiGun: isletme.gelmediKisitiGun,
       }}
     />
   );

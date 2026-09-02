@@ -12,6 +12,7 @@ const GECERLI = {
   minOnceBildirimDk: 120,
   maksIleriGun: 60,
   otomatikOnay: true,
+  gelmediKisitiGun: 30,
 };
 
 describe("telefonDogrula", () => {
@@ -77,6 +78,24 @@ describe("ayarAlanlariniDogrula", () => {
     // 0 gun "hic randevu alinamaz" demek olurdu.
     expect(ayarAlanlariniDogrula({ ...GECERLI, maksIleriGun: 0 }).tamam).toBe(false);
     expect(ayarAlanlariniDogrula({ ...GECERLI, maksIleriGun: 366 }).tamam).toBe(false);
+  });
+
+  test("gelmedi kisiti sifir olabilir - kisit kapali demek", () => {
+    const sonuc = ayarAlanlariniDogrula({ ...GECERLI, gelmediKisitiGun: 0 });
+    expect(sonuc.tamam && sonuc.deger.gelmediKisitiGun).toBe(0);
+  });
+
+  test("gelmedi kisiti bir yildan uzun olamaz", () => {
+    // Daha uzunu pratikte omurluk yasak; o karar telefonda verilmeli.
+    expect(
+      ayarAlanlariniDogrula({ ...GECERLI, gelmediKisitiGun: 366 }).tamam,
+    ).toBe(false);
+    expect(
+      ayarAlanlariniDogrula({ ...GECERLI, gelmediKisitiGun: -1 }).tamam,
+    ).toBe(false);
+    expect(
+      ayarAlanlariniDogrula({ ...GECERLI, gelmediKisitiGun: "otuz" }).tamam,
+    ).toBe(false);
   });
 
   test("otomatik onay yoksa kapali sayiliyor", () => {

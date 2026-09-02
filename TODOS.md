@@ -1621,3 +1621,99 @@ CI temiz checkout'ta koştuğu için `yayinla` işi bu sorunu yaşamıyor; risk
 yalnızca `docs/yayin.md`'de belgelenen **acil yerel yayın** yolunda. Oraya uyarı
 düşüldü. Kalıcı çözüm (`.env`'i build'den dışlamak ya da sırrı yalnızca binding'den
 okumak) ayrı ve küçük bir iş — bu fazın konusu değil, bilerek ertelendi.
+## Faz L3 — "gelmedi" kısıtı
+
+**423 test** (28 dosya), bunun **16'sı** bu işin. `npm run tip`, `npm run lint`,
+`npm test` ve `npm run cf:tip` yeşil. Göç: `drizzle/0003_gelmedi-kisiti.sql`
+(iki `ADD COLUMN`, ikisi de eklemeli).
+
+Randevusuna gelmeyen müşteri bir süre o işletmeden randevu alamıyor. Kaporası
+olmayan işletmenin — yani hedef kitlenin çoğunun — boş saate karşı tek
+korunması bu.
+
+### Kararlar
+
+**Kısıt `musteri` satırında, sayılan bir değer değil.** "Gelmedi randevularını
+say, üçü geçtiyse engelle" biçiminde türetilebilirdi; türetmedik çünkü işletme
+affetmek istediği müşteriyi affedemezdi — geçmişi silmesi gerekirdi. Tek bir
+`randevuKisitiBitis` alanı hem okuması ucuz hem de panelden elle sıfırlanmaya
+açık (o ekran henüz yok, aşağıda).
+
+**Kiracıya özel olması ücretsiz geldi.** `musteri` zaten kiracı başına ayrı bir
+satır (`musteri_isletme_telefon_idx`), yani aynı telefon numarası iki salonda
+iki ayrı kayıt. Bir salonda gelmemek diğerinden randevu almayı engellemiyor ve
+bunu iki ayrı IDOR testi arıyor: biri yazma yolunda (başka işletmenin
+randevusunu GELMEDI yapmak müşterisini kısıtlamıyor), biri okuma yolunda (A'daki
+kısıt B'nin sayfasında görünmüyor).
+
+**Kısıtı yazan UPDATE, durumu değiştiren koşullu UPDATE ile AYNI
+transaction'da.** Kısıt randevunun gerçekten GELMEDI'ye geçmesinin sonucu; iki
+ayrı istekte yapılsaydı yarışı kaybeden ikinci sekme de cezayı bir kez daha
+uzatırdı. Testi var: zaten GELMEDI olan randevuda ikinci çağrı 0 satır etkiliyor
+ve kısıt milisaniyesine kadar aynı kalıyor.
+
+**Süre `now()` ile veritabanı saatinden hesaplanıyor**, uygulamadan gelen bir
+`Date` ile değil. Worker ile Postgres arasındaki saat kayması cezayı uzatıp
+kısaltamıyor. `GREATEST(coalesce(mevcut, now()), now() + gün)`: var olan bir
+kısıt KISALTILMIYOR — işletme ayarı 100 günden 30'a indirdiğinde ikinci bir
+"gelmedi" cezayı azaltmış olurdu.
+
+**Süre parametre değil, kapanış değişkeni.** `randevuDurumunuDegistir` ayarı
+kendisi okuyor, `randevuOlustur` da `sahip.gelmediKisitiGun`'ü kapanıştan
+alıyor — `otomatikOnay` gibi çağıran taraftan GELMİYOR. Gerekçe: route bir gün
+ayarı geçmeyi unutsa koruma sessizce kalkardı ve hiçbir test bunu göstermezdi,
+çünkü ayar alanı panelde dolu görünmeye devam ederdi.
+
+**`gelmediKisitiGun = 0` kayıtlı bitiş tarihini de yok sayıyor.** Ayarı kapatan
+işletme mevcut kısıtların da kalkmasını bekliyor. Alanları temizlemek yerine
+okumada yok saymak, ayarı tekrar açınca geçmişin geri gelmesi demek — "yanlışlıkla
+kapattım" durumunda doğru davranış bu. 0 iken GELMEDI işaretlemek yine de
+çalışıyor: 0 "kaydı tutma" değil, "müşteriyi kapıya koyma".
+
+**429 mesajı kısıtın SEBEBİNİ söylemiyor.** `POST /api/randevu` oturumsuz: bir
+telefon numarası yazıp cevaba bakan herkes o kişinin bu işletmeye gelmediğini
+öğrenirdi. Kısıtın VARLIĞINI gizlemek mümkün değil — meşru müşteriye ne zaman
+tekrar deneyeceğini söylemek zorundayız — ama sebebini gizlemenin maliyeti yok:
+mesaj tarihi veriyor ve "daha erken bir randevu için işletmeyi arayın" diyor.
+Test metinde "gelmedi" kelimesinin geçmediğini de doğruluyor.
+
+**Sınır `>`, yani bitiş anında kısıt bitmiş sayılıyor.** Eşitliği kısıtlı
+saymak, "3 Mart 12:00'ye kadar" denen cezayı belirsiz biçimde uzatırdı. Tarih
+işletmenin saat diliminde yazılıyor (DEĞİŞMEZ 7); sunucununkine göre yazılsaydı
+gece yarısına yakın bitişler bir gün kaymış görünürdü.
+
+### Bilerek kapsam dışı
+
+- **Kısıtı panelden görme ve kaldırma ekranı yok.** Müşteri listesi Faz H2'nin
+  işi ve kısıt orada anlamlı bir sütun; ayrı bir "kısıtlı müşteriler" ekranı
+  açmak, iki fazın aynı listeyi iki kez çizmesi olurdu. Bugünkü kaldırma yolu
+  ayarı geçici olarak 0 yapmak — kaba ama var.
+- **İşletmenin kendi eklediği randevuya kısıt uygulanmıyor.** Elle randevu
+  ekleme zaten yok (Faz H2); geldiğinde kararı orada verilmeli — telefonla arayıp
+  yer isteyen müşteriyi işletme kendi affediyor olabilir.
+- **Müşteriye kısıt bildirimi gönderilmiyor.** Bildirim altyapısı Faz I'de;
+  şimdilik müşteri kısıtı ancak randevu almaya çalışınca görüyor.
+- **Kısıt süresi tek bir sayı; tekrar edene daha uzun ceza yok.** Kademeli ceza
+  ("ikinci kez gelmediyse iki katı") kaç kez gelmediğini saymayı gerektiriyor —
+  yani yukarıda bilerek reddedilen türetilmiş modeli. Değerse ayrı bir karar.
+- **Prod'a göç UYGULANMADI.** Göç yalnızca ekleme (`isletme.gelmedi_kisiti_gun`
+  DEFAULT 30, `musteri.randevu_kisiti_bitis` nullable); geri alma iki
+  `drop column`. `docs/yayin.md`'deki elle iş akışıyla uygulanacak.
+
+### Doğrulama
+
+- `npm run db:goc` + `npm run db:uygula` — yerel `randevu_dev`'e uygulandı
+- `npm run cf:tip`, `npm run tip`, `npm run lint` temiz
+- `npm test` — **423 test geçti** (28 dosya), üst üste üç koşumda
+- Yeni testler: `scoped-db-randevu.test.ts` +11 (kısıtın yazılması ve
+  okunması, iki IDOR, `GREATEST`, ayar 0, tam sınır), `randevu.test.ts` +3
+  (uçtan uca 429 + mesajın tarih taşıması + sebebin sızmaması),
+  `ayar-girdi.test.ts` +2
+
+### Elle yapılması gerekenler (Faz L3)
+
+- [ ] Prod göçü: `npm run db:uygula:prod -- --onayla` ya da `goc` iş akışı.
+- [ ] Uçtan uca: randevu al → panelde "Gelmedi" işaretle → aynı numarayla
+      tekrar randevu almayı dene, tarihli 429 mesajını gör → ayarı 0 yapıp
+      tekrar dene, geçtiğini gör.
+- [ ] Ayarlar ekranındaki yeni alanı mobil genişlikte gözle doğrula.
