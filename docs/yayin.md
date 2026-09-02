@@ -101,8 +101,23 @@ yanlış yapılandırma artık sessizce açık değil, gürültülü kapalı.
 
 `wrangler.jsonc > ratelimits` iki sınırlayıcı tanımlıyor: `RANDEVU_SINIRI`
 (5/dk, yazma) ve `MUSAITLIK_SINIRI` (60/dk, okuma). Panel WAF kuralı **değil**:
-bu dosya PR'da inceleniyor ve `wrangler dev` ile yerelde de koşuyor. Sayaç kolo
-başına ve yaklaşık — ucuz bir kalkan, kesin bir kota değil.
+bu dosya PR'da inceleniyor ve `wrangler dev` ile yerelde de koşuyor.
+
+**Ne kadar sıkı olduğu ölçüldü** ve yereldeki sonuca bakıp genelleme yapmak
+yanlış olurdu:
+
+| Ortam | 5/dk sınırında ilk 429 |
+|---|---|
+| Yerel workerd (`cf:onizle`) | **6. istek** — tek isolate, sayaç anında |
+| Üretim | **22. istek**, sonrası kesintili |
+
+Sebep Cloudflare'in belgelendirdiği davranış: sayaç her isolate'in yerel
+önbelleğinde ve kolo başına tutuluyor — dokümantasyonun kendi ifadesiyle
+*"permissive, eventually consistent... not an accurate accounting system"*.
+
+Yani bu kapı **kısa bir patlamayı durdurmuyor, sürekli bir seli yavaşlatıyor**.
+Korkulan tehdit zaten ikincisi. Kesin kota gerekirse durum tutan bir yapı
+(KV / Durable Object) gerekir ve bedeli her istekte bir yazmadır.
 
 ## Yerelden elle yayın
 
