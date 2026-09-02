@@ -58,6 +58,18 @@
       "simple": { "limit": 60, "period": 60 }
     }
   ],
+  // Wrangler'in kendi esbuild adimi varsayilan olarak keep_names: true
+  // kullanir; bu next-themes'in <head>'e gomdugu satir ici betikte sorun
+  // cikarir. O betik `M.toString()` ile fonksiyonu ISLENMIS (bundle edilmis)
+  // haliyle metne cevirip tarayiciya gonderiyor - keep_names acikken esbuild
+  // ic ice tanimli fonksiyonlarin (`function p(n){...}`) hemen ardina
+  // `__name(p, "p")` cagrisi ekliyor. Bu cagri worker paketinin ust
+  // seviyesinde tanimli yardimciya (`__name`) bakiyor; toString() ile
+  // disari cikan metinde o tanim yok, tarayicida "ReferenceError: __name is
+  // not defined" ile patliyor. OpenNext'in kendi esbuild adimi (bundle-server.js)
+  // keep_names'i hic ayarlamiyor (esbuild varsayilani false) - sorun yalnizca
+  // Wrangler'in worker.js'i tekrar paketledigi son adimda ortaya cikiyor.
+  "keep_names": false,
   // workers.dev KAPALI, tek adres custom domain.
   //
   // Iki sebep: (1) bu hesapta workers.dev alt alan adi kayitli degil ve
