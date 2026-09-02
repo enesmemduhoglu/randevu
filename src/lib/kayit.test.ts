@@ -4,7 +4,8 @@ import { afterAll, beforeEach, describe, expect, test } from "vitest";
 import { isletme, kullanici, personel } from "@/db/sema";
 import { tablolariBosalt } from "@/db/test-temizlik";
 import { baglantiyiKapat, getDb } from "@/lib/db";
-import { isletmeKaydiOlustur, slugUret } from "@/lib/kayit";
+import { isletmeKaydiOlustur } from "@/lib/kayit";
+import { slugUret } from "@/lib/slug";
 
 // Dogrulamalar ham getDb ile yapiliyor: test, test ettigi katmana guvenmemeli.
 

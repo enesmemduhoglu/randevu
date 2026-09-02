@@ -187,6 +187,36 @@ test("arama isletme adinda gecen metni buluyor", async () => {
   expect(slugLari((await isletmeleriAra({ arama: "NISAN" })).kartlar)).toEqual([a.slug]);
 });
 
+test("Turkce'nin dogru kucuk yazimi da buluyor", async () => {
+  // BU TESTIN SEBEBI GERCEK BIR HATA: `ilike` kucultmeyi veritabani
+  // collation'iyla yapiyor ve orada "I" -> noktali "i". Yani yalnizca `ad`
+  // taransaydi "Işıl Güzellik" kaydi "işıl" aramasini bulur, Turkce'de o adin
+  // DOGRU kucuk yazimi olan "ışıl" aramasini bulmazdi. Elle olculdu, uc
+  // yazimdan biri bos donuyordu.
+  const k = await tamKurulum("Işıl Güzellik");
+  await k.db.yayindaAyarla(true);
+
+  for (const yazim of ["Işıl", "ışıl", "işıl", "isil", "ISIL"]) {
+    const sonuc = await isletmeleriAra({ arama: yazim });
+    expect(slugLari(sonuc.kartlar), `yazim: ${yazim}`).toEqual([k.slug]);
+  }
+});
+
+test("Turkce karakter yazmayan ziyaretci de buluyor", async () => {
+  // Kayit slug'i zaten ASCII'ye katlanmis duruyor (`isil-guzellik`); aramayi
+  // ayni fonksiyondan gecirmek klavyesinde Turkce harf olmayan ziyaretciyi de
+  // kapsiyor. Ayri bir kolon ya da `unaccent` uzantisi gerekmedi.
+  const k = await tamKurulum("Çağdaş Kuaför");
+  await k.db.yayindaAyarla(true);
+
+  expect(slugLari((await isletmeleriAra({ arama: "cagdas" })).kartlar)).toEqual([k.slug]);
+  expect(slugLari((await isletmeleriAra({ arama: "kuafor" })).kartlar)).toEqual([k.slug]);
+  // Iki kelime arasindaki bosluk slug'da tire; arama yine tutuyor.
+  expect(slugLari((await isletmeleriAra({ arama: "cagdas kuafor" })).kartlar)).toEqual([
+    k.slug,
+  ]);
+});
+
 test("aramadaki joker karakterler ESLESMIYOR", async () => {
   const k = await tamKurulum("Duz Salon");
   await k.db.yayindaAyarla(true);

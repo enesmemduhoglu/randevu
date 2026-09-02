@@ -26,11 +26,12 @@
 // SALT OKUNUR. Bu dosyaya asla bir yazma metodu eklenmeyecek - yazma yollari
 // kiracisiz calisamaz.
 
-import { and, asc, eq, ilike, min, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, min, or, sql } from "drizzle-orm";
 
 import { hizmet, isletme } from "@/db/sema";
 import { getDb } from "@/lib/db";
 import { ILLER, KATEGORILER } from "@/lib/dizin-girdi";
+import { slugUret } from "@/lib/slug";
 
 /// Dizin kartinin TAM icerigi. Kapali tip; genisletmek bilincli bir karar
 /// olmali (bkz. dosya basligi, madde 3).
@@ -99,12 +100,39 @@ export async function isletmeleriAra(filtre: DizinFiltresi): Promise<{
       ? filtre.kategori
       : undefined;
 
+  // Arama IKI kolona birden bakiyor ve ikincisi bir suslu degil, TURKCE'nin
+  // kendisi. Postgres'in `ilike`i kucuk harfe cevirmeyi veritabani
+  // collation'iyla yapiyor ve orada "I"nin kuculmusu noktali "i"; yani
+  // "Işıl Güzellik" kaydi "işıl" aramasini buluyor ama Turkce'de o adin dogru
+  // kucuk yazimi olan "ışıl" aramasini BULMUYOR. Olculdu: uc yazimdan yalnizca
+  // ikisi eslesiyordu.
+  //
+  // Cozum yeni bir kolon ya da uzanti degil, zaten duran `slug`: kayit aninda
+  // `slugUret` ile ASCII'ye katlanmis hali (Isil Guzellik -> isil-guzellik) ve
+  // uzerinde benzersizlik indeksi var. Aramayi ayni fonksiyondan gecirince
+  // "ışıl", "Işıl", "isil" ve "işıl" ayni satiri buluyor - Turkce karakter
+  // yazamayan ya da yazmak istemeyen ziyaretci de dahil.
+  //
+  // `ad` uzerindeki kosul KALIYOR: slug yalnizca kelime baslarini degil
+  // noktalama ve bosluklari da tiretiye ceviriyor, yani "&" ya da "'" iceren
+  // adlarda ham metin eslesmesi hala daha iyi sonuc veriyor.
+  const aramaSlug = arama ? slugUret(arama) : "";
+
+  const aramaKosulu = arama
+    ? or(
+        ilike(isletme.ad, `%${jokerKacir(arama)}%`),
+        // `slugUret` ciktisi yalnizca [a-z0-9-] - joker karakter uretemiyor,
+        // bu yuzden kacisa gerek yok.
+        aramaSlug ? ilike(isletme.slug, `%${aramaSlug}%`) : undefined,
+      )
+    : undefined;
+
   const kosul = and(
     eq(isletme.aktif, true),
     eq(isletme.yayinda, true),
     il ? eq(isletme.il, il) : undefined,
     kategori ? eq(isletme.kategori, kategori) : undefined,
-    arama ? ilike(isletme.ad, `%${jokerKacir(arama)}%`) : undefined,
+    aramaKosulu,
   );
 
   const [satirlar, sayim] = await Promise.all([
