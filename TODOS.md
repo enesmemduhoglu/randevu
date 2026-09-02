@@ -1623,9 +1623,16 @@ düşüldü. Kalıcı çözüm (`.env`'i build'den dışlamak ya da sırrı yaln
 okumak) ayrı ve küçük bir iş — bu fazın konusu değil, bilerek ertelendi.
 ## Faz L3 — "gelmedi" kısıtı
 
-**423 test** (28 dosya), bunun **16'sı** bu işin. `npm run tip`, `npm run lint`,
+**428 test** (29 dosya), bunun **17'si** bu işin. `npm run tip`, `npm run lint`,
 `npm test` ve `npm run cf:tip` yeşil. Göç: `drizzle/0003_gelmedi-kisiti.sql`
 (iki `ADD COLUMN`, ikisi de eklemeli).
+
+> Dal önce **Faz L'den önceki** main'den çıkmıştı: worktree açılırken yerel
+> `origin/main` referansı bayattı. O haliyle merge edilseydi Faz L'nin tamamını
+> (`hiz-siniri.ts`, `wrangler.jsonc`'deki `vars` ve `ratelimits`, CI kapısı)
+> geri alırdı — diff bunu "silme" olarak gösteriyordu. `origin/main` üzerine
+> rebase edildi; L3'ün kendi değişiklikleri zaten tamamen eklemeliydi, yalnızca
+> bu dosya çakıştı. Yukarıdaki sayılar rebase SONRASI ölçüm.
 
 Randevusuna gelmeyen müşteri bir süre o işletmeden randevu alamıyor. Kaporası
 olmayan işletmenin — yani hedef kitlenin çoğunun — boş saate karşı tek
