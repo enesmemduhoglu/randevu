@@ -1501,3 +1501,96 @@ kullanılan kalıp izlendi.
       açık kalıyor.
 - [ ] İlk yayından sonra canlıda `/saglik` ve `/r/<slug>` sayfalarını gözle
       doğrula — üretimdeki sürüm hâlâ Faz G öncesi, yani `/r/<slug>` şu an 404.
+
+---
+
+## Faz L — kalkan
+
+Dizin (pazaryeri) açılmadan önce halka açık yolların savunması. Sıra bilinçli:
+dizin her işletmeyi keşfedilebilir yapıp saldırı yüzeyini bir anda büyütüyor.
+
+### Doğurduğu bulgu: Turnstile üretimde sessizce kapalıydı
+
+`turnstile.ts` yalnızca `"gercek"` yazan değeri gerçek sayıyor, başka her değer
+— ve tanımsızlık — kapıyı açıyor. `wrangler.jsonc`'de `vars` bloğu **hiç
+yoktu**, yani üretimde `TURNSTILE_MODU` tanımsızdı ve bot kapısı Faz G2'den
+beri koşulsuz geçiriyordu.
+
+Kod doğruydu. Eksik olan bir satır değil, bir satırın **yokluğuydu** — ve
+yokluk kod incelemesinde görünmüyor. `docs/yayin.md` durumu zaten yazmıştı;
+eksik olan bilgi değil, kapatan bir değişiklikti.
+
+### Yapılanlar
+
+- `wrangler.jsonc > vars > TURNSTILE_MODU: "gercek"`.
+- `wrangler.jsonc > ratelimits`: `RANDEVU_SINIRI` (5/dk, yazma) ve
+  `MUSAITLIK_SINIRI` (60/dk, okuma). Panel WAF kuralı **değil** — bu dosya
+  PR'da inceleniyor ve `wrangler dev` ile yerelde de koşuyor.
+- `src/lib/hiz-siniri.ts` — sınırlayıcının tek çıkış noktası.
+- `degismezler.test.ts`: **yapılandırma da sınanıyor.** İki binding'in ve
+  `TURNSTILE_MODU="gercek"` satırının varlığı test koşumunda aranıyor; ayrıca
+  wrangler'daki binding adıyla koddaki union üyesinin ayrışmadığı doğrulanıyor.
+- `ci.yml`'e "turnstile iki yakası tutarlı mı" adımı (aşağıda).
+
+### Ölçüm — `cf:onizle`, workerd
+
+Varsayılmadı, ölçüldü (bkz. "ölçmeden runtime varsayımı yapma"):
+
+| Ölçüm | Sonuç |
+|---|---|
+| `env.TURNSTILE_MODU` | `"gercek"` olarak bağlandı |
+| `env.RANDEVU_SINIRI` / `MUSAITLIK_SINIRI` | ikisi de bağlandı |
+| Jetonsuz `POST /api/randevu` | **403** (önce kapıdan geçiyordu) |
+| Yabancı Origin | 403 (CSRF bozulmadı) |
+| `CF-Connecting-IP` ile 8 POST | 1–5 → 403, 6–8 → **429** |
+| Başlıksız 8 POST *(ilk sürüm)* | hepsi 403 — **sınır hiç ateşlemedi** |
+
+Son satır bir tasarım hatasını açığa çıkardı: `istekIpsi()` yerel workerd'de
+`null` dönüyordu ve kod "anahtar yoksa geçir" diyordu. Üretimde Cloudflare o
+başlığı hep koyuyor, yani kod "çalışıyordu" — ama bu tam olarak Turnstile'ı
+aylarca sessizce açık bırakan şeklin ta kendisiydi, yalnızca başka bir
+değişkende. Düzeltildi: binding varken anahtarsız istekler **tek kovaya**
+düşüyor, geçmiyor. Yeniden ölçüldü, başlıksız istekler de 6'dan sonra 429.
+
+### Bilerek kapsam dışı
+
+- **"Gelmedi" kısıtı (L3)**: şema göçü gerektiriyor, ayrı risk sınıfı —
+  `/goc` ile ayrı faz.
+- **SMS OTP (L2)**: `src/lib/sms.ts` henüz yok (Faz K'nin dosyası); adaptörü
+  öne çekmek bu PR'ı iki konuya bölerdi.
+- **Uygulama içi IP sayacı**: kenarda duran bir kural Postgres'e hiç sorgu
+  açtırmıyor, uygulama sayacı ise her istekte bir yazma demekti.
+
+### ELLE YAPILMASI GEREKEN — bu PR merge edilmeden önce
+
+Turnstile'ın iki yakası **birlikte açılıp birlikte kapanacak** şekilde
+tasarlanmış: `turnstile-alani.tsx:38` site anahtarı yoksa widget'ı hiç
+çizmiyor. Bugüne kadar ikisi de kapalıydı ve simetri sessizce doğruydu. Modu
+açmak o simetriyi bozuyor — sunucu jeton istiyor, istemci üretemiyor.
+
+1. Cloudflare → Turnstile → widget oluştur (`randevu.enesmemduhoglu.tech`).
+2. Site anahtarını `NEXT_PUBLIC_TURNSTILE_SITE_KEY` repository **variable**
+   olarak gir (derleme anında gömülüyor, çalışma anında geç kalır).
+3. `wrangler secret put TURNSTILE_SECRET`.
+
+Bu üçü yapılmadan yayın hattı **düşer**: `yayinla` işine eklenen "turnstile iki
+yakası tutarlı mı" adımı, `TURNSTILE_MODU=gercek` iken site anahtarı boşsa
+derlemeyi reddediyor. Bilerek: sessizce açık bir kapıyı kimse fark etmiyor,
+düşen bir yayın ilk denemede görülüyor.
+
+**Durum (aynı oturumda tamamlandı):** widget oluşturuldu, `TURNSTILE_SECRET`
+`wrangler secret put` ile Worker'a girildi (`wrangler secret list` ile
+doğrulandı), site anahtarı `gh variable set` ile repository variable oldu.
+Derlenmiş istemci paketinde site anahtarı görüldü — yani widget artık çiziliyor.
+
+### Yan bulgu: yerel `cf:yayinla` sırrı pakete gömüyor
+
+Ölçüldü: `.env` varken `next build` onu `.open-next/server-functions/default/.env`
+içine kopyalıyor, yani `TURNSTILE_SECRET` Worker paketinin **içinde** yayınlanır.
+İstemci paketine (`assets/`) girmiyor — halka açık sızıntı değil — ama betiği
+okuyabilen görüyor ve `wrangler secret` ile döndürmek etkisiz kalıyor.
+
+CI temiz checkout'ta koştuğu için `yayinla` işi bu sorunu yaşamıyor; risk
+yalnızca `docs/yayin.md`'de belgelenen **acil yerel yayın** yolunda. Oraya uyarı
+düşüldü. Kalıcı çözüm (`.env`'i build'den dışlamak ya da sırrı yalnızca binding'den
+okumak) ayrı ve küçük bir iş — bu fazın konusu değil, bilerek ertelendi.

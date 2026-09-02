@@ -85,10 +85,24 @@ haberi yok:
 wrangler secret put TURNSTILE_SECRET
 ```
 
-`TURNSTILE_MODU` ve `BILDIRIM_MODU` ise `wrangler.jsonc`'de `vars` bloğu
-olmadığı için üretimde **tanımsız**. Turnstile açısından bunun anlamı şu:
-kod yayında olsa bile `TURNSTILE_MODU=gercek` girilene kadar kapı açık kalır.
-Koda bakıp "koruma var" demek yetmiyor.
+**Faz L'ye kadar `TURNSTILE_MODU` üretimde tanımsızdı** — `wrangler.jsonc`'de
+`vars` bloğu hiç yoktu, mod `sahte`ye düşüyordu ve bot kapısı canlıda koşulsuz
+geçiriyordu. Bu satırların bir önceki sürümü sorunu zaten yazmıştı; eksik olan
+şey bilgi değil, kapatan bir değişiklikti.
+
+Şimdi mod `wrangler.jsonc > vars` içinde `"gercek"` ve silinmesini
+`src/lib/degismezler.test.ts` yakalıyor. Sır (`TURNSTILE_SECRET`) hâlâ yalnızca
+`wrangler secret` ile giriliyor — **girilmezse kapı kapalı kalır**, yani
+yanlış yapılandırma artık sessizce açık değil, gürültülü kapalı.
+
+`BILDIRIM_MODU` hâlâ tanımsız; onu okuyan kod da henüz yok (Faz I).
+
+### Hız sınırı
+
+`wrangler.jsonc > ratelimits` iki sınırlayıcı tanımlıyor: `RANDEVU_SINIRI`
+(5/dk, yazma) ve `MUSAITLIK_SINIRI` (60/dk, okuma). Panel WAF kuralı **değil**:
+bu dosya PR'da inceleniyor ve `wrangler dev` ile yerelde de koşuyor. Sayaç kolo
+başına ve yaklaşık — ucuz bir kalkan, kesin bir kota değil.
 
 ## Yerelden elle yayın
 
@@ -100,3 +114,14 @@ npm run cf:yayinla
 
 Windows'ta önce `.open-next` dizinini kilitleyen süreçleri kapat (bkz.
 `CLAUDE.md` > Windows notu).
+
+> **Bu yolun bedeli var.** Yerelde `.env` varsa `next build` onu okuyup
+> `.open-next/server-functions/default/.env` içine kopyalıyor — yani
+> `TURNSTILE_SECRET` **Worker paketine gömülü** olarak yayınlanıyor, yönetilen
+> bir sır olarak değil. Faz L'de ölçüldü: sır istemci paketine (`assets/`)
+> girmiyor, yani halka açık bir sızıntı değil; ama betiği okuyabilen herkes
+> görebiliyor ve `wrangler secret` ile döndürmek beklenen etkiyi yapmıyor.
+>
+> CI bu sorunu yaşamıyor: `yayinla` işi temiz bir checkout'ta koşuyor ve orada
+> `.env` yok. Yani **normal yol güvenli, acil yol değil.** Acil yayından sonra
+> sırrı döndür.
