@@ -53,3 +53,14 @@ export function benzersizIhlaliMi(hata: unknown, kisit: string): boolean {
 export function cakismaIhlaliMi(hata: unknown): boolean {
   return pgHata(hata)?.kod === "23P01";
 }
+
+/// 23514 = check_violation.
+///
+/// Uygulama ayni kurali zaten kontrol ediyor olabilir; bu yakalayici o
+/// kontrolun yerine gecmiyor, ARKASINDA duruyor. Kisit tek gerceklik kaynagi
+/// (DEGISMEZ 8'in ruhu) ve ihlali kullaniciya 500 olarak donmek, duzeltebilecegi
+/// bir seyi "sunucu hatasi" diye gostermek olurdu.
+export function kontrolIhlaliMi(hata: unknown, kisit: string): boolean {
+  const bilgi = pgHata(hata);
+  return bilgi?.kod === "23514" && bilgi.kisit === kisit;
+}

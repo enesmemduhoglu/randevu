@@ -26,6 +26,9 @@ export default async function AyarlarSayfasi() {
         maksIleriGun: isletme.maksIleriGun,
         otomatikOnay: isletme.otomatikOnay,
         gelmediKisitiGun: isletme.gelmediKisitiGun,
+        il: isletme.il,
+        ilce: isletme.ilce,
+        kategori: isletme.kategori,
       }}
     />
   );

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { sureBicimle, telefonBicimle } from "@/lib/bicim";
 import { SAAT_DILIMLERI, SLOT_ARALIKLARI } from "@/lib/ayar-girdi";
+import { ILLER_ALFABETIK, KATEGORILER } from "@/lib/dizin-girdi";
 
 export type AyarKaydi = {
   ad: string;
@@ -22,11 +23,19 @@ export type AyarKaydi = {
   maksIleriGun: number;
   otomatikOnay: boolean;
   gelmediKisitiGun: number;
+  il: string | null;
+  ilce: string | null;
+  kategori: string | null;
 };
 
 // Ayarlar formu. Sunucudan gelen degerler `defaultValue` ile veriliyor, yani
 // bilesen "kontrolsuz": her tusa basista React durumu guncellemek bu ekranda
 // hicbir sey kazandirmaz ve her alan icin bir useState demektir.
+
+/// Dort acilir listede tekrar eden sinif. `Input`'un h-10'uyla ayni yukseklik:
+/// dokunma hedefi en az 44px (bkz. docs/tasarim-sistemi.md).
+const SECIM_SINIFI =
+  "h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30";
 
 export function AyarlarFormu({ ayarlar }: { ayarlar: AyarKaydi }) {
   const router = useRouter();
@@ -53,6 +62,9 @@ export function AyarlarFormu({ ayarlar }: { ayarlar: AyarKaydi }) {
       minOnceBildirimDk: veri.get("minOnceBildirimDk"),
       maksIleriGun: veri.get("maksIleriGun"),
       gelmediKisitiGun: veri.get("gelmediKisitiGun"),
+      il: veri.get("il"),
+      ilce: veri.get("ilce"),
+      kategori: veri.get("kategori"),
       // Isaretli degilse FormData alani hic tasimiyor.
       otomatikOnay: veri.get("otomatikOnay") === "on",
     };
@@ -155,6 +167,74 @@ export function AyarlarFormu({ ayarlar }: { ayarlar: AyarKaydi }) {
       </section>
 
       <section className="space-y-4">
+        <h2 className="font-heading text-lg font-semibold">Dizin bilgileri</h2>
+        <p className="text-sm text-muted-foreground">
+          Randevu dizininde bulunabilmek için il ve kategori gerekiyor. Bu
+          alanları doldurmak sizi dizine eklemez — eklemeyi ayrıca siz
+          seçersiniz.
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="il">İl</Label>
+            <select
+              id="il"
+              name="il"
+              defaultValue={ayarlar.il ?? ""}
+              disabled={gonderiliyor}
+              className={SECIM_SINIFI}
+            >
+              <option value="">Seçilmedi</option>
+              {ILLER_ALFABETIK.map((il) => (
+                <option key={il} value={il}>
+                  {il}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ilce">İlçe</Label>
+            <Input
+              id="ilce"
+              name="ilce"
+              defaultValue={ayarlar.ilce ?? ""}
+              disabled={gonderiliyor}
+              className="h-10"
+            />
+            {/* Ilce serbest metin ve dizinde FILTRE DEGIL - yalnizca kartta
+                gorunen bir etiket (bkz. dizin-girdi.ts). Kullaniciya da bu
+                soyleniyor ki listede bulunmak icin doldurmasi gerektigini
+                sanmasin. */}
+            <p className="text-xs text-muted-foreground">
+              Kartınızda görünür; aramayı etkilemez.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kategori">Kategori</Label>
+          <select
+            id="kategori"
+            name="kategori"
+            defaultValue={ayarlar.kategori ?? ""}
+            disabled={gonderiliyor}
+            className={SECIM_SINIFI}
+          >
+            <option value="">Seçilmedi</option>
+            {KATEGORILER.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Aradığınız kategori listede yoksa &ldquo;Diğer&rdquo;i seçin.
+          </p>
+        </div>
+      </section>
+
+      <section className="space-y-4">
         <h2 className="font-heading text-lg font-semibold">Randevu kuralları</h2>
 
         <div className="space-y-2">
@@ -164,7 +244,7 @@ export function AyarlarFormu({ ayarlar }: { ayarlar: AyarKaydi }) {
             name="saatDilimi"
             defaultValue={ayarlar.saatDilimi}
             disabled={gonderiliyor}
-            className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
+            className={SECIM_SINIFI}
           >
             {SAAT_DILIMLERI.map((s) => (
               <option key={s.deger} value={s.deger}>
@@ -184,7 +264,7 @@ export function AyarlarFormu({ ayarlar }: { ayarlar: AyarKaydi }) {
             name="slotAraligiDk"
             defaultValue={ayarlar.slotAraligiDk}
             disabled={gonderiliyor}
-            className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
+            className={SECIM_SINIFI}
           >
             {SLOT_ARALIKLARI.map((dk) => (
               <option key={dk} value={dk}>

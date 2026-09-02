@@ -50,6 +50,33 @@ export const KATEGORILER = [
 
 export type Kategori = (typeof KATEGORILER)[number];
 
+/// Turk alfabesindeki harf sirasi. Kucuk ve buyuk harfler ayni sirayi
+/// paylasiyor, yani "İstanbul" ile "istanbul" ayni yere dusuyor.
+const TR_ALFABE = "aAbBcCçÇdDeEfFgGğĞhHıIiİjJkKlLmMnNoOöÖpPrRsSşŞtTuUüÜvVyYzZ";
+
+/// Turkce siralama - `localeCompare(…, "tr")` DEGIL.
+///
+/// Neden elle: bu liste hem sunucuda (workerd) hem tarayicida ayni sirayi
+/// uretmek zorunda. workerd'in ICU derlemesi tam degil (bkz. `ayar-girdi.ts >
+/// SAAT_DILIMLERI` ve `bicim.ts > paraBicimle`); iki taraf farkli siralarsa
+/// React hidrasyonda uyusmazlik goruyor ve listeyi bastan ciziyor.
+///
+/// Alfabede olmayan karakter (bosluk, tire) harflerin ONUNE dusuyor, yani
+/// "Afyon Karahisar" ile "Afyonkarahisar" arasindaki sira da kararli.
+export function trKarsilastir(a: string, b: string): number {
+  const enKisa = Math.min(a.length, b.length);
+  for (let i = 0; i < enKisa; i++) {
+    const fark = TR_ALFABE.indexOf(a[i]) - TR_ALFABE.indexOf(b[i]);
+    if (fark !== 0) return fark;
+  }
+  return a.length - b.length;
+}
+
+/// Illerin alfabetik hali. `ILLER` plaka sirasinda duruyor cunku o kanonik;
+/// kullaniciya gosterilen liste ise alfabetik olmali - 81 secenek arasinda
+/// plaka numarasindan arama yapan kimse yok.
+export const ILLER_ALFABETIK = [...ILLER].sort(trKarsilastir);
+
 /// Ilce SERBEST METIN ve dogrulanmiyor - yalnizca uzunlugu kirpiliyor.
 ///
 /// Neden: Turkiye'de yaklasik bin ilce var ve il -> ilce eslemesini dogru

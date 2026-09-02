@@ -1,5 +1,6 @@
 // Isletme ayarlarinin dogrulama kurallari.
 
+import { ilDogrula, ilceDogrula, kategoriDogrula } from "@/lib/dizin-girdi";
 import { adDogrula, tamsayiDogrula, type Dogrulama } from "@/lib/girdi";
 
 /// Desteklenen saat dilimleri.
@@ -33,6 +34,9 @@ export type AyarAlanlari = {
   maksIleriGun: number;
   otomatikOnay: boolean;
   gelmediKisitiGun: number;
+  il: string | null;
+  ilce: string | null;
+  kategori: string | null;
 };
 
 export function ayarAlanlariniDogrula(
@@ -92,6 +96,19 @@ export function ayarAlanlariniDogrula(
   );
   if (!gelmediKisiti.tamam) return gelmediKisiti;
 
+  // Dizin (pazaryeri) profili. Bu alanlar `yayinda`nin AKSINE ayarlar setinin
+  // parcasi: bos birakilabiliyorlar ve yazilmalari hicbir on kosula bagli
+  // degil. Yayina cikarmak ise ayri bir yol (`yayindaAyarla`) - orada on kosul
+  // var ve ayni sette gelseydi bir istek alani yazip kontrolu atlayabilirdi.
+  const il = ilDogrula(govde.il);
+  if (!il.tamam) return il;
+
+  const ilce = ilceDogrula(govde.ilce);
+  if (!ilce.tamam) return ilce;
+
+  const kategori = kategoriDogrula(govde.kategori);
+  if (!kategori.tamam) return kategori;
+
   return {
     tamam: true,
     deger: {
@@ -104,6 +121,9 @@ export function ayarAlanlariniDogrula(
       minOnceBildirimDk: minOnce.deger,
       maksIleriGun: maksIleri.deger,
       gelmediKisitiGun: gelmediKisiti.deger,
+      il: il.deger,
+      ilce: ilce.deger,
+      kategori: kategori.deger,
       // Kutucuk isaretli degilse tarayici alani hic gondermiyor; yoklugu
       // "kapali" demek.
       otomatikOnay: govde.otomatikOnay === true || govde.otomatikOnay === "true",
