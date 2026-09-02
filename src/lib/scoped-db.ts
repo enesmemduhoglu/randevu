@@ -6,7 +6,7 @@
 // kapanis degiskeni. Yanlis kiracinin verisini istemek icin once bu dosyayi
 // degistirmek gerekiyor - unutmakla olmuyor.
 
-import { and, asc, eq, gt, gte, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
 import {
   calismaSaati,
@@ -247,6 +247,7 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
       minOnceBildirimDk?: number;
       maksIleriGun?: number;
       otomatikOnay?: boolean;
+      gelmediKisitiGun?: number;
     }) {
       const sonuc = await db
         .update(isletme)
@@ -499,6 +500,10 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
     /// uretiliyor: gecis kuralinin tek kaynagi `randevu-durum.ts` kalsin diye.
     /// Kume parametre olsaydi bir route "IPTAL -> ONAYLI"yi kendi basina
     /// mumkun kilabilirdi ve kural iki yerde yasardi.
+    /// GELMEDI hedefinde ayrica musterinin randevu kisiti ileri atiliyor
+    /// (Faz L3) - ayni transaction icinde, cunku kisit randevunun gercekten
+    /// GELMEDI'ye gectiginin SONUCU. Iki ayri istekte yapilsaydi, kosullu
+    /// UPDATE'i kaybeden ikinci sekme de kisiti bir kez daha uzatabilirdi.
     async randevuDurumunuDegistir(
       id: string,
       hedef: RandevuDurumu,
@@ -510,21 +515,67 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
       // surume bagli bir davranis; kazanamayacak sorguyu hic gondermiyoruz.
       if (kume.length === 0) return 0;
 
-      const sonuc = await db
-        .update(randevu)
-        .set({ durum: hedef })
-        .where(
-          and(
-            eq(randevu.id, id),
-            eq(randevu.isletmeId, kiraci),
-            inArray(randevu.durum, kume),
-          ),
-        )
-        .returning({ id: randevu.id });
+      return db.transaction(async (tx) => {
+        const sonuc = await tx
+          .update(randevu)
+          .set({ durum: hedef })
+          .where(
+            and(
+              eq(randevu.id, id),
+              eq(randevu.isletmeId, kiraci),
+              inArray(randevu.durum, kume),
+            ),
+          )
+          // musteriId geri isteniyor: kisiti yazacak satiri bulmak icin
+          // randevuyu ikinci kez okumak gerekmesin.
+          .returning({ id: randevu.id, musteriId: randevu.musteriId });
 
-      // 0 donuyorsa kayit yok, baska kiraciya ait YA DA durumu artik uygun
-      // degil - uctu de cagirana ayni gorunmeli, yoksa varligi sizdiririz.
-      return sonuc.length;
+        if (hedef !== "GELMEDI" || sonuc.length === 0) {
+          // 0 donuyorsa kayit yok, baska kiraciya ait YA DA durumu artik
+          // uygun degil - uctu de cagirana ayni gorunmeli, yoksa varligi
+          // sizdiririz.
+          return sonuc.length;
+        }
+
+        // Kisit suresi ISLETMENIN kendi ayarindan; cagiran taraf veremiyor.
+        // Parametre olsaydi bir route kendi basina omurluk kisit yazabilirdi.
+        const [ayar] = await tx
+          .select({ gun: isletme.gelmediKisitiGun })
+          .from(isletme)
+          .where(eq(isletme.id, kiraci))
+          .limit(1);
+
+        // 0 = kisit kapali. O zaman GELMEDI isaretlemek yalnizca kayit
+        // tutuyor, musteriyi kapiya koymuyor.
+        if (!ayar || ayar.gun <= 0) return sonuc.length;
+
+        await tx
+          .update(musteri)
+          .set({
+            // Sure DB saatinden hesaplaniyor: transaction icinde `now()`
+            // islemin baslangici, yani uygulama ile veritabani saati
+            // arasindaki kayma kisiti uzatip kisaltamiyor.
+            //
+            // GREATEST: var olan bir kisit KISALTILMIYOR. Iki gelmedi
+            // ust uste isaretlenirse ikincisi sureyi bastan baslatiyor ama
+            // isletme bu arada ayari kucultmusse eski, daha uzun kisit
+            // ayakta kaliyor - musteriye "yeniden kapandi" demek yerine.
+            randevuKisitiBitis: sql`greatest(
+              coalesce(${musteri.randevuKisitiBitis}, now()),
+              now() + make_interval(days => ${ayar.gun})
+            )`,
+          })
+          // Kiraci filtresi burada da var: musteriId randevudan geldi ama
+          // bu dosyanin sozlesmesi "her sorguda kiraci".
+          .where(
+            and(
+              eq(musteri.id, sonuc[0].musteriId),
+              eq(musteri.isletmeId, kiraci),
+            ),
+          );
+
+        return sonuc.length;
+      });
     },
   };
 }
@@ -554,6 +605,7 @@ export async function getHalkaAcikDb(slug: string) {
       minOnceBildirimDk: isletme.minOnceBildirimDk,
       maksIleriGun: isletme.maksIleriGun,
       otomatikOnay: isletme.otomatikOnay,
+      gelmediKisitiGun: isletme.gelmediKisitiGun,
     })
     .from(isletme)
     .where(and(eq(isletme.slug, slug), eq(isletme.aktif, true)))
@@ -574,7 +626,7 @@ export async function getHalkaAcikDb(slug: string) {
       return await db.transaction(async (tx) => {
         // Musteri TELEFONLA tekilleniyor (sema: musteri_isletme_telefon_idx).
         const [mevcut] = await tx
-          .select({ id: musteri.id })
+          .select({ id: musteri.id, kisitBitis: musteri.randevuKisitiBitis })
           .from(musteri)
           .where(
             and(
@@ -585,6 +637,8 @@ export async function getHalkaAcikDb(slug: string) {
           .limit(1);
 
         let musteriId = mevcut?.id;
+        // Yeni musterinin kisiti olamaz; alan yalnizca mevcut kayittan gelir.
+        let kisitBitis = mevcut?.kisitBitis ?? null;
 
         if (!musteriId) {
           // `onConflictDoNothing`: ayni numarayla ayni anda gelen ikinci
@@ -605,7 +659,10 @@ export async function getHalkaAcikDb(slug: string) {
             musteriId = yeni.id;
           } else {
             const [yarisiKaybeden] = await tx
-              .select({ id: musteri.id })
+              .select({
+                id: musteri.id,
+                kisitBitis: musteri.randevuKisitiBitis,
+              })
               .from(musteri)
               .where(
                 and(
@@ -622,12 +679,36 @@ export async function getHalkaAcikDb(slug: string) {
               throw new Error("Musteri kaydi olusturulamadi");
             }
             musteriId = yarisiKaybeden.id;
+            kisitBitis = yarisiKaybeden.kisitBitis;
           }
         }
         // MEVCUT MUSTERININ ADI VE NOTU GUNCELLENMIYOR. Bu yol oturumsuz:
         // numarayi bilen herkes buraya yazabiliyor. Guncelleseydik, bir
         // yabanci isletmenin musteri kaydindaki adi degistirebilirdi.
         // Isletme farkli bir ad gormek isterse panelden kendi duzeltir.
+
+        // GELMEDI KISITI (Faz L3). Randevusuna gelmedigi isaretlenen musteri
+        // bir sure bu isletmeden randevu alamiyor.
+        //
+        // Kisit suresi ISLETMENIN ayarindan ve kapanis degiskeninden
+        // okunuyor, `veri` ile disaridan GELMIYOR: route bir gun ayari
+        // gecmeyi unutsa kisit sessizce kalkardi ve bunu hicbir test
+        // gostermezdi - ayar alani hala doluyken davranis kaybolurdu.
+        //
+        // `gelmediKisitiGun === 0` (kisit kapali) kayitli bitis tarihini de
+        // YOK SAYIYOR: isletme ayari kapattiginda mevcut kisitlarin da
+        // kalkmasini bekliyor. Alanlari temizlemek yerine okumada yok saymak,
+        // ayari tekrar acinca gecmisin geri gelmesi demek - "yanlislikla
+        // kapattim" durumunda dogru davranis bu.
+        //
+        // Sinir `>`: bitis anininda kisit BITMIS sayiliyor.
+        if (
+          sahip.gelmediKisitiGun > 0 &&
+          kisitBitis &&
+          kisitBitis.getTime() > veri.simdi.getTime()
+        ) {
+          return { durum: "kisitli" as const, bitis: kisitBitis };
+        }
 
         // Ayni musterinin ACIK randevu sayisi sinirli. Bot korumasi degil
         // (o Faz G2'de Turnstile ve hiz siniriyla geliyor) - takvimi elli

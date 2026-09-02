@@ -5,7 +5,11 @@ import { hizmet, isletme, kullanici, musteri, personel, randevu } from "@/db/sem
 import { tablolariBosalt } from "@/db/test-temizlik";
 import { baglantiyiKapat, getDb } from "@/lib/db";
 import type { RandevuDurumu } from "@/lib/randevu-durum";
-import { getScopedDb, type IsletmeOturumu } from "@/lib/scoped-db";
+import {
+  getHalkaAcikDb,
+  getScopedDb,
+  type IsletmeOturumu,
+} from "@/lib/scoped-db";
 
 // Faz H'de gelen panel takvimi kapsaminin testleri.
 //
@@ -408,5 +412,266 @@ describe("randevuDurumunuDegistir", () => {
     // Kaynak kumesi bos: sorgu hic gonderilmiyor, satir da degismiyor.
     expect(await db.randevuDurumunuDegistir(r.id, "BEKLIYOR")).toBe(0);
     expect((await hamRandevuOku(r.id))?.durum).toBe("ONAYLI");
+  });
+});
+
+// ---- Gelmedi kisiti (Faz L3) -----------------------------------------------
+//
+// Randevusuna gelmeyen musteri bir sure o isletmeden randevu alamiyor.
+// Kaporasi olmayan isletmenin tek korumasi bu, o yuzden iki ucu da burada
+// kilitli: kisitin YAZILMASI (durum degisiminin yan etkisi) ve kisitin
+// OKUNMASI (halka acik randevu yazmanin kapisi).
+//
+// KIRACIYA OZEL OLMASI EN KRITIK OZELLIK: ayni telefon numarasi her isletmede
+// ayri bir musteri satiri, yani bir salonda gelmemek digerinden randevu
+// almayi engellememeli. Iki ayri IDOR testi bunu ariyor.
+
+const GUN_MS = 86_400_000;
+
+async function hamMusteriOku(id: string) {
+  const db = await getDb();
+  const [kayit] = await db
+    .select()
+    .from(musteri)
+    .where(eq(musteri.id, id))
+    .limit(1);
+  return kayit ?? null;
+}
+
+/// Kisit bitisini dogrudan yaziyor. Sureyi bekleyerek sinamak mumkun degil;
+/// kisitin DOLMUS hali ancak gecmise yazilmis bir bitisle gorulebiliyor.
+async function hamKisitYaz(musteriId: string, bitis: Date | null) {
+  const db = await getDb();
+  await db
+    .update(musteri)
+    .set({ randevuKisitiBitis: bitis })
+    .where(eq(musteri.id, musteriId));
+}
+
+async function hamKisitAyariYaz(isletmeId: string, gun: number) {
+  const db = await getDb();
+  await db
+    .update(isletme)
+    .set({ gelmediKisitiGun: gun })
+    .where(eq(isletme.id, isletmeId));
+}
+
+/// Halka acik yoldan randevu yazar - kisit kapisinin bulundugu yol.
+///
+/// `simdi` DISARIDAN veriliyor (scoped-db bu dosyada `new Date()` okumuyor):
+/// kisitin tam sinirini ancak zamani sabitleyerek sinayabiliriz.
+async function halkaAcikYaz(
+  slug: string,
+  k: Kurulum,
+  secenekler: { simdi: Date; telefon?: string; baslangicSaati?: number },
+) {
+  const db = await getHalkaAcikDb(slug);
+  if (!db) throw new Error("isletme bulunamadi");
+
+  const bas = saat(secenekler.baslangicSaati ?? 15);
+  return db.randevuOlustur({
+    personelId: k.personelId,
+    hizmetId: k.hizmetId,
+    baslangic: bas,
+    bitis: new Date(bas.getTime() + 30 * 60_000),
+    musteriAd: "Ayşe Yılmaz",
+    telefon: secenekler.telefon ?? "5551112233",
+    eposta: null,
+    not: null,
+    iptalToken: token(),
+    simdi: secenekler.simdi,
+    enCokAcikRandevu: 3,
+    otomatikOnay: true,
+  });
+}
+
+describe("gelmedi kisitinin YAZILMASI", () => {
+  test("GELMEDI isaretlemek musterinin kisitini ayar kadar ileri atiyor", async () => {
+    const a = await isletmeKur("a");
+    const r = await hamRandevuEkle(a, {
+      baslangic: saat(10),
+      bitis: saat(10, 30),
+      durum: "ONAYLI",
+    });
+
+    const db = await getScopedDb(a.oturum);
+    expect(await db.randevuDurumunuDegistir(r.id, "GELMEDI")).toBe(1);
+
+    // Varsayilan 30 gun. Kesin esitlik aranmiyor: bitis DB saatinden
+    // hesaplaniyor ve test saati ile arasinda milisaniyeler var.
+    const kisit = (await hamMusteriOku(a.musteriId))?.randevuKisitiBitis;
+    const fark = (kisit!.getTime() - Date.now()) / GUN_MS;
+    expect(fark).toBeGreaterThan(29.9);
+    expect(fark).toBeLessThan(30.1);
+  });
+
+  test("gelmediKisitiGun 0 iken kisit YAZILMIYOR", async () => {
+    const a = await isletmeKur("a");
+    await hamKisitAyariYaz(a.isletmeId, 0);
+    const r = await hamRandevuEkle(a, {
+      baslangic: saat(10),
+      bitis: saat(10, 30),
+      durum: "ONAYLI",
+    });
+
+    const db = await getScopedDb(a.oturum);
+    // Durum yine de degisiyor: 0 "kaydi tutma" degil "musteriyi kapiya koyma".
+    expect(await db.randevuDurumunuDegistir(r.id, "GELMEDI")).toBe(1);
+    expect((await hamRandevuOku(r.id))?.durum).toBe("GELMEDI");
+    expect((await hamMusteriOku(a.musteriId))?.randevuKisitiBitis).toBeNull();
+  });
+
+  test("TAMAMLANDI kisit yazmiyor - kisit yalnizca GELMEDI'nin sonucu", async () => {
+    const a = await isletmeKur("a");
+    const r = await hamRandevuEkle(a, {
+      baslangic: saat(10),
+      bitis: saat(10, 30),
+      durum: "ONAYLI",
+    });
+
+    const db = await getScopedDb(a.oturum);
+    expect(await db.randevuDurumunuDegistir(r.id, "TAMAMLANDI")).toBe(1);
+    expect((await hamMusteriOku(a.musteriId))?.randevuKisitiBitis).toBeNull();
+  });
+
+  test("yarisi kaybeden ikinci karar kisiti UZATMIYOR", async () => {
+    const a = await isletmeKur("a");
+    const r = await hamRandevuEkle(a, {
+      baslangic: saat(10),
+      bitis: saat(10, 30),
+      durum: "GELMEDI",
+    });
+    // Ilk karar zaten verilmis gibi: kisit duruyor.
+    const oncekiKisit = new Date(Date.now() + 5 * GUN_MS);
+    await hamKisitYaz(a.musteriId, oncekiKisit);
+
+    const db = await getScopedDb(a.oturum);
+    // DEGISMEZ 3: kosullu UPDATE 0 satir etkiliyor, yani yan etki de yok.
+    // Ayni transaction'da olmasalardi ikinci sekme kisiti bir kez daha
+    // uzatirdi ve musteri iki kat ceza yerdi.
+    expect(await db.randevuDurumunuDegistir(r.id, "GELMEDI")).toBe(0);
+    expect(
+      (await hamMusteriOku(a.musteriId))?.randevuKisitiBitis?.getTime(),
+    ).toBe(oncekiKisit.getTime());
+  });
+
+  test("var olan DAHA UZUN kisit kisaltilmiyor", async () => {
+    const a = await isletmeKur("a");
+    // Isletme ayari 30 gune inmis ama musterinin 100 gunluk kisiti duruyor.
+    const uzunKisit = new Date(Date.now() + 100 * GUN_MS);
+    await hamKisitYaz(a.musteriId, uzunKisit);
+    const r = await hamRandevuEkle(a, {
+      baslangic: saat(10),
+      bitis: saat(10, 30),
+      durum: "ONAYLI",
+    });
+
+    const db = await getScopedDb(a.oturum);
+    expect(await db.randevuDurumunuDegistir(r.id, "GELMEDI")).toBe(1);
+
+    // GREATEST: yeni kisit eskisinden kisaysa eski ayakta kaliyor. Aksi halde
+    // ikinci bir gelmedi, cezayi KISALTMIS olurdu.
+    expect(
+      (await hamMusteriOku(a.musteriId))?.randevuKisitiBitis?.getTime(),
+    ).toBe(uzunKisit.getTime());
+  });
+
+  test("IDOR: baska isletmenin randevusu GELMEDI yapilamiyor, musterisi kisitlanmiyor", async () => {
+    const a = await isletmeKur("a");
+    const b = await isletmeKur("b");
+    const bRandevu = await hamRandevuEkle(b, {
+      baslangic: saat(10),
+      bitis: saat(10, 30),
+      durum: "ONAYLI",
+    });
+
+    const db = await getScopedDb(a.oturum);
+    expect(await db.randevuDurumunuDegistir(bRandevu.id, "GELMEDI")).toBe(0);
+    expect((await hamRandevuOku(bRandevu.id))?.durum).toBe("ONAYLI");
+    // Asil sizinti riski burada: yan etki randevudan BASKA bir tabloya
+    // yaziyor ve o yazmanin kiraci filtresi kaybolsaydi kimse gormezdi.
+    expect((await hamMusteriOku(b.musteriId))?.randevuKisitiBitis).toBeNull();
+  });
+});
+
+describe("gelmedi kisitinin OKUNMASI", () => {
+  /// Kisit bitisi ve "su an" testin sabitledigi degerler; gercek saate
+  /// bagli bir sinir testi makinenin hizina gore kirmizi olurdu.
+  const KISIT_BITISI = new Date(Date.UTC(2026, 2, 1, 12, 0, 0));
+
+  test("kisit sururken randevu yazilmiyor", async () => {
+    const a = await isletmeKur("a");
+    await hamKisitYaz(a.musteriId, KISIT_BITISI);
+
+    const sonuc = await halkaAcikYaz("a", a, {
+      simdi: new Date(KISIT_BITISI.getTime() - 60_000),
+    });
+
+    expect(sonuc.durum).toBe("kisitli");
+    // Bitis cagirana geri veriliyor: route mesaja tarihi yazacak.
+    expect(sonuc.durum === "kisitli" && sonuc.bitis.getTime()).toBe(
+      KISIT_BITISI.getTime(),
+    );
+  });
+
+  test("tam bitis aninda kisit BITMIS sayiliyor", async () => {
+    const a = await isletmeKur("a");
+    await hamKisitYaz(a.musteriId, KISIT_BITISI);
+
+    // Sinir `>`: bitis anini kisitli saymak, "3 Mart'a kadar" denen kisiti
+    // 3 Mart'in tamamina yaymak olurdu.
+    const sonuc = await halkaAcikYaz("a", a, { simdi: KISIT_BITISI });
+
+    expect(sonuc.durum).toBe("tamam");
+  });
+
+  test("kisit dolmussa randevu yaziliyor", async () => {
+    const a = await isletmeKur("a");
+    await hamKisitYaz(a.musteriId, KISIT_BITISI);
+
+    const sonuc = await halkaAcikYaz("a", a, {
+      simdi: new Date(KISIT_BITISI.getTime() + GUN_MS),
+    });
+
+    expect(sonuc.durum).toBe("tamam");
+  });
+
+  test("kisiti olmayan musteri etkilenmiyor", async () => {
+    const a = await isletmeKur("a");
+
+    const sonuc = await halkaAcikYaz("a", a, {
+      simdi: new Date(KISIT_BITISI.getTime() - GUN_MS),
+    });
+
+    expect(sonuc.durum).toBe("tamam");
+  });
+
+  test("ayar 0 iken kayitli kisit YOK SAYILIYOR", async () => {
+    const a = await isletmeKur("a");
+    await hamKisitYaz(a.musteriId, KISIT_BITISI);
+    await hamKisitAyariYaz(a.isletmeId, 0);
+
+    // Isletme ayari kapattiginda mevcut kisitlarin da kalkmasini bekliyor.
+    // Alanlari temizlemek yerine okumada yok sayiliyor: ayar geri acilirsa
+    // gecmis de geri geliyor.
+    const sonuc = await halkaAcikYaz("a", a, {
+      simdi: new Date(KISIT_BITISI.getTime() - 60_000),
+    });
+
+    expect(sonuc.durum).toBe("tamam");
+  });
+
+  test("IDOR: bir isletmedeki kisit digerine SIZMIYOR", async () => {
+    const a = await isletmeKur("a");
+    const b = await isletmeKur("b");
+    // Iki isletmede de ayni numara - ayri musteri satirlari
+    // (musteri_isletme_telefon_idx).
+    await hamKisitYaz(a.musteriId, KISIT_BITISI);
+
+    const simdi = new Date(KISIT_BITISI.getTime() - 60_000);
+
+    expect((await halkaAcikYaz("a", a, { simdi })).durum).toBe("kisitli");
+    // Ayni numara, baska salon: kisit kiraciya ozel, gecmis ve notlar gibi.
+    expect((await halkaAcikYaz("b", b, { simdi })).durum).toBe("tamam");
   });
 });

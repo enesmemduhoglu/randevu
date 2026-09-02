@@ -1,3 +1,4 @@
+import { saatBicimle, tarihUzun } from "@/lib/bicim";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
 import { hizSiniriAsildiMi } from "@/lib/hiz-siniri";
 import { iptalTokenUret } from "@/lib/iptal-token";
@@ -6,6 +7,7 @@ import { checkOrigin } from "@/lib/origin";
 import { randevuAlanlariniDogrula } from "@/lib/randevu-girdi";
 import { getHalkaAcikDb } from "@/lib/scoped-db";
 import { istekIpsi, turnstileDogrula } from "@/lib/turnstile";
+import { yerelParcalar } from "@/lib/zaman";
 
 // Halka acik randevu yazma.
 //
@@ -143,6 +145,27 @@ export async function POST(istek: Request) {
     enCokAcikRandevu: EN_COK_ACIK_RANDEVU,
     otomatikOnay: db.isletme.otomatikOnay,
   });
+
+  if (sonuc.durum === "kisitli") {
+    // KISITIN SEBEBI SOYLENMIYOR - "randevunuza gelmediginiz icin" cumlesi
+    // bilerek yok. Bu yol OTURUMSUZ: kimligini dogrulamamis herhangi biri bir
+    // telefon numarasi yazip 429 alarak o numaranin sahibinin bu isletmeye
+    // gelmedigini ogrenirdi. Kisitin varligini gizlemek mumkun degil (mesru
+    // musteriye ne zaman tekrar deneyecegini soylemek zorundayiz), ama
+    // SEBEBINI gizlemek mumkun ve maliyeti yok: musteri zaten isletmeyi
+    // ariyor, konusma orada aciliyor.
+    //
+    // Tarih ISLETMENIN saat diliminde (DEGISMEZ 7): sunucununkine gore
+    // yazilsaydi gece yarisina yakin bitisler bir gun kaymis gorunurdu.
+    const p = yerelParcalar(sonuc.bitis, db.isletme.saatDilimi);
+    const neZaman = `${tarihUzun(p)} ${saatBicimle(p.saat * 60 + p.dakika)}`;
+
+    return hata(
+      `Bu numarayla ${neZaman} tarihine kadar yeni randevu alınamıyor. ` +
+        "Daha erken bir randevu için işletmeyi arayabilirsiniz.",
+      429,
+    );
+  }
 
   if (sonuc.durum === "sinir") {
     return hata(
