@@ -1,6 +1,6 @@
 // Veritabani semasi. Tablo ve alan adlari Turkce - depo sozlesmesi (CLAUDE.md).
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -60,6 +60,34 @@ export const isletme = pgTable(
     // tekrarini engelleyecek kadar uzun.
     gelmediKisitiGun: integer("gelmedi_kisiti_gun").notNull().default(30),
 
+    // --- Dizin (pazaryeri) alanlari, Faz M ---
+    //
+    // NEDEN pgEnum ya da ayri tablo DEGIL, duz `text`: bu bir durum makinesi
+    // degil (randevu_durum oyle), `saatDilimi` gibi bir REFERANS alani. Depoda
+    // ayni ihtiyac zaten cozulmus - `ayar-girdi.ts > SAAT_DILIMLERI` duz text
+    // kolonu + kapali bir TS listesine karsi dogrulama kullaniyor. Ayni ailede
+    // ayni cozum.
+    //
+    // Bedeli bilinsin: gecersiz bir il ya da kategori DB tarafindan
+    // engellenmiyor, yazma yolundaki dogrulamaya guveniliyor. Kazanci: yeni bir
+    // kategori eklemek pgEnum'da `ALTER TYPE ... ADD VALUE` gocu (ve o degerin
+    // ayni transaction'da kullanilamamasi tuzagi) demekti; burada tek satirlik
+    // dizi degisikligi.
+    il: text("il"),
+    ilce: text("ilce"),
+    kategori: text("kategori"),
+
+    // Dizinde GORUNUYOR mu. Varsayilan FALSE: bu alan eklendiginde depoda
+    // zaten kayitli isletmeler vardi ve onlar pazaryeri diye bir kavram
+    // yokken kaydoldu. Sessizce herkese acik bir listeye dusmek surpriz olurdu.
+    //
+    // `aktif`ten AYRI: `aktif=false` isletmenin randevu sayfasini tumden
+    // kapatiyor, `yayinda=false` ise yalnizca dizinden gizliyor - dogrudan
+    // linki olan musteri randevu almaya devam ediyor. Ikisini tek alana
+    // sikistirmak, "Instagram'dan gelenler girebilsin ama dizinde olmayayim"
+    // diyen isletmeyi imkansiz kilardi.
+    yayinda: boolean("yayinda").notNull().default(false),
+
     aktif: boolean("aktif").notNull().default(true),
     olusturmaTarihi: timestamp("olusturma_tarihi", { withTimezone: true })
       .notNull()
@@ -69,7 +97,16 @@ export const isletme = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index("isletme_aktif_idx").on(t.aktif)],
+  (t) => [
+    index("isletme_aktif_idx").on(t.aktif),
+    // Dizin sorgusunun tek indeksi. Kismi: yalnizca yayindaki ve aktif
+    // isletmeler dizinde gorunuyor, yani indeksin geri kalanini tasimasi
+    // gereksiz. Kolon sirasi filtrelerin secicilik sirasi: il once daraltiyor,
+    // kategori sonra.
+    index("isletme_dizin_idx")
+      .on(t.il, t.kategori)
+      .where(sql`${t.yayinda} = true and ${t.aktif} = true`),
+  ],
 );
 
 /// Kimligi Supabase Auth sagliyor, veriyi biz tutuyoruz.
