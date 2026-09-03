@@ -29,7 +29,16 @@
   // da kod gibi sinaniyor, cunku bu hata tam olarak "kimsenin bakmadigi yerde
   // sessizce kayboldu" bicimindeydi.
   "vars": {
-    "TURNSTILE_MODU": "gercek"
+    "TURNSTILE_MODU": "gercek",
+    // Faz I. `email.ts` YALNIZCA "gercek" yazan degeri gercek sayiyor; bu
+    // satir silinirse uretimde hicbir mail gitmez ve kuyruk "gonderildi" der.
+    // Tam olarak Faz L'de Turnstile'in basina gelen sey - degismezler.test.ts
+    // ikisini de ariyor.
+    //
+    // ON KOSUL: `wrangler secret put RESEND_API_KEY`. Anahtar yoksa gonderim
+    // sessizce sahteye DUSMUYOR, kuyruga "anahtar-yok" hatasi yaziliyor ve
+    // /panel/gelistirici/bildirimler ekraninda gorunuyor.
+    "BILDIRIM_MODU": "gercek"
   },
   // Workers'in yerel hiz sinirlayicisi. Panel WAF kurali yerine burada olmasinin
   // sebebi: bu dosya PR'da inceleniyor ve `wrangler dev` ile yerelde de kosuyor.

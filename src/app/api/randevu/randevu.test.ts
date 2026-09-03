@@ -209,6 +209,24 @@ test("gecerli istek 201 donuyor ve randevu veritabanina yaziliyor", async () => 
   expect(kayit?.baslangic.toISOString()).toBe(SAAT_10);
 });
 
+test("randevu yazilinca bildirimler kuyruga giriyor", async () => {
+  // Faz I. Kuyruga yazma YANIT ONCESINDE, gonderim yanittan sonra (`after`).
+  // Bu test yazma adimini tutuyor: gonderim akisinin kendisi
+  // `src/lib/bildirim.test.ts`te. Ikisini ayirmanin sebebi, `after`in vitest'te
+  // istek baglami olmadigi icin kosmamasi - o yolun sinanmasi kuyruk
+  // uzerinden yapiliyor.
+  const a = await isletmeKur("A Salonu");
+
+  await basari(await POST(istek(govde(a))));
+
+  const kuyruk = await a.db.bildirimleriListele(10);
+  expect(kuyruk.map((k) => k.sablon).sort()).toEqual([
+    "ISLETME_YENI_RANDEVU",
+    "MUSTERI_HATIRLATMA",
+    "MUSTERI_RANDEVU_ONAYLANDI",
+  ]);
+});
+
 test("otomatikOnay kapali isletmede randevu BEKLIYOR basliyor", async () => {
   const a = await isletmeKur("A Salonu", { otomatikOnay: false });
 

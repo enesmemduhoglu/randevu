@@ -10,6 +10,8 @@
 // geliyor; resim secmeye zorlayan bir kapi, engellediginden fazla mesru
 // musteri kaybettirirdi.
 
+import { modCoz, type Mod } from "@/lib/mod";
+
 const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 export type TurnstileSonucu =
@@ -24,8 +26,7 @@ export type TurnstileSonucu =
 /// Cloudflare sirri yok ve olmayan bir sir yuzunden butun testlerin kirmizi
 /// olmasi, korumadan cok gelistirmeyi engellerdi. BILDIRIM_MODU ile ayni
 /// desen - tek yerden okunan bir anahtar, dagilmis `if (prod)` kontrolleri
-/// degil.
-type Mod = "sahte" | "gercek";
+/// degil. Modun nasil secildigi `mod.ts`te.
 
 /// Sir once Cloudflare binding'inden, sonra `process.env`'den okunuyor.
 ///
@@ -49,12 +50,12 @@ async function ayar(): Promise<{ mod: Mod; sir: string | undefined }> {
     // Cloudflare baglami yok: vitest ya da duz node betigi.
   }
 
-  const ham = cfMod ?? process.env.TURNSTILE_MODU;
-
-  // VARSAYILAN `sahte` DEGIL, yazildigi gibi okunuyor: yalnizca acikca
-  // "gercek" yazilmissa gercek. Tersini yapmak - tanimsizken gercege
-  // dusmek - yeni gelistiricinin ilk gununde her randevuyu 403'e cevirirdi.
-  const mod: Mod = ham === "gercek" ? "gercek" : "sahte";
+  // YERELDE cf degeri YOK SAYILIYOR (bkz. mod.ts). Faz L'de wrangler.jsonc'ye
+  // yazilan "gercek", initOpenNextCloudflareForDev sayesinde `next dev`e de
+  // sizip yerel randevu denemelerini 403'e ceviriyordu: uretim site anahtari
+  // localhost icin kayitli degil, widget Turnstile 110200 veriyor ve jeton hic
+  // uretilmiyor. Faz I'de tarayicidan gorulup duzeltildi.
+  const mod = modCoz(cfMod, process.env.TURNSTILE_MODU);
 
   return { mod, sir: cfSir ?? process.env.TURNSTILE_SECRET };
 }

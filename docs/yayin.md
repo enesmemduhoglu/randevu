@@ -113,6 +113,7 @@ haberi yok:
 
 ```bash
 wrangler secret put TURNSTILE_SECRET
+wrangler secret put RESEND_API_KEY      # Faz I
 ```
 
 **Faz L'ye kadar `TURNSTILE_MODU` üretimde tanımsızdı** — `wrangler.jsonc`'de
@@ -125,7 +126,23 @@ geçiriyordu. Bu satırların bir önceki sürümü sorunu zaten yazmıştı; ek
 `wrangler secret` ile giriliyor — **girilmezse kapı kapalı kalır**, yani
 yanlış yapılandırma artık sessizce açık değil, gürültülü kapalı.
 
-`BILDIRIM_MODU` hâlâ tanımsız; onu okuyan kod da henüz yok (Faz I).
+> **Yerelde bu değerler OKUNMUYOR** (Faz I, `src/lib/mod.ts`).
+> `initOpenNextCloudflareForDev()` yüzünden `wrangler.jsonc > vars` `next dev`e
+> de sızıyordu ve bot kapısı yerelde gerçek modda koşup her randevu denemesini
+> 403'e çeviriyordu. Artık üretim dışında kararı yalnızca `.env` veriyor.
+
+### Bildirim (Faz I)
+
+Aynı desen, aynı gerekçe: `BILDIRIM_MODU` artık `wrangler.jsonc > vars` içinde
+`"gercek"` ve silinmesini `src/lib/degismezler.test.ts` yakalıyor. Anahtar
+(`RESEND_API_KEY`) yalnızca `wrangler secret` ile giriliyor.
+
+**Anahtar girilmezse gönderim sahteye DÜŞMÜYOR.** Kuyruğa `anahtar-yok` hatası
+yazılıyor ve `/panel/gelistirici/bildirimler` ekranında görünüyor — yani yanlış
+yapılandırma yine sessiz değil, görünür. Ama görünür olması yeterli değil:
+**bu faz merge edilmeden önce anahtarın girilmiş olması gerekiyor**, yoksa
+merge anı yayın anı olduğu için ilk randevudan itibaren hiçbir onay maili
+gitmez.
 
 ### Hız sınırı
 

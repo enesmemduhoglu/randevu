@@ -1,4 +1,8 @@
 import { saatBicimle, tarihUzun } from "@/lib/bicim";
+import {
+  bildirimleriYanittanSonraGonder,
+  randevuOlustuKayitlari,
+} from "@/lib/bildirim";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
 import { hizSiniriAsildiMi } from "@/lib/hiz-siniri";
 import { iptalTokenUret } from "@/lib/iptal-token";
@@ -176,6 +180,31 @@ export async function POST(istek: Request) {
   }
 
   if (sonuc.durum === "tamam") {
+    // BILDIRIM YAZMA (Faz I). Kuyruk satirlari YANIT ONCESINDE yaziliyor
+    // (tek INSERT), gonderim ise yanittan sonra: satirin var olmasi garanti
+    // olsun ki `after` hic kosmasa bile Faz K'nin cron'u mesaji bulabilsin.
+    //
+    // HATASI YUTULUYOR: randevu ZATEN yazildi ve slot tutuldu. Kuyruga
+    // yazamamak yuzunden 500 donmek, musteriye "olmadi" deyip takvimde
+    // duran bir randevu birakmak olurdu - musteri tekrar dener, bu kez
+    // "saat dolu" alir ve neden oldugunu anlamaz.
+    const bildirimZamani = new Date();
+    try {
+      await db.bildirimKuyrugunaYaz(
+        randevuOlustuKayitlari({
+          randevuId: sonuc.randevu.id,
+          baslangic: sonuc.randevu.baslangic,
+          // Otomatik onay kapaliyken randevu BEKLIYOR basliyor ve musteriye
+          // "onaylandi" demek yanlis olurdu; sablon secimi bu bayraga bakiyor.
+          onayli: sonuc.randevu.durum === "ONAYLI",
+          simdi: bildirimZamani,
+        }),
+      );
+      bildirimleriYanittanSonraGonder(db, sonuc.randevu.id, bildirimZamani);
+    } catch {
+      // Yukaridaki gerekce. Randevu duruyor, bildirim gitmiyor.
+    }
+
     return Response.json(
       {
         randevu: {

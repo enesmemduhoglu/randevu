@@ -127,7 +127,11 @@ Kapı dışı dosyalar; ham `db` ve dış SDK çağrıları **yalnızca** burada
 | `src/lib/zaman.ts` | UTC ↔ işletme saat dilimi dönüşümlerinin tek yeri |
 | `src/lib/slug.ts` | Türkçe metin → ASCII slug. Saf; hem `kayit.ts` hem `dizin.ts` kullanıyor |
 | `src/lib/turnstile.ts`, `hiz-siniri.ts` | Bot ve hız kalkanı |
-| `src/lib/email.ts`, `sms.ts` | `gonder()` — bildirimlerin tek çıkış noktası (Faz I, K) |
+| `src/lib/email.ts` | `gonder()` — e-postanın tek çıkış noktası. SDK değil düz `fetch` |
+| `src/lib/mod.ts` | `sahte`/`gercek` kararı. Üretimde `wrangler.jsonc`, yerelde `.env` |
+| `src/lib/bildirim.ts` | Hangi olayda ne kuyruğa girer, kuyruk nasıl boşalır |
+| `src/lib/bildirim-sablon.ts` | Saf metin üretimi; DB'ye ve ağa dokunmuyor |
+| `src/lib/sms.ts` | `gonder()` — SMS'in tek çıkış noktası (Faz K) |
 | `src/lib/marka.ts` | Renk/tipografi sabitleri; e-posta şablonları buradan okur |
 
 ### workerd'in dayattığı üç kısıt
@@ -265,7 +269,9 @@ hatayı sarmalıyor ve `hata.code` sarmalayıcıda yok.
 1. **`src/app` altında ham `db` yok** → `scoped-db.ts` üzerinden *(ESLint `no-restricted-imports`)*
 2. **Mutasyon route'unda `checkOrigin`** — makine yolları muaf *(`degismezler.test.ts`)*
 3. **Karar değiştiren yollarda koşullu UPDATE** → etkilenen satır 0 ise 409
-4. **E-posta yalnızca `email.ts > gonder()`, SMS yalnızca `sms.ts > gonder()`** *(warden kapısı)*
+4. **E-posta yalnızca `email.ts > gonder()`, SMS yalnızca `sms.ts > gonder()`**
+   *(warden kapısı + `degismezler.test.ts`; depo SDK değil `fetch` kullandığı için kapının
+   aradığı metin hiç oluşmuyor — gerçek zorlama testte)*
 5. **Sırlar log'a ve hata metinlerine girmez**
 6. **`session.isletmeId` düz string kalır**
 7. **Randevu zamanları DB'de `timestamptz` (UTC).** Yerel saate çevirme yalnızca `zaman.ts`
@@ -302,21 +308,10 @@ karar kaydı `TODOS.md`'de.
 | **L** — kalkan | Worker rate limiting; Turnstile'ın üretimde sessizce kapalı olduğu bulundu |
 | **L3** — "gelmedi" kısıtı | Gelmeyen müşteriye randevu kısıtı, işletme ayarlı |
 | **M** — pazaryeri dizini | Dizin şeması, `dizin.ts`, panelde yayına çıkma, `/dizin` |
+| **N** — ön kapı | Ortak üst bar/alt bilgi, müşteri kök sayfası, `/isletmeler-icin` |
+| **I** — bildirim altyapısı | `email.ts`, kuyruk yazma/boşaltma, altı şablon, önizleme ekranı |
 
 ### Sıradakiler
-
-**Faz N — ön kapı** *(kapandı)*
-Paylaşılan genel layout (logo · arama · Randevularım · "İşletme misiniz?"). `/` ters çevrilir:
-arama kutusu + dokuz kategori kutucuğu + Bursa/İstanbul bölümleri. Bugünkü kök sayfa
-içeriği `/isletmeler-icin`'e taşınır ve genişletilir. `layout.tsx` metadata'sı müşteri
-diline geçer.
-**Yapmaz:** SEO iniş sayfaları (Faz O), müşteri hesabı (Faz J).
-
-**Faz I — bildirim altyapısı** *(sıradaki)*
-`email.ts > gonder()`, kuyruğa yazma (oluşturma, iptal, hatırlatma), şablonlar,
-`/panel/gelistirici/bildirimler`. Ön koşul kalktı: Resend doğrulandı, gönderen kimliği
-netleşti. Resend'in `{ data, error }` dönüşü **okunur** — warden kapısının doğrudan çağrıyı
-bloklamasının sebebi tam olarak bu.
 
 **Faz O — keşfedilebilirlik**
 `/dizin/[il]` ve `/dizin/[il]/[kategori]` iniş sayfaları (slug eşlemesi `slug.ts` ile),
