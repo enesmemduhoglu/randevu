@@ -2582,7 +2582,7 @@ kategori için slug eşlemesi, `app/robots.ts`, `app/sitemap.ts`, faceted
 navigation kapısı (`/dizin`in filtre parametreleri için canonical/noindex),
 kart listesinin paylaşılan bileşene çıkarılması.
 
-**509 test** (36 dosya). `npm run tip`, `npm run lint`, `npm test`,
+**515 test** (37 dosya). `npm run tip`, `npm run lint`, `npm test`,
 `npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1693.13 KiB
 gzip** (önceki 1664.74 — +28.4 KiB). **Göç yok.**
 
@@ -2671,6 +2671,50 @@ gzip** (önceki 1664.74 — +28.4 KiB). **Göç yok.**
   sayıyor. Değişken tanımsızken üretilecek en doğru şey üretimde kullanılan
   adres.
 
+### Ortaya çıkan gerçek hata — kurtarılamaz karakter girdi kapısından geçiyordu
+
+Dizinde bir işletme **"agdas Berber"** olarak görünüyordu; adın başındaki
+Ç yerine siyah baklava içinde soru işareti (U+FFFD, REPLACEMENT CHARACTER)
+duruyordu.
+
+**Teşhis:** veritabanındaki kod noktaları tek tek okundu. `randevu_dev`'deki
+dokuz işletmeden yalnızca biri bozuktu; diğerlerinin hepsinde `ş`, `ı`, `ğ`,
+`ö`, `ç` doğru saklanıyordu. **Üretim veritabanı tamamen temiz.** Yani
+uygulamanın yazma yolunda hata yok — o kayıt, kod sayfası UTF-8 olmayan bir
+terminalden geçen bir betikle oluşturulmuş (bu deponun bilinen tuzağı; hafızada
+"Türkçe metni kabuktan geçirme" olarak duruyor).
+
+**Ama kapı açıktı.** `adDogrula`, `metinDogrula` ve `ilceDogrula` U+FFFD taşıyan
+bir değeri kabul ediyordu. Bu karakterin klavyede karşılığı yok ve kimse onu
+bilerek yazmıyor; göründüğü her yerde anlamı tek: metin bir yerde yanlış
+kodlamayla çözülmüş ve **asıl harf geri getirilemeyecek şekilde kaybolmuş**.
+Kaydedildikten sonra düzeltmenin yolu da yok — hangi harf olduğunu artık kimse
+bilmiyor.
+
+Üç kapıya da kontrol eklendi (`girdi.ts > cozulememisKarakterVar`). Kullanıcıya
+"geçersiz ad" değil, ne yapacağını söyleyen bir mesaj dönüyor: bozukluk çoğu
+fontta tek bir küçük işaret ve kullanıcı ekranda doğru görünen bir metne bakıp
+neden reddedildiğini anlamayabilir.
+
+Kontrol **kod noktası karşılaştırmasıyla**, regex ile değil; karakter kaynak
+dosyaya harf olarak da yazılmıyor, `String.fromCodePoint(0xfffd)` ile
+üretiliyor. Aynı gerekçe `kontrolKarakteriVar` için de yazılıydı: kaçış dizileri
+bu depoda birkaç kez araç zincirinde gerçek karaktere dönüşüp kaynağı bozdu — ve
+tam da o bozulmadan şikâyet eden bir testte bedeli daha yüksek olurdu.
+
+Bozuk kayıt yerel veritabanında düzeltildi ("Çağdaş Berber", "Baba oğul
+berber"). **Slug değiştirilmedi** (`agdas-berber`): slug kayıt anında üretiliyor
+ve ad değişince yeniden üretilmiyor — bu bilinçli, çünkü o adres paylaşılmış
+olabilir. Üretimde düzeltilecek bir kayıt yok.
+
+### Yol boyunca temizlenen
+
+`siteKoku()` iki dosyada birden vardı: `bildirim.ts` (Faz I) tanımsız değişkende
+`null` dönüyordu, `site.ts` (Faz O) üretim adresini yedek olarak taşıyor. Aynı
+adı taşıyan iki fonksiyonun farklı davranması, hangisinin çağrıldığını okumadan
+bilmenin imkânsız olması demek. `bildirim.ts` kendi kopyasını bıraktı; yedek
+değer sayesinde "bağlantı hiç konulmasın" dalı da gereksiz kaldı.
+
 ### Bilerek kapsam dışı
 
 - **Kategori-yalnız iniş sayfası yok** (`/dizin/kategori/kuafor` gibi). Ana
@@ -2695,8 +2739,8 @@ gzip** (önceki 1664.74 — +28.4 KiB). **Göç yok.**
 ### Doğrulama
 
 - `npm run tip`, `npm run lint` temiz
-- `npm test` — **509 test geçti** (36 dosya, gerçek Postgres); yeni:
-  `dizin-slug.test.ts` (8), `seo.test.ts` (12)
+- `npm test` — **515 test geçti** (37 dosya, gerçek Postgres); yeni:
+  `dizin-slug.test.ts` (8), `seo.test.ts` (12), `bozuk-karakter.test.ts` (6)
 - `npm run build` başarılı, 40 route (`/robots.txt` statik, `/sitemap.xml`
   dinamik)
 - `cf:kur` + `wrangler deploy --dry-run`: 1693.13 KiB gzip
