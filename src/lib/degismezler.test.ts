@@ -116,6 +116,79 @@ describe("Faz L - kalkanin uretimde acik oldugu", () => {
   });
 });
 
+describe("Faz I - bildirim uretimde gercek modda", () => {
+  // AYNI DERS, IKINCI KEZ. Faz L'de `TURNSTILE_MODU` wrangler.jsonc'de
+  // tanimsiz kaldi ve bot kapisi aylarca sessizce kosulsuz gecirdi. `email.ts`
+  // de yalnizca "gercek" yazan degeri gercek sayiyor: bu satir silinirse
+  // uretimde hicbir mail gitmez ve kuyruk yine "GONDERILDI" der - yani
+  // hatanin hicbir gorunur izi olmaz.
+  test("BILDIRIM_MODU wrangler.jsonc'de gercek", () => {
+    const wrangler = readFileSync(
+      join(process.cwd(), "wrangler.jsonc"),
+      "utf-8",
+    );
+    expect(wrangler).toMatch(/"BILDIRIM_MODU"\s*:\s*"gercek"/);
+  });
+});
+
+describe("DEGISMEZ 4 - e-posta tek kapidan cikiyor", () => {
+  // warden'in PreToolUse kapisi `resend.emails.send` metnini bloklamak icin
+  // yazildi; bu depo SDK yerine duz `fetch` kullaniyor, yani o metin hic
+  // olusmuyor ve kapi bir sey gormuyor. Zorlama bu yuzden burada: Resend'in
+  // ucuna giden cagri YALNIZCA email.ts'te olabilir.
+  function tsDosyalari(dizin: string): string[] {
+    const bulunan: string[] = [];
+    for (const ad of readdirSync(dizin)) {
+      const tam = join(dizin, ad);
+      if (statSync(tam).isDirectory()) bulunan.push(...tsDosyalari(tam));
+      else if (ad.endsWith(".ts") || ad.endsWith(".tsx")) bulunan.push(tam);
+    }
+    return bulunan;
+  }
+
+  const IZINLI = join(process.cwd(), "src", "lib", "email.ts");
+
+  /// BU DOSYANIN KENDISI MUAF. Aradigi metinleri kaciniz gerekmeden yaziyor -
+  /// tam da kurali ifade etmek icin. Muaf olmasaydi test kendi varligindan
+  /// dolayi kirmizi olurdu ve caresi kurali yazmamak olurdu. Ayni gerekce
+  /// asagida dizin.ts taramasinda yorumlarin soyulmasinda da yazili.
+  const KENDISI = join(process.cwd(), "src", "lib", "degismezler.test.ts");
+
+  /// YORUMLAR SOYULUYOR - dizin.ts taramasindaki gerekcenin aynisi. `email.ts`
+  /// kendi basliginda `resend.emails.send`i ADIYLA aniyor, cunku o cagrinin
+  /// neden yasak oldugunu anlatiyor. Ham metin taransaydi test, dogru yazilmis
+  /// bir aciklamayi cezalandirirdi.
+  function kod(yol: string): string {
+    return readFileSync(yol, "utf-8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+  }
+
+  function tarananlar(): string[] {
+    return tsDosyalari(join(process.cwd(), "src")).filter(
+      (yol) => yol !== KENDISI,
+    );
+  }
+
+  test("api.resend.com yalnizca email.ts'te geciyor", () => {
+    const ihlaller = tarananlar().filter(
+      (yol) => yol !== IZINLI && kod(yol).includes("api.resend.com"),
+    );
+
+    expect(ihlaller.map((y) => y.replace(process.cwd(), ""))).toEqual([]);
+  });
+
+  test("SDK bicimindeki dogrudan cagri hicbir yerde yok", () => {
+    // Bir gun `resend` paketi eklenirse kapinin metin arayan hali yine ise
+    // yarasin diye burada da araniyor.
+    const ihlaller = tarananlar().filter((yol) =>
+      kod(yol).includes("resend.emails.send"),
+    );
+
+    expect(ihlaller.map((y) => y.replace(process.cwd(), ""))).toEqual([]);
+  });
+});
+
 describe("DEGISMEZ 12 - dizin kapsamsiz okuyor, karsiligi dar olmasi", () => {
   // `src/lib/dizin.ts` bu deponun tek KIRACI-USTU sorgusu: pazaryeri dizini
   // tanimi geregi butun isletmeleri listeliyor, yani DEGISMEZ 1'in kapsama
