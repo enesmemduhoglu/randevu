@@ -11,6 +11,7 @@
 // yalnizca TEK bir yoldan yaziliyor (panel ayarlari) ve o yol buradan geciyor.
 
 import type { Dogrulama } from "@/lib/girdi";
+import { slugUret } from "@/lib/slug";
 
 /// Turkiye'nin 81 ili, plaka sirasinda.
 ///
@@ -133,3 +134,74 @@ export function ilceDogrula(ham: unknown): Dogrulama<string | null> {
   }
   return { tamam: true, deger: kirpilmis };
 }
+
+// ---- URL slug'lari (Faz O) --------------------------------------------------
+//
+// Inis sayfalari `/dizin/istanbul/kuafor` bicimindeki adreslerde duruyor ve
+// oradaki parcalarin il/kategori degerine geri cevrilmesi gerekiyor.
+//
+// NEDEN YENI BIR TABLO DEGIL, `slugUret`: bu deponun slug uretimi zaten tek
+// yerde (`slug.ts`) ve Turkce harfleri elle esliyor - noktasiz i ve noktali I
+// dahil. Ikinci bir esleme tablosu yazmak, ayni kurali iki yerde tutmak ve bir
+// gun ayrismalarina izin vermek demekti. Karsiligi: `slugUret`in davranisi
+// degisirse buradaki adresler de degisir, yani o fonksiyon artik bir URL
+// sozlesmesi tasiyor. `dizin-girdi.test.ts` bunu sabitliyor.
+//
+// Esleme MODUL YUKLENIRKEN bir kez kuruluyor: her istekte 81 il uzerinden
+// donmek gereksiz, ve carpisma olup olmadigi testte kontrol ediliyor (iki ilin
+// ayni slug'a dusmesi, birinin sayfasini erisilemez kilardi).
+
+const IL_SLUGLARI = new Map<string, Il>(
+  ILLER.map((il) => [slugUret(il), il]),
+);
+
+const KATEGORI_SLUGLARI = new Map<string, Kategori>(
+  KATEGORILER.map((k) => [slugUret(k), k]),
+);
+
+export function ilSlugu(il: Il): string {
+  return slugUret(il);
+}
+
+export function kategoriSlugu(kategori: Kategori): string {
+  return slugUret(kategori);
+}
+
+/// Slug'dan ile. Taninmayan deger `null` - cagiran taraf 404 donuyor.
+///
+/// Neden 404 ve neden "yok say": dizin sorgusunda gecersiz bir il PARAMETRESI
+/// yok sayiliyor (bkz. dizin.ts), cunku orada kullanicinin gordugu sey bir
+/// liste ve bos sayfa ona bir sey anlatmiyor. Burada ise il ADRESIN KENDISI:
+/// `/dizin/istanbull` diye bir sayfa YOK ve arama motoruna "var ama bos" demek,
+/// dizine binlerce anlamsiz URL sokmak olurdu.
+export function slugdanIl(slug: string): Il | null {
+  return IL_SLUGLARI.get(slug) ?? null;
+}
+
+export function slugdanKategori(slug: string): Kategori | null {
+  return KATEGORI_SLUGLARI.get(slug) ?? null;
+}
+
+/// Kategorilerin cogul yazimi - ELLE, dokuz satir.
+///
+/// "İstanbul kuaförleri" demek istiyoruz ama Turkce'de cogul eki unlu uyumuna
+/// gore degisiyor ("kuaförleri" ama "salonları") ve bazi kategoriler duz cogul
+/// almiyor ("Cilt Bakımı" -> "cilt bakımı merkezleri"). Uretmeye calisan bir
+/// fonksiyon dokuz durumdan en az ucunu yanlis yazardi; liste kapali ve dokuz
+/// satirlik oldugu icin elle yazmak hem dogru hem ucuz. Ayni gerekce `bicim.ts`
+/// icindeki ay ve gun adlarinda da yazili.
+///
+/// Il adina EK GELMIYOR: ek kategori kelimesinin sonunda duruyor, yani 81 ilin
+/// hicbiri icin ayri bir yazim gerekmiyor. Faz N'de sehir basliklarinda ayni
+/// tuzaktan bilerek kacinilmisti.
+export const KATEGORI_COGUL: Record<Kategori, string> = {
+  "Kuaför": "kuaförleri",
+  "Berber": "berberleri",
+  "Güzellik Salonu": "güzellik salonları",
+  "Tırnak Stüdyosu": "tırnak stüdyoları",
+  "Cilt Bakımı": "cilt bakımı merkezleri",
+  "Masaj & Spa": "masaj ve spa merkezleri",
+  "Diş Kliniği": "diş klinikleri",
+  "Veteriner": "veteriner klinikleri",
+  "Diğer": "diğer işletmeleri",
+};
