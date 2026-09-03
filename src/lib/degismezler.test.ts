@@ -269,3 +269,86 @@ describe("DEGISMEZ 1 - src/app altinda ham veritabani yok", () => {
     expect(ihlaller.map((y) => y.replace(process.cwd(), ""))).toEqual([]);
   });
 });
+
+describe("DEGISMEZ 1 - musteri kapisi ikinci eksende, yuzeyi dar", () => {
+  // `src/lib/musteri-db.ts` kiraci filtresi YERINE kullanici filtresi enjekte
+  // ediyor (Faz J). Musterinin randevulari cok kiracili, yani `isletmeId`
+  // orada dogru soruyu soramiyor - ama kapinin kendisi kalkmiyor, ekseni
+  // degisiyor.
+  //
+  // Bu testin korudugu sey su: birinin bir gun buraya "isletmeId'yi disaridan
+  // alan" bir metot ya da baska bir tabloya yazan bir yol eklemesi. Ikisi de
+  // sessizce gecerdi - kod derlenir, testler gecer, yalnizca yuzey genisler.
+  const musteriDb = readFileSync(
+    join(process.cwd(), "src", "lib", "musteri-db.ts"),
+    "utf-8",
+  );
+
+  /// YORUMLAR SOYULUYOR - dizin.ts ve email.ts taramalarindaki gerekcenin
+  /// aynisi. Bu dosyanin kendi basligi yasakli seyleri ADIYLA aniyor (neden
+  /// `musteri.not` donmedigini anlatmak icin); ham metin taransaydi test,
+  /// dogru yazilmis bir aciklamayi cezalandirirdi.
+  const kod = musteriDb
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ 	]*\/\/.*$/gm, "");
+
+  test("yalnizca izinli tablolari import ediyor", () => {
+    const eslesme = /import\s*\{([^}]*)\}\s*from\s*["']@\/db\/sema["']/.exec(kod);
+    const importlar = (eslesme?.[1] ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // `musteri` LISTEDE YOK ve olmamali: o tablo isletmenin kendi musteri
+    // kaydi (not, telefon, gelmedi kisiti) ve musteriye gosterilecek hicbir
+    // seyi yok. Bu listeye ekleme yapmak bilincli bir karar olmali.
+    expect(importlar.sort()).toEqual(["hizmet", "isletme", "personel", "randevu"]);
+  });
+
+  test("her sorgu kullanici filtresini tasiyor", () => {
+    // Filtrenin kendisi. `sahip` kapanis degiskeni ve disaridan verilemiyor;
+    // bu satirlarin varligi, listelemenin ve iptalin ikisinin de o degiskene
+    // bagli kaldigini gosteriyor.
+    expect(kod).toContain("eq(randevu.kullaniciId, sahip)");
+  });
+
+  test("kullanici kimligini disaridan alan metot YOK", () => {
+    // Kapinin butun anlami bu. Kimlik yalnizca `getMusteriDb`nin parametresi
+    // olmali; ondan sonraki her metot onu KAPANISTAN okumali. Bir metot
+    // kimligi disaridan alsaydi, bir route yanlis kimligi gecerek baskasinin
+    // randevularini okuyabilirdi - ve bunu hicbir tip hatasi gostermezdi.
+    expect(kod).toContain("export async function getMusteriDb(kullaniciId: string)");
+    expect(kod).toContain("const sahip = kullaniciId;");
+
+    // Kapinin ICINDEKI metotlarin parametre listeleri taraniyor. Kimlige
+    // benzeyen hicbir sey gecmemeli; sema kolonuna yapilan `randevu.kullaniciId`
+    // gibi ERISIMLER bu taramaya girmiyor, cunku yalnizca imzalara bakiliyor.
+    const imzalar = [...kod.matchAll(/^\s*async\s+\w+\(([^)]*)\)/gm)].map(
+      (m) => m[1],
+    );
+    expect(imzalar.length).toBeGreaterThan(0);
+
+    const sizdiran = imzalar.filter((args) =>
+      /kullanici|sahip|isletme/i.test(args),
+    );
+    expect(sizdiran).toEqual([]);
+  });
+
+  test("yalnizca randevu tablosuna ve iki kolona yaziyor", () => {
+    // Baska bir tabloya yazma yolu, kapinin dar yuzeyini sessizce genisletirdi.
+    expect(kod.includes(".insert(")).toBe(false);
+    expect(kod.includes(".delete(")).toBe(false);
+    expect(kod.includes("update(randevu)")).toBe(true);
+    expect(kod.includes("update(isletme)")).toBe(false);
+    expect(kod.includes("update(hizmet)")).toBe(false);
+    expect(kod.includes("update(personel)")).toBe(false);
+  });
+
+  test("hesaba ekleme token'a bagli ve sahipsiz randevuya yaziyor", () => {
+    // Sahiplenmenin TEK kurali: token'i gosteren sahiplenir, ve yalnizca
+    // sahibi olmayan bir randevu sahiplenilebilir. `isNull` kosulu silinirse
+    // bir kullanici, token'ini ele gecirdigi randevuyu baskasindan CALABILIR.
+    expect(kod).toContain("eq(randevu.iptalToken, iptalToken)");
+    expect(kod).toContain("isNull(randevu.kullaniciId)");
+  });
+});

@@ -21,8 +21,19 @@ Yorumlar "ne yaptigini" degil **"neden boyle yaptigini"** anlatir.
 `src/lib/scoped-db.ts` uzerinden gider; o her sorguya oturumun `isletmeId`
 filtresini enjekte eder. Yeni bir sorgu tipi gerekiyorsa route'a ham Drizzle
 yazma, `scoped-db.ts`'e metot ekle. Muaf dosyalar: `src/lib/db.ts`,
-`src/lib/scoped-db.ts`, `src/lib/auth.ts`, `src/lib/kayit.ts`,
-`src/lib/saglik.ts`.
+`src/lib/scoped-db.ts`, `src/lib/musteri-db.ts`, `src/lib/auth.ts`,
+`src/lib/kayit.ts`, `src/lib/saglik.ts`.
+
+> **Ikinci eksen: `src/lib/musteri-db.ts` (Faz J).** Musterinin randevulari
+> tanimi geregi COK KIRACILI - iki ayri salondan randevu almis biri ikisini de
+> tek listede goruyor - yani `isletmeId` filtresi orada dogru soruyu soramiyor.
+> `getMusteriDb` ayni disiplini `kullaniciId` uzerinde tekrarliyor: filtre yine
+> parametre degil KAPANIS DEGISKENI, cagiran taraf veremiyor. DEGISMEZ 12 gibi
+> bir MUAFIYET degil; kapinin kendisi, baska bir eksende.
+>
+> Karsiligi yine yuzeyin dar tutulmasi: yalnizca `randevu` yazilabiliyor ve o
+> da iki kolonda (`durum`, `kullanici_id`), okunan alanlar elle yazili ve
+> kapali, `musteri.not` ile `musteri.telefon` hic donmuyor.
 
 > **Zorlayan: ESLint `no-restricted-imports`** (`eslint.config.mjs`).
 > `src/app/**` icinden `@/lib/db` import etmek hata veriyor. Kapsam route

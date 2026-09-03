@@ -47,8 +47,10 @@ const eslintConfig = defineConfig([
                 "src/app altinda ham veritabani istemcisi kullanilmaz: kiraci " +
                 "filtresi unutulabilir. Kiraciya bagli sorgular icin " +
                 "@/lib/scoped-db > getScopedDb(oturum), oturumsuz halka acik " +
-                "okumalar icin getHalkaAcikDb(slug) kullan. Gereken sorgu " +
-                "yoksa route'a ham sorgu yazma, scoped-db'ye metot ekle.",
+                "okumalar icin getHalkaAcikDb(slug), musterinin kendi " +
+                "randevulari icin @/lib/musteri-db > getMusteriDb(kullaniciId) " +
+                "kullan. Gereken sorgu yoksa route'a ham sorgu yazma, ilgili " +
+                "kapiya metot ekle.",
             },
           ],
         },
