@@ -4,7 +4,8 @@ import { beforeEach, expect, test } from "vitest";
 import { isletme } from "@/db/sema";
 import { tablolariBosalt } from "@/db/test-temizlik";
 import { getDb } from "@/lib/db";
-import { isletmeleriAra, filtreSecenekleri } from "@/lib/dizin";
+import { isletmeleriAra, filtreSecenekleri, SAYFA_BOYUTU } from "@/lib/dizin";
+import { ILLER, VITRIN_ILLERI } from "@/lib/dizin-girdi";
 import { isletmeKaydiOlustur } from "@/lib/kayit";
 import { getScopedDb, type ScopedDb } from "@/lib/scoped-db";
 
@@ -275,4 +276,42 @@ test("filtre secenekleri yalnizca DOLU il ve kategorileri donuyor", async () => 
   expect(kategoriler).toEqual(["Masaj & Spa"]);
   expect(iller).not.toContain("Konya");
   void b;
+});
+
+// ---- Vitrin kirpmasi -------------------------------------------------------
+
+test("enCok kart sayisini kisiyor ama toplam kirpilmis sayiyi DEGIL", async () => {
+  for (const ad of ["Vitrin Bir", "Vitrin Iki", "Vitrin Uc"]) {
+    const k = await tamKurulum(ad, { il: "Bursa" });
+    await k.db.yayindaAyarla(true);
+  }
+
+  const { kartlar, toplam } = await isletmeleriAra({ il: "Bursa", enCok: 2 });
+
+  expect(kartlar).toHaveLength(2);
+  // Toplam kirpilmadan donuyor: ana sayfadaki "N işletmenin tümü" baglantisi
+  // gosterilenden fazlasi olup olmadigini bu sayidan biliyor. Kirpilmis
+  // donseydi baglanti hic gorunmez ve kalan isletmelere gidilemezdi.
+  expect(toplam).toBe(3);
+});
+
+test("enCok sayfa boyutunun USTUNE cikamiyor", async () => {
+  // Cagiran taraf `enCok` ile sayfalama sinirini asamamali; asabilseydi tek
+  // istekte butun dizini cekmek serbest olurdu.
+  const k = await tamKurulum("Tek Salon", { il: "Bursa" });
+  await k.db.yayindaAyarla(true);
+
+  const { kartlar } = await isletmeleriAra({ il: "Bursa", enCok: 10_000 });
+
+  expect(kartlar).toHaveLength(1);
+  expect(kartlar.length).toBeLessThanOrEqual(SAYFA_BOYUTU);
+});
+
+test("vitrin illerinin hepsi gecerli bir il", async () => {
+  // `VITRIN_ILLERI` dizin sorgusuna dogrudan filtre olarak giriyor ve gecersiz
+  // bir deger sessizce YOK SAYILIYOR (dizin.ts karari) - yani yanlis yazilmis
+  // bir sehir, ana sayfada butun dizini o baslik altinda listelerdi.
+  for (const il of VITRIN_ILLERI) {
+    expect(ILLER).toContain(il);
+  }
 });
