@@ -2254,3 +2254,118 @@ Yalnızca ürün kimliği yüzünden değil. Plan üç ayrı yerden bayattı:
 
 Yeni faz sırası: **N** (ön kapı) → **I** (bildirim) → **O** (keşfedilebilirlik) →
 **J** (müşteri hesabı) → **P** (sağlamlaştırma) → **K** (SMS).
+
+---
+
+## Faz N — ön kapı
+
+**Kapandı:** halka açık sayfaların ortak üst barı ve alt bilgisi, kök sayfanın
+müşteriye çevrilmesi (arama + dokuz kategori kutucuğu + şehir bölümleri),
+işletme içeriğinin `/isletmeler-icin`'e taşınması, `/randevularim` yer tutucusu,
+metadata'nın müşteri diline geçmesi.
+
+**459 test** (31 dosya). `npm run tip`, `npm run lint`, `npm test`,
+`npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1635.64 KiB
+gzip** (önceki 1634.49 — +1.15 KiB). **Göç yok.**
+
+### Kararlar
+
+- **`enCok` kısabiliyor ama BÜYÜTEMİYOR.** Şehir bölümü altı kart istiyor; üst
+  sınır yine `SAYFA_BOYUTU`. Olmasaydı `enCok: 10000` yazan bir çağrı sayfalama
+  sınırının etrafından dolaşıp tek istekte bütün dizini çekerdi. `toplam`
+  kırpılmadan dönüyor: "N işletmenin tümü" bağlantısı gösterilenden fazlası olup
+  olmadığını o sayıdan biliyor; kırpılsaydı bağlantı hiç görünmez ve kalan
+  işletmelere gidilemezdi.
+
+- **`VITRIN_ILLERI` kapalı listede ve testle bağlı.** Dizin sorgusu geçersiz bir
+  il değerini **sessizce yok sayıyor** (Faz M kararı) — yani yanlış yazılmış bir
+  şehir, ana sayfada o başlık altında bütün dizini listelerdi. Test her değerin
+  `ILLER`de olduğunu zorluyor.
+
+- **İl adına ek getirilmiyor** ("Bursa — öne çıkan işletmeler"). Türkçede ek ünlü
+  uyumuna göre değişiyor ("Bursa'da" ama "İzmir'de"); listeye yarın eklenen bir
+  il sessizce yanlış yazılırdı. Tire eki gereksiz kılıyor.
+
+- **Kategori kutucukları SABİT listeden, dizin filtresi ise gerçek veriden.**
+  Ters gibi görünüyor ama amaçlar farklı: filtrede amaç bulunan sonucu daraltmak
+  (boş il seçtirmek kullanıcıyı boş sonuca götürür), kutucuklarda kapsamı
+  göstermek. Kategorileri dizin doluluğuna göre gizlemek, ana sayfanın günden
+  güne şekil değiştirmesi olurdu.
+
+- **Boş şehir bölümü çizilmiyor, boş başlık gösterilmiyor.** İki şehrin de kartı
+  yoksa tek bir dürüst boş durum çıkıyor. Sahte kart gösterilmedi: tıklayınca
+  hiçbir yere gitmeyen bir ürün demek olurdu. (Ürün kimliği maddesinde kabul
+  edilen bedel buydu — "dizin dolana kadar ana sayfa boş görünecek".)
+
+- **`UstBar` `/r/[slug]`e KONMADI.** O sayfa işletmenin kendi randevu sayfası ve
+  ziyaretçi oraya Instagram biyografisinden geliyor; üstüne "İşletme misiniz?"
+  koymak, işletmenin müşterisini işletmenin sayfasından geri çağırmak olurdu.
+  Aynı gerekçeyle `/r/[slug]` başlığı `title.absolute` ile şablondan muaf.
+
+- **Üst bardaki arama kutusu kendi arama yüzeyi olan sayfalarda KAPALI**
+  (`arama={false}`: kök sayfa, `/dizin`). Aynı ekranda iki arama alanı,
+  kullanıcının hangisinin ne aradığını bilmemesi demek.
+
+- **Öneri listesi (autocomplete) yok.** Her tuşa basışta sunucuya soran bir kutu
+  hem ana sayfayı istemci bileşenine çevirirdi hem de bugün önerecek bir şey yok.
+  Dizin dolunca değer kazanır.
+
+- **`/randevularim` liste göstermiyor** ve bu bilinçli: liste müşteri hesabı
+  istiyor (Faz J), bugün randevunun kimliğini token taşıyor — sunucunun elinde
+  "bu ziyaretçinin randevuları" diye bir küme yok. Bağlantıyı üst bardan
+  çıkarmak yerine sayfa bugünkü cevabı veriyor; kullanıcı önce o başlığı arıyor.
+
+- **"İşletme misiniz?" mobilde üst barda gizli, alt bilgide açık.** Dar ekranda
+  üst barın işi müşteriyi randevusuna götürmek.
+
+### Ortaya çıkan gerçek hata
+
+**Tailwind'de `hidden` sessizce eziliyordu.** Paylaşılan bağlantı sınıfı
+`inline-flex` içeriyordu ve `` `${BAGLANTI} hidden sm:inline-flex` `` yazıldığında
+Tailwind aynı özelliği yazan iki utility arasında **kaynak sırasına değil
+üretilen CSS sırasına** bakıyor: `hidden` uygulanmıyordu. 390px genişlikte
+ölçüldü — "İşletme misiniz?" mobilde de görünüyor ve barı iki satıra çıkarıyordu.
+Çözüm: display sınıfı paylaşılan dizeden çıkarıldı, her bağlantı kendi yazıyor.
+
+**Tarayıcıdan görüldü, testte değil.** Faz M'deki Türkçe arama hatasıyla aynı
+sınıf: yalnızca gözle bakılınca çıkan bir kusur.
+
+### Bilerek kapsam dışı
+
+- **`robots.txt` / `sitemap.xml` yok** — Faz O'nun kendisi (teknik borç 4).
+- **Sıralama sinyali yok.** Şehir bölümleri de ada göre sıralı; gerçek sıralama
+  (yakınlık, doluluk, puan) hâlâ verilmemiş bir ürün kararı.
+- **Müşteri hesabı yok** (Faz J). `/randevularim` onun yer tutucusu.
+- **Harita, konum ve "yakınımdakiler" yok.** İşletmenin koordinatı şemada yok.
+- **Ana sayfada hız sınırı yok.** `/dizin` ile aynı gerekçe: okuma yolu ucuz ve
+  kart sayısı sabitlenmiş. Faz L'nin `hiz-siniri.ts`'i trafik geldiğinde bağlanır.
+- **Alt bilgi kısa** (hakkımızda/gizlilik/iletişim yok): o sayfalar yazılmadı ve
+  olmayan sayfaya bağlantı vermek kullanıcıyı 404'e götürmek olurdu.
+
+### Doğrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` — **459 test geçti** (31 dosya, gerçek Postgres); `dizin.test.ts`
+  +3 (`enCok` kırpması, üst sınır, vitrin illerinin geçerliliği)
+- `npm run build` başarılı, 36 route (`/isletmeler-icin` ve `/randevularim`
+  statik üretiliyor — ikisi de veritabanına dokunmuyor)
+- **Elle (`next dev`, tohumlanmış `randevu_dev`, tarayıcı eklentisi):**
+  `/`, `/dizin`, `/isletmeler-icin`, `/randevularim` 200; ana sayfada yalnızca
+  İstanbul bölümü çiziliyor (Bursa'da yayında işletme yok — boş bölüm
+  gösterilmiyor); hero'dan `isil` araması `/dizin?arama=isil`e gidip iki kaydı
+  buluyor; **390px genişlik** ve **açık/koyu tema** ikisi de gözle doğrulandı.
+
+### Elle yapılması gerekenler (Faz N)
+
+- [ ] Üretimde `/` artık dizine bakıyor ve prod'da **yayında işletme yok** —
+      yani canlıda boş durum görünecek. Beklenen; demo işletmeyi dizine
+      çıkarmak isteniyorsa panelden "Dizine ekle".
+- [ ] Prod'da `Bursa` bölümü ancak o ilde yayında bir işletme olunca çıkar.
+
+### Not: tasarım zinciri
+
+`/design` çağrıldı; yönlendirme tablosu bu iş için `ui-styling` alt-skill'ine
+gidiyor ve o skill `skillOverrides`'ta **model çağrısına kapalı**. Yerleşim ve
+UX kararları `ui-ux-pro-max` (product/ux alanları) ve deponun kendi
+`docs/tasarim-sistemi.md`'siyle verildi; yeni palet ya da tipografi
+üretilmedi — mevcut token'lar kullanıldı.

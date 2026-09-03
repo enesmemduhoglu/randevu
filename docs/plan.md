@@ -305,14 +305,14 @@ karar kaydı `TODOS.md`'de.
 
 ### Sıradakiler
 
-**Faz N — ön kapı** *(sıradaki)*
+**Faz N — ön kapı** *(kapandı)*
 Paylaşılan genel layout (logo · arama · Randevularım · "İşletme misiniz?"). `/` ters çevrilir:
 arama kutusu + dokuz kategori kutucuğu + Bursa/İstanbul bölümleri. Bugünkü kök sayfa
 içeriği `/isletmeler-icin`'e taşınır ve genişletilir. `layout.tsx` metadata'sı müşteri
 diline geçer.
 **Yapmaz:** SEO iniş sayfaları (Faz O), müşteri hesabı (Faz J).
 
-**Faz I — bildirim altyapısı**
+**Faz I — bildirim altyapısı** *(sıradaki)*
 `email.ts > gonder()`, kuyruğa yazma (oluşturma, iptal, hatırlatma), şablonlar,
 `/panel/gelistirici/bildirimler`. Ön koşul kalktı: Resend doğrulandı, gönderen kimliği
 netleşti. Resend'in `{ data, error }` dönüşü **okunur** — warden kapısının doğrudan çağrıyı
