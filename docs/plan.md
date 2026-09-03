@@ -129,6 +129,7 @@ Kapı dışı dosyalar; ham `db` ve dış SDK çağrıları **yalnızca** burada
 | `src/lib/turnstile.ts`, `hiz-siniri.ts` | Bot ve hız kalkanı |
 | `src/lib/email.ts` | `gonder()` — e-postanın tek çıkış noktası. SDK değil düz `fetch` |
 | `src/lib/mod.ts` | `sahte`/`gercek` kararı. Üretimde `wrangler.jsonc`, yerelde `.env` |
+| `src/lib/site.ts` | Kanonik adres; `robots.ts`, `sitemap.ts` ve `metadataBase` buradan okur |
 | `src/lib/bildirim.ts` | Hangi olayda ne kuyruğa girer, kuyruk nasıl boşalır |
 | `src/lib/bildirim-sablon.ts` | Saf metin üretimi; DB'ye ve ağa dokunmuyor |
 | `src/lib/sms.ts` | `gonder()` — SMS'in tek çıkış noktası (Faz K) |
@@ -310,15 +311,9 @@ karar kaydı `TODOS.md`'de.
 | **M** — pazaryeri dizini | Dizin şeması, `dizin.ts`, panelde yayına çıkma, `/dizin` |
 | **N** — ön kapı | Ortak üst bar/alt bilgi, müşteri kök sayfası, `/isletmeler-icin` |
 | **I** — bildirim altyapısı | `email.ts`, kuyruk yazma/boşaltma, altı şablon, önizleme ekranı |
+| **O** — keşfedilebilirlik | `/dizin/[il]`, `/dizin/[il]/[kategori]`, `robots.ts`, `sitemap.ts`, faceted navigation kapısı |
 
 ### Sıradakiler
-
-**Faz O — keşfedilebilirlik**
-`/dizin/[il]` ve `/dizin/[il]/[kategori]` iniş sayfaları (slug eşlemesi `slug.ts` ile),
-`app/robots.ts`, `app/sitemap.ts`, `/r/<slug>` sayfalarının sitemap'e girmesi.
-**Kritik:** `/dizin`in filtre parametreleri indekslenmemeli — faceted navigation'ın
-ürettiği yinelenen içerik pazaryeri SEO'sunun bir numaralı ölüm sebebi. Canonical
-etiketi ve `robots` kuralı birlikte konur.
 
 **Faz J — müşteri hesabı**
 `/randevularim`, misafir randevusunu telefon/e-posta eşleşmesiyle hesaba bağlama,

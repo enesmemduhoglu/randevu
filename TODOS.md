@@ -2253,8 +2253,8 @@ Yalnızca ürün kimliği yüzünden değil. Plan üç ayrı yerden bayattı:
   `CLAUDE.md`'ye eklendi.
 
 Yeni faz sırası: ~~**N** (ön kapı)~~ → ~~**I** (bildirim)~~ →
-**O** (keşfedilebilirlik) → **J** (müşteri hesabı) → **P** (sağlamlaştırma) →
-**K** (SMS).
+~~**O** (keşfedilebilirlik)~~ → **J** (müşteri hesabı) → **P** (sağlamlaştırma)
+→ **K** (SMS).
 
 ---
 
@@ -2572,3 +2572,190 @@ davranış canlıda da doğrulanmış oldu.
       Salonu) — panele girip ekrana bakmak yeterli.
 - [ ] Üretimde ilk randevudan sonra kuyruğun `GONDERILDI` gösterdiği ve mailin
       gerçekten geldiği doğrulanmalı (Resend panelinden de bakılabilir).
+
+---
+
+## Faz O — keşfedilebilirlik
+
+**Kapandı:** `/dizin/[il]` ve `/dizin/[il]/[kategori]` iniş sayfaları, il ve
+kategori için slug eşlemesi, `app/robots.ts`, `app/sitemap.ts`, faceted
+navigation kapısı (`/dizin`in filtre parametreleri için canonical/noindex),
+kart listesinin paylaşılan bileşene çıkarılması.
+
+**515 test** (37 dosya). `npm run tip`, `npm run lint`, `npm test`,
+`npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1693.13 KiB
+gzip** (önceki 1664.74 — +28.4 KiB). **Göç yok.**
+
+### Kararlar
+
+- **Canonical ile noindex AYNI URL'e KONMUYOR.** Plan "ikisi birlikte konur"
+  diyordu; uygulamada bu yanlış olurdu. Google, `noindex` ile başka bir adresi
+  gösteren `canonical`ı çelişkili sinyal sayıyor ve `noindex`i canonical
+  hedefine taşıyabiliyor — yani asıl iniş sayfasını da dizinden düşürme riski.
+  Bu yüzden her URL'e **biri**:
+  - Filtre gerçek bir iniş sayfasına karşılık geliyorsa (il, ya da il+kategori,
+    arama yok, ilk sayfa) → `canonical` o sayfayı gösteriyor.
+  - Karşılığı olmayan her şey (arama metni, ikinci ve sonraki sayfalar, ilsiz
+    kategori) → `noindex, follow`. Dizine girmiyor ama bağlantılar izleniyor,
+    yani işletme sayfaları yine bulunuyor.
+
+- **`robots.txt` `/dizin`in sorgu parametrelerini ENGELLEMİYOR** ve bu, ilk
+  içgüdünün tersi. Taranması engellenen bir sayfanın `canonical` etiketi de
+  okunamıyor; o zaman motor "bu içeriğin aslı şurada" bilgisini hiç öğrenemez
+  ve biriken değer iniş sayfasına akmaz. Doğru araç sayfanın kendi metadata'sı.
+
+- **`/r/*/randevu/` hem `robots.txt`'te kapalı hem sayfada `noindex`.** İki
+  kapı üst üste bilinçli: robots.txt bir *rica* (uymayan tarayıcı var), meta
+  etiketi ise ancak sayfa *taranırsa* görülüyor. Tek başına ikisi de yetmez ve
+  bu URL tek başına iptal yetkisi taşıyor (DEĞİŞMEZ 5'in dışarı bakan yüzü).
+
+- **Slug eşlemesi ayrı bir tablo değil, `slugUret`.** Depoda slug üretimi zaten
+  tek yerde ve Türkçe harfleri elle eşliyor. İkinci bir tablo yazmak aynı
+  kuralı iki yerde tutmak olurdu. Karşılığı: `slugUret` artık bir **URL
+  sözleşmesi** taşıyor — davranışı değişirse yayındaki adresler değişir.
+  `dizin-slug.test.ts` bunu sabitliyor (81 ilin ve 9 kategorinin slug'ı
+  benzersiz, gidip geri geliyor, dört bilinen adres birebir sabit).
+
+- **Tanınmayan slug 404, "boş liste" değil.** Dizin *sorgusunda* geçersiz il
+  parametresi yok sayılıyor (Faz M kararı) çünkü orada kullanıcının gördüğü şey
+  bir liste. Burada il **adresin kendisi**: `/dizin/istanbull` diye bir sayfa
+  yok ve "var ama boş" demek, arama motoruna sonsuz sayıda anlamsız URL açmak
+  olurdu.
+
+- **Kategori çoğulları ELLE yazıldı** (`KATEGORI_COGUL`, dokuz satır). "İstanbul
+  kuaförleri" istiyoruz ama çoğul eki ünlü uyumuna göre değişiyor ("kuaförleri"
+  ama "salonları") ve bazıları düz çoğul almıyor ("Cilt Bakımı" → "cilt bakımı
+  merkezleri"). Üretmeye çalışan bir fonksiyon dokuz durumdan en az üçünü yanlış
+  yazardı. **Ek il adına gelmiyor**, kategori kelimesine geliyor — yani 81 ilin
+  hiçbiri için ayrı yazım gerekmiyor. Faz N'de şehir başlıklarında aynı tuzaktan
+  kaçınılmıştı; buradaki fark, listenin kapalı ve dokuz satırlık olması.
+
+- **Sitemap BOŞ iniş sayfalarını öne sürmüyor.** 81 il × 9 kategori = 729 adres;
+  yalnızca gerçekten yayında işletmesi olanlar giriyor. Boş sayfaları sitemap'e
+  koymak, arama motoruna "bunlar önemli" deyip içeriği olmayan sayfalara
+  götürmek olurdu. Boş sayfalar erişilebilir kalıyor (il sayfasından bağlantı
+  var), yalnızca öne sürülmüyorlar.
+
+- **`lastModified` işletmenin kendi güncelleme tarihinden.** Uydurma bir "bugün"
+  değeri her taramada her sayfayı değişmiş gösterir ve sinyali tümden
+  değersizleştirirdi.
+
+- **Sitemap sorgusu `isletmeleriAra` değil kendi metodu** (`sitemapKayitlari`).
+  O sayfalama yapıyor (en çok 24 kart), sitemap ise tamamını istiyor. Ayrıca
+  kart alanlarının hiçbiri gerekmiyor: sitemap'e "hakkında" metni ya da fiyat
+  taşımak, sızabilecek yüzeyi bedelsiz genişletmek olurdu. DEĞİŞMEZ 12 korunuyor
+  — yalnızca `isletme` okunuyor, dönen tip elle yazılmış ve kapalı.
+
+- **Ana sayfanın şehir bağlantısı artık iniş sayfasına gidiyor**
+  (`/dizin?il=İstanbul` → `/dizin/istanbul`). İkisi aynı listeyi gösteriyor ama
+  ilki dizine girmiyor; ana sayfadan çıkan bağlantının dizine giren sayfaya
+  işaret etmesi, iç bağlantı değerinin doğru yere akması demek.
+
+- **Kart listesi `DizinListesi` bileşenine çıkarıldı.** Sayfalamanın sınır
+  davranışı (son sayfada "Sonraki" çizilmemesi, filtrenin bağlantılarda
+  taşınması) üç yerde ayrı ayrı doğru tutulması gereken bir şey olurdu. Boş
+  durum dışarıdan geliyor: `/dizin`de iki ayrı boş durum var, iniş sayfasında
+  tek.
+
+- **Kategori adı cümle içinde geçmiyor.** Küçük harfe çevirmek
+  `toLocaleLowerCase("tr")` isterdi ve workerd'in ICU derlemesi tam değil; ham
+  bırakmak da cümle ortasında büyük harf demekti. Kategori zaten başlıkta ve
+  rozetlerde duruyor.
+
+- **`metadataBase` eklendi.** Olmadan Next göreli `canonical` değerlerini
+  localhost'a göre üretiyor — yayında yanlış adresi gösteren bir canonical, hiç
+  olmamasından kötü.
+
+- **`siteKoku()` yedek değer taşıyor.** `robots.txt` ve `sitemap.xml` mutlak
+  adres istiyor; göreli URL protokole aykırı ve motor dosyayı tümden yok
+  sayıyor. Değişken tanımsızken üretilecek en doğru şey üretimde kullanılan
+  adres.
+
+### Ortaya çıkan gerçek hata — kurtarılamaz karakter girdi kapısından geçiyordu
+
+Dizinde bir işletme **"agdas Berber"** olarak görünüyordu; adın başındaki
+Ç yerine siyah baklava içinde soru işareti (U+FFFD, REPLACEMENT CHARACTER)
+duruyordu.
+
+**Teşhis:** veritabanındaki kod noktaları tek tek okundu. `randevu_dev`'deki
+dokuz işletmeden yalnızca biri bozuktu; diğerlerinin hepsinde `ş`, `ı`, `ğ`,
+`ö`, `ç` doğru saklanıyordu. **Üretim veritabanı tamamen temiz.** Yani
+uygulamanın yazma yolunda hata yok — o kayıt, kod sayfası UTF-8 olmayan bir
+terminalden geçen bir betikle oluşturulmuş (bu deponun bilinen tuzağı; hafızada
+"Türkçe metni kabuktan geçirme" olarak duruyor).
+
+**Ama kapı açıktı.** `adDogrula`, `metinDogrula` ve `ilceDogrula` U+FFFD taşıyan
+bir değeri kabul ediyordu. Bu karakterin klavyede karşılığı yok ve kimse onu
+bilerek yazmıyor; göründüğü her yerde anlamı tek: metin bir yerde yanlış
+kodlamayla çözülmüş ve **asıl harf geri getirilemeyecek şekilde kaybolmuş**.
+Kaydedildikten sonra düzeltmenin yolu da yok — hangi harf olduğunu artık kimse
+bilmiyor.
+
+Üç kapıya da kontrol eklendi (`girdi.ts > cozulememisKarakterVar`). Kullanıcıya
+"geçersiz ad" değil, ne yapacağını söyleyen bir mesaj dönüyor: bozukluk çoğu
+fontta tek bir küçük işaret ve kullanıcı ekranda doğru görünen bir metne bakıp
+neden reddedildiğini anlamayabilir.
+
+Kontrol **kod noktası karşılaştırmasıyla**, regex ile değil; karakter kaynak
+dosyaya harf olarak da yazılmıyor, `String.fromCodePoint(0xfffd)` ile
+üretiliyor. Aynı gerekçe `kontrolKarakteriVar` için de yazılıydı: kaçış dizileri
+bu depoda birkaç kez araç zincirinde gerçek karaktere dönüşüp kaynağı bozdu — ve
+tam da o bozulmadan şikâyet eden bir testte bedeli daha yüksek olurdu.
+
+Bozuk kayıt yerel veritabanında düzeltildi ("Çağdaş Berber", "Baba oğul
+berber"). **Slug değiştirilmedi** (`agdas-berber`): slug kayıt anında üretiliyor
+ve ad değişince yeniden üretilmiyor — bu bilinçli, çünkü o adres paylaşılmış
+olabilir. Üretimde düzeltilecek bir kayıt yok.
+
+### Yol boyunca temizlenen
+
+`siteKoku()` iki dosyada birden vardı: `bildirim.ts` (Faz I) tanımsız değişkende
+`null` dönüyordu, `site.ts` (Faz O) üretim adresini yedek olarak taşıyor. Aynı
+adı taşıyan iki fonksiyonun farklı davranması, hangisinin çağrıldığını okumadan
+bilmenin imkânsız olması demek. `bildirim.ts` kendi kopyasını bıraktı; yedek
+değer sayesinde "bağlantı hiç konulmasın" dalı da gereksiz kaldı.
+
+### Bilerek kapsam dışı
+
+- **Kategori-yalnız iniş sayfası yok** (`/dizin/kategori/kuafor` gibi). Ana
+  sayfadaki dokuz kutucuk hâlâ `/dizin?kategori=...`e gidiyor ve o adres
+  `noindex`. Ürün kararı: pazaryeri **yerel** — "kuaför" araması ülke çapında
+  bir liste istemiyor, "istanbul kuaför" istiyor. İl boyutu olmayan bir sayfanın
+  kullanıcıya vaadi de zayıf. İhtiyaç görülürse eklenmesi ucuz.
+- **İlçe kırılımı yok** (`/dizin/istanbul/kadikoy`). İlçe serbest metin ve
+  doğrulanmıyor (Faz M kararı); adres üretmek önce il→ilçe eşlemesini veri
+  olarak tutmayı gerektirir.
+- **Yapılandırılmış veri (JSON-LD) yok.** `LocalBusiness` işaretlemesi sıradaki
+  doğal adım ama açılış/kapanış saatleri, koordinat ve puan alanlarının
+  hiçbirini bugün taşımıyoruz; yarısı boş bir işaretleme koymak yarar
+  sağlamıyor.
+- **Sıralama sinyali hâlâ yok** — iniş sayfaları da ada göre sıralı.
+- **`generateStaticParams` yok**, sayfalar `force-dynamic`. Dizinden yeni çıkmış
+  bir işletmeyi göstermeye devam eden bayat bir liste istemiyoruz; sayfa sayısı
+  da 81 il ile sınırlı, yani önbellekten kazanılacak şey sınırlı.
+- **Sitemap bölünmesi yok.** Üst sınır 5000 kayıt; protokol 50.000'e izin
+  veriyor ama o boyuta gelindiğinde sitemap'i bölmek ayrı bir karar.
+
+### Doğrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` — **515 test geçti** (37 dosya, gerçek Postgres); yeni:
+  `dizin-slug.test.ts` (8), `seo.test.ts` (12), `bozuk-karakter.test.ts` (6)
+- `npm run build` başarılı, 40 route (`/robots.txt` statik, `/sitemap.xml`
+  dinamik)
+- `cf:kur` + `wrangler deploy --dry-run`: 1693.13 KiB gzip
+- **Elle (`next dev`, tohumlanmış `randevu_dev`, tarayıcı eklentisi):**
+  `/dizin/istanbul` ve `/dizin/istanbul/kuafor` 200, `/dizin/atlantis` **404**;
+  `robots.txt` ve `sitemap.xml` mutlak adreslerle üretiliyor; sitemap yalnızca
+  dolu il ve il+kategori kombinasyonlarını taşıyor. Canonical/noindex
+  etiketleri beş ayrı URL'de HTML'den okundu ve beklendiği gibi çıktı.
+  **390px** genişlik (iframe içinde gerçek dar görünüm) ve **koyu tema** gözle
+  doğrulandı; rozetler sarıyor, yatay taşma yok.
+
+### Elle yapılması gerekenler (Faz O)
+
+- [ ] Yayından sonra Google Search Console'a `sitemap.xml` bildirilmeli; aksi
+      halde iniş sayfalarının keşfi tarayıcının kendi hızına kalıyor.
+- [ ] Üretimde `robots.txt` ve `sitemap.xml` bir kez açılıp `Host` satırının ve
+      adreslerin `randevu.enesmemduhoglu.tech` olduğu doğrulanmalı
+      (`NEXT_PUBLIC_SITE_URL` derleme anında gömülüyor).

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
 
 import { TemaSaglayici } from "@/components/tema-saglayici";
+import { siteKoku } from "@/lib/site";
 
 import "./globals.css";
 
@@ -31,6 +32,10 @@ const fraunces = Fraunces({
 // `title.template`: alt sayfalar kendi basligini yaziyor ve marka adi sonuna
 // kendiliginden ekleniyor; `default` ise yalnizca kok sayfa icin.
 export const metadata: Metadata = {
+  // Faz O: goreli `canonical` degerlerinin cozulecegi kok. Olmadan Next
+  // uyari veriyor ve etiketi localhost'a gore uretiyor - yayinda yanlis
+  // adresi gosteren bir canonical, hic olmamasindan kotu.
+  metadataBase: new URL(siteKoku()),
   title: {
     default: "Randevu — kuaför, berber ve güzellik salonu randevusu",
     template: "%s · Randevu",

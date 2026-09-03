@@ -88,6 +88,9 @@ export function adDogrula(
   if (deger.length > enCok) {
     return { tamam: false, hata: `${alan} en fazla ${enCok} karakter olabilir` };
   }
+  if (cozulememisKarakterVar(deger)) {
+    return { tamam: false, hata: cozulememisKarakterHatasi(alan) };
+  }
 
   return { tamam: true, deger };
 }
@@ -218,4 +221,41 @@ export function guvenliYol(ham: unknown): string | null {
   if (kontrolKarakteriVar(ham)) return null;
 
   return ham;
+}
+
+/// U+FFFD = REPLACEMENT CHARACTER: tarayicida siyah baklava icinde soru
+/// isareti olarak cizilen karakter.
+///
+/// NEDEN REDDEDILIYOR: klavyede karsiligi yok ve kimse onu bilerek yazmiyor.
+/// Gorundugu her yerde anlami tek: metin bir yerde YANLIS KODLAMAYLA cozulmus
+/// ve asil harf geri getirilemeyecek sekilde kaybolmus. Yani "gecerli ama
+/// tuhaf" bir girdi degil, kaybolmus bir harfin mezar tasi.
+///
+/// Neden yazma anindan once: kaydedildikten SONRA duzeltmenin yolu yok, cunku
+/// hangi harf oldugunu artik kimse bilmiyor. Isletme adinda bir kez yer
+/// ettiginde dizinde, e-posta konusunda ve randevu sayfasinin basliginda da
+/// gorunuyor.
+///
+/// Faz O'da yerel veritabaninda gercek bir ornegi bulundu: "Cagdas Berber"
+/// diye kurulmus bir isletmenin adindaki C-cedilla kaybolmus, yerine bu
+/// karakter yazilmisti. UYGULAMA KODUNDA HATA YOKTU - kayit, kod sayfasi
+/// UTF-8 olmayan bir terminalden gecen bir betikle olusturulmustu. Uretimde
+/// ayni bozukluk yok, ama kapinin acik oldugu goruldu.
+///
+/// KOD NOKTASI KARSILASTIRMASI, regex degil: ayni gerekce bu dosyada
+/// `kontrolKarakteriVar` icin de yazili - kacis dizileri bu depoda birkac kez
+/// arac zincirinde gercek (gorunmez) karaktere donusup kaynagi bozdu.
+const COZULEMEMIS_KARAKTER = 0xfffd;
+
+export function cozulememisKarakterVar(metin: string): boolean {
+  for (const harf of metin) {
+    if (harf.codePointAt(0) === COZULEMEMIS_KARAKTER) return true;
+  }
+  return false;
+}
+
+/// Kullaniciya donen ortak metin. Tek yerde duruyor ki uc ayri kapida uc ayri
+/// cumle olusmasin.
+export function cozulememisKarakterHatasi(alan: string): string {
+  return `${alan} okunamayan bir karakter içeriyor. Türkçe harfler bozulmuş olabilir; alanı silip yeniden yazın.`;
 }

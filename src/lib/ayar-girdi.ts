@@ -1,7 +1,13 @@
 // Isletme ayarlarinin dogrulama kurallari.
 
 import { ilDogrula, ilceDogrula, kategoriDogrula } from "@/lib/dizin-girdi";
-import { adDogrula, tamsayiDogrula, type Dogrulama } from "@/lib/girdi";
+import {
+  adDogrula,
+  cozulememisKarakterHatasi,
+  cozulememisKarakterVar,
+  tamsayiDogrula,
+  type Dogrulama,
+} from "@/lib/girdi";
 
 /// Desteklenen saat dilimleri.
 ///
@@ -167,6 +173,11 @@ function metinDogrula(
   const deger = ham.trim();
   if (deger.length > enCok) {
     return { tamam: false, hata: `${alan} en fazla ${enCok} karakter olabilir` };
+  }
+  // Adres ve "hakkinda" da dizinde ve randevu sayfasinda gorunuyor; kapinin
+  // yalnizca ad alaninda durmasi, bozuklugu bir alan oteye tasirdi.
+  if (cozulememisKarakterVar(deger)) {
+    return { tamam: false, hata: cozulememisKarakterHatasi(alan) };
   }
 
   return { tamam: true, deger: deger || null };

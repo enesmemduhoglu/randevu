@@ -116,10 +116,49 @@ export async function turnstileDogrula(
     cozulen !== null &&
     (cozulen as { success?: unknown }).success === true;
 
-  // `error-codes` OKUNMUYOR ve donmuyor. Kullaniciya "invalid-input-secret"
-  // demek ise yaramaz, log'a yazmak ise yapilandirmamizi sizdirir; ikisi de
-  // "jeton tutmadi" bilgisinden fazlasini vermiyor.
-  return basarili ? { gecti: true } : { gecti: false, sebep: "gecersiz" };
+  if (basarili) return { gecti: true };
+
+  // `error-codes` ARTIK OKUNUYOR ve sunucu log'una yaziliyor.
+  //
+  // Onceki hali okumuyordu ve gerekcesi "yapilandirmayi sizdirmayalim"di. O
+  // gerekce yanlisti: bu kodlar Cloudflare'in BELGELEDIGI kapali bir liste
+  // (`invalid-input-secret`, `timeout-or-duplicate`, ...) ve hicbiri sir
+  // tasimiyor - DEGISMEZ 5'in konusu token, anahtar ve baglanti dizesi.
+  //
+  // Bedeli olculdu: uretimde widget "Basarili" derken sunucu 403 donuyordu ve
+  // sebebini ogrenmenin HICBIR yolu yoktu. Kullaniciya hala tek bir genel
+  // mesaj gidiyor; kod yalnizca `wrangler tail` ile gorunuyor.
+  //
+  // Bilinmeyen bir deger OLDUGU GIBI yazilmiyor: liste disi bir dize gelirse
+  // "taninmayan" olarak geciyor, boylece saglayici bir gun govdeye baska bir
+  // sey koyarsa log ona acik bir kanal olmuyor.
+  console.warn("turnstile dogrulamadi:", bilinenKodlar(cozulen).join(","));
+
+  return { gecti: false, sebep: "gecersiz" };
+}
+
+/// Cloudflare'in belgeledigi hata kodlari. Kapali liste: yanittaki taninmayan
+/// bir deger log'a GECMIYOR.
+const BILINEN_KODLAR = new Set([
+  "missing-input-secret",
+  "invalid-input-secret",
+  "missing-input-response",
+  "invalid-input-response",
+  "bad-request",
+  "timeout-or-duplicate",
+  "internal-error",
+  "invalid-widget-id",
+  "invalid-parsed-secret",
+]);
+
+function bilinenKodlar(cozulen: unknown): string[] {
+  const ham = (cozulen as { "error-codes"?: unknown })?.["error-codes"];
+  if (!Array.isArray(ham)) return ["kod-yok"];
+
+  const kodlar = ham.map((k) =>
+    typeof k === "string" && BILINEN_KODLAR.has(k) ? k : "taninmayan",
+  );
+  return kodlar.length > 0 ? kodlar : ["kod-yok"];
 }
 
 /// Ziyaretcinin IP'si. Cloudflare her istege `CF-Connecting-IP` koyuyor ve bu

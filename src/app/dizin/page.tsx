@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { DizinFiltresi } from "@/components/dizin/dizin-filtresi";
-import { DizinKarti } from "@/components/dizin/dizin-karti";
+import { DizinListesi } from "@/components/dizin/dizin-listesi";
 import { AltBilgi } from "@/components/genel/alt-bilgi";
 import { UstBar } from "@/components/genel/ust-bar";
 import {
@@ -12,6 +12,14 @@ import {
   isletmeleriAra,
   SAYFA_BOYUTU,
 } from "@/lib/dizin";
+import {
+  ILLER,
+  KATEGORILER,
+  ilSlugu,
+  kategoriSlugu,
+  type Il,
+  type Kategori,
+} from "@/lib/dizin-girdi";
 
 // Halka acik pazaryeri dizini.
 //
@@ -26,13 +34,6 @@ import {
 // yeni cikmis bir isletmeyi gostermeye devam ederdi.
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  // Kok layout'un "%s · Randevu" sablonu marka adini kendisi ekliyor.
-  title: "İşletme dizini",
-  description:
-    "İl ve kategoriye göre işletme bulun, uygun saati seçin, hesap açmadan randevu alın.",
-};
-
 /// Tek bir parametreyi metne indirger. Next arama parametresini dizi olarak da
 /// verebiliyor (`?il=A&il=B`); ilkini almak, "geçersizse yok say" kuralinin
 /// (bkz. dizin.ts) URL katmanindaki karsiligi.
@@ -41,16 +42,82 @@ function tekDeger(ham: string | string[] | undefined): string {
   return ham ?? "";
 }
 
+/// Kapali listeye karsi dogrulanmis filtreler. `dizin.ts` ayni kontrolu sorgu
+/// icin yapiyor; burada AYRICA gerekiyor cunku canonical adresini uretmek
+/// gecerli bir il/kategori degeri istiyor.
+function filtreleriCoz(arananlar: Record<string, string | string[] | undefined>) {
+  const ilHam = tekDeger(arananlar.il);
+  const kategoriHam = tekDeger(arananlar.kategori);
+
+  return {
+    arama: tekDeger(arananlar.arama).trim(),
+    il: (ILLER as readonly string[]).includes(ilHam) ? (ilHam as Il) : null,
+    kategori: (KATEGORILER as readonly string[]).includes(kategoriHam)
+      ? (kategoriHam as Kategori)
+      : null,
+    sayfa: Math.max(1, Number.parseInt(tekDeger(arananlar.sayfa), 10) || 1),
+  };
+}
+
+// FACETED NAVIGATION KAPISI (Faz O).
+//
+// `/dizin` filtre parametreleriyle sinirsiz sayida URL uretebiliyor
+// (`?il=...&kategori=...&arama=...&sayfa=...`) ve hepsi ayni kartlari farkli
+// siralarda gosteriyor. Bu, pazaryeri SEO'sunun bir numarali olum sebebi:
+// arama motoru ayni icerigi yuzlerce adreste gorur, tarama butcesini orada
+// harcar ve hicbirini guclu bulmaz.
+//
+// IKI ARAC VAR ve HER URL'E YALNIZCA BIRI KONUYOR:
+//
+//   - Filtre gercek bir INIS SAYFASINA karsilik geliyorsa (il, ya da
+//     il+kategori, arama yok, ilk sayfa) -> `canonical` o sayfayi gosteriyor.
+//     Sinyal "bu icerigin asli surada" demek ve biriken deger oraya gidiyor.
+//   - Karsiligi olmayan her sey (arama metni, ikinci ve sonraki sayfalar,
+//     ilsiz kategori) -> `noindex, follow`. Dizine girmiyor ama baglantilar
+//     izleniyor, yani isletme sayfalari yine bulunuyor.
+//
+// IKISI BIRDEN KONMUYOR. `noindex` ile baska bir adresi gosteren `canonical`
+// celiskili sinyal: motorlar `noindex`i canonical hedefine tasiyabiliyor, yani
+// asil sayfayi da dizinden dusurme riski var.
+export async function generateMetadata(
+  props: PageProps<"/dizin">,
+): Promise<Metadata> {
+  const { arama, il, kategori, sayfa } = filtreleriCoz(await props.searchParams);
+
+  const temel = {
+    // Kok layout'un "%s · Randevu" sablonu marka adini kendisi ekliyor.
+    title: "İşletme dizini",
+    description:
+      "İl ve kategoriye göre işletme bulun, uygun saati seçin, hesap açmadan randevu alın.",
+  };
+
+  // Filtresiz dizin kendi kendisinin aslidir.
+  if (!arama && !il && !kategori && sayfa === 1) {
+    return { ...temel, alternates: { canonical: "/dizin" } };
+  }
+
+  // Inis sayfasi karsiligi olan filtreler.
+  if (!arama && il && sayfa === 1) {
+    const hedef = kategori
+      ? `/dizin/${ilSlugu(il)}/${kategoriSlugu(kategori)}`
+      : `/dizin/${ilSlugu(il)}`;
+    return { ...temel, alternates: { canonical: hedef } };
+  }
+
+  return { ...temel, robots: { index: false, follow: true } };
+}
+
 export default async function DizinSayfasi(props: PageProps<"/dizin">) {
   const arananlar = await props.searchParams;
-
-  const arama = tekDeger(arananlar.arama).trim();
-  const il = tekDeger(arananlar.il);
-  const kategori = tekDeger(arananlar.kategori);
-  const sayfa = Math.max(1, Number.parseInt(tekDeger(arananlar.sayfa), 10) || 1);
+  const { arama, il, kategori, sayfa } = filtreleriCoz(arananlar);
 
   const [{ kartlar, toplam }, secenekler] = await Promise.all([
-    isletmeleriAra({ arama, il, kategori, sayfa }),
+    isletmeleriAra({
+      arama,
+      il: il ?? undefined,
+      kategori: kategori ?? undefined,
+      sayfa,
+    }),
     filtreSecenekleri(),
   ]);
 
@@ -93,115 +160,67 @@ export default async function DizinSayfasi(props: PageProps<"/dizin">) {
         </div>
 
         <DizinFiltresi
-          secili={{ arama, il, kategori }}
+          secili={{ arama, il: il ?? "", kategori: kategori ?? "" }}
           secenekler={secenekler}
         />
 
-        {kartlar.length > 0 ? (
-          <>
-            {/* Sayim filtreliyken gosteriliyor: filtresiz listede "142 işletme"
-                yazmak kullaniciya hiçbir şey söylemiyor, filtreliyken ise
-                aramanın işe yarayıp yaramadığını söylüyor. */}
-            {filtreliMi ? (
-              <p className="pt-6 text-sm text-muted-foreground" role="status">
-                {toplam} işletme bulundu
-              </p>
-            ) : null}
-
-            <ul className="grid gap-4 pt-6 sm:grid-cols-2 lg:grid-cols-3">
-              {kartlar.map((kart) => (
-                <li key={kart.slug}>
-                  <DizinKarti kart={kart} />
-                </li>
-              ))}
-            </ul>
-
-            {sonSayfa > 1 ? (
-              <nav
-                className="flex items-center justify-between gap-4 pt-8"
-                aria-label="Sayfalar"
-              >
-                {/* Numarali sayfa listesi yerine iki yon: 200 sayfaya kadar
-                    cikabilen bir listede numaralari cizmek mobilde tasar ve
-                    dizinde "17. sayfaya git" diyen bir kullanim yok. */}
-                {sayfa > 1 ? (
+        <DizinListesi
+          kartlar={kartlar}
+          toplam={toplam}
+          sayfa={sayfa}
+          sonSayfa={sonSayfa}
+          sayfaYolu={sayfaYolu}
+          sayimGoster={filtreliMi}
+          bosDurum={
+            // Iki ayri bos durum: aramasi tutmayan kullaniciyla dizinin
+            // gercekten bos oldugu gun ayni cumleyi gormemeli. Ilkinde yapacak
+            // bir sey var (filtreyi temizle), ikincisinde yok - ve olmadigini
+            // soylemek, kullaniciyi olmayan bir sonucu aramaya birakmaktan
+            // durust.
+            <div className="mt-6 flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-16 text-center">
+              {filtreliMi ? (
+                <>
+                  <SearchXIcon
+                    className="size-8 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <div className="space-y-1">
+                    <p className="font-medium">Aramanıza uygun işletme yok</p>
+                    <p className="text-sm text-muted-foreground">
+                      Filtreleri gevşetip yeniden deneyebilirsiniz.
+                    </p>
+                  </div>
                   <Link
-                    href={sayfaYolu(sayfa - 1)}
-                    className="text-sm font-medium underline-offset-4 hover:underline"
-                    rel="prev"
+                    href="/dizin"
+                    className="text-sm font-medium text-primary underline-offset-4 hover:underline"
                   >
-                    ← Önceki
+                    Filtreleri temizle
                   </Link>
-                ) : (
-                  <span />
-                )}
-
-                <span className="text-sm text-muted-foreground">
-                  Sayfa {sayfa} / {sonSayfa}
-                </span>
-
-                {sayfa < sonSayfa ? (
+                </>
+              ) : (
+                <>
+                  <StoreIcon
+                    className="size-8 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <div className="space-y-1">
+                    <p className="font-medium">Dizin henüz boş</p>
+                    <p className="text-sm text-muted-foreground">
+                      Burada listelenen bir işletme yok. İşletmeniz varsa dizine
+                      ekleyebilirsiniz.
+                    </p>
+                  </div>
                   <Link
-                    href={sayfaYolu(sayfa + 1)}
-                    className="text-sm font-medium underline-offset-4 hover:underline"
-                    rel="next"
+                    href="/kayit"
+                    className="text-sm font-medium text-primary underline-offset-4 hover:underline"
                   >
-                    Sonraki →
+                    İşletmenizi ekleyin
                   </Link>
-                ) : (
-                  <span />
-                )}
-              </nav>
-            ) : null}
-          </>
-        ) : (
-          // Iki ayri bos durum: aramasi tutmayan kullaniciyla dizinin gercekten
-          // bos oldugu gun ayni cumleyi gormemeli. Ilkinde yapacak bir sey var
-          // (filtreyi temizle), ikincisinde yok - ve olmadigini soylemek,
-          // kullaniciyi olmayan bir sonucu aramaya birakmaktan durust.
-          <div className="mt-6 flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-16 text-center">
-            {filtreliMi ? (
-              <>
-                <SearchXIcon
-                  className="size-8 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <div className="space-y-1">
-                  <p className="font-medium">Aramanıza uygun işletme yok</p>
-                  <p className="text-sm text-muted-foreground">
-                    Filtreleri gevşetip yeniden deneyebilirsiniz.
-                  </p>
-                </div>
-                <Link
-                  href="/dizin"
-                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  Filtreleri temizle
-                </Link>
-              </>
-            ) : (
-              <>
-                <StoreIcon
-                  className="size-8 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <div className="space-y-1">
-                  <p className="font-medium">Dizin henüz boş</p>
-                  <p className="text-sm text-muted-foreground">
-                    Burada listelenen bir işletme yok. İşletmeniz varsa dizine
-                    ekleyebilirsiniz.
-                  </p>
-                </div>
-                <Link
-                  href="/kayit"
-                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  İşletmenizi ekleyin
-                </Link>
-              </>
-            )}
-          </div>
-        )}
+                </>
+              )}
+            </div>
+          }
+        />
       </main>
 
       <AltBilgi />

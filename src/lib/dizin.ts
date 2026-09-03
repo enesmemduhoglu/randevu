@@ -243,3 +243,45 @@ export async function filtreSecenekleri(): Promise<{
     kategoriler: ayikla(kategoriSatirlari),
   };
 }
+
+/// Sitemap'in ihtiyaci olan TEK okuma: yayindaki isletmelerin adresleri ve
+/// hangi il/kategori kombinasyonlarinin gercekten dolu oldugu.
+///
+/// DEGISMEZ 12 KORUNUYOR: yalnizca `isletme` okunuyor, donen tip elle yazilmis
+/// ve kapali, yazma yok. Kisisel veri tasiyan hicbir kolon yok - slug zaten
+/// halka acik adresin kendisi.
+///
+/// NEDEN `isletmeleriAra` KULLANILMIYOR: o sayfalama yapiyor (en cok 24 kart)
+/// ve sitemap'in TAMAMINI istemesi gerekiyor. Ayrica kart alanlarinin hicbiri
+/// burada gerekmiyor; sitemap'e hakkinda metni ya da fiyat tasimak, sizabilecek
+/// yuzeyi bedelsiz genisletmek olurdu.
+///
+/// UST SINIR VAR. Sitemap protokolu tek dosyada 50.000 URL'e izin veriyor;
+/// biz cok daha erken duruyoruz cunku bu sorgu her sitemap istegi icin kosuyor
+/// ve dizin o boyuta gelirse sitemap'i bolmek ayri bir karar olacak.
+export const SITEMAP_EN_COK = 5000;
+
+export type SitemapKaydi = {
+  slug: string;
+  il: string | null;
+  kategori: string | null;
+  guncelleme: Date;
+};
+
+export async function sitemapKayitlari(): Promise<SitemapKaydi[]> {
+  const db = await getDb();
+
+  const satirlar = await db
+    .select({
+      slug: isletme.slug,
+      il: isletme.il,
+      kategori: isletme.kategori,
+      guncelleme: isletme.guncellemeTarihi,
+    })
+    .from(isletme)
+    .where(and(eq(isletme.aktif, true), eq(isletme.yayinda, true)))
+    .orderBy(asc(isletme.ad))
+    .limit(SITEMAP_EN_COK);
+
+  return satirlar;
+}

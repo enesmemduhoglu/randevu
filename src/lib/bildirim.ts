@@ -17,6 +17,7 @@ import { after } from "next/server";
 import { sablonUret, type SablonKimligi } from "@/lib/bildirim-sablon";
 import { gonder, bildirimModu } from "@/lib/email";
 import type { BekleyenBildirim, YeniBildirim } from "@/lib/scoped-db";
+import { siteKoku } from "@/lib/site";
 
 /// Hatirlatma randevudan KAC SAAT once gidiyor.
 ///
@@ -192,10 +193,9 @@ export async function bildirimleriBosalt(
         baslangic: b.baslangic,
         // Iptal baglantisi YALNIZCA musteriye gidiyor: tek basina iptal
         // yetkisi tasiyor ve isletmenin zaten paneli var.
-        iptalAdresi:
-          isletmeyeMi(b.sablon) || !kok
-            ? null
-            : `${kok}/r/${b.isletmeSlug}/randevu/${b.iptalToken}`,
+        iptalAdresi: isletmeyeMi(b.sablon)
+          ? null
+          : `${kok}/r/${b.isletmeSlug}/randevu/${b.iptalToken}`,
       });
 
       // Onizleme YALNIZCA sahte modda saklaniyor (gerekcesi scoped-db'de).
@@ -233,15 +233,9 @@ export function bildirimleriYanittanSonraGonder(
   after(() => bildirimleriBosalt(kapi, randevuId, simdi));
 }
 
-/// E-postadaki baglantilarin koku. Cagri aninda okunuyor, modul yuklenirken
-/// degil: modul seviyesinde yakalanan bir env degeri Workers'ta ilk istegin
-/// baglaminda donar (ayni gerekce `origin.ts`te de yazili).
-///
-/// Tanimsizsa baglanti HIC KONULMUYOR (`null` doner). Goreli bir adres
-/// e-postada ise yaramaz, uydurulmus bir alan adi ise musteriyi olmayan bir
-/// sayfaya goturur.
-function siteKoku(): string | null {
-  const ham = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!ham) return null;
-  return ham.replace(/\/+$/, "");
-}
+// Baglantilarin koku `site.ts`ten geliyor. Faz I'de bu dosyanin kendi kopyasi
+// vardi ve tanimsiz degiskende `null` donuyordu - o zaman iptal baglantisi hic
+// konmuyordu. Faz O'da `site.ts` uretim adresini yedek olarak tasimaya
+// baslayinca ikinci kopya hem gereksiz hem tehlikeli hale geldi: ayni adi
+// tasiyan iki fonksiyonun farkli davranmasi, hangisinin cagrildigini okumadan
+// bilmenin imkansiz olmasi demek.
