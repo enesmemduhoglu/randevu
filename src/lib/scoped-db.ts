@@ -6,9 +6,23 @@
 // kapanis degiskeni. Yanlis kiracinin verisini istemek icin once bu dosyayi
 // degistirmek gerekiyor - unutmakla olmuyor.
 
-import { and, asc, eq, gt, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import {
+  bildirimKuyrugu,
   calismaSaati,
   hizmet,
   isletme,
@@ -19,6 +33,10 @@ import {
   personelHizmet,
   randevu,
 } from "@/db/sema";
+import {
+  sablonGecerliMi,
+  type SablonKimligi,
+} from "@/lib/bildirim-sablon";
 import { getDb } from "@/lib/db";
 import { cakismaIhlaliMi, pgHata } from "@/lib/pg-hata";
 import { kaynakDurumlar, type RandevuDurumu } from "@/lib/randevu-durum";
@@ -110,6 +128,231 @@ export type RandevuYazma = {
 /// 40P01 = deadlock_detected. Gerekcesi `randevuOlustur`un yaninda.
 const KILITLENME = "40P01";
 
+type Veritabani = Awaited<ReturnType<typeof getDb>>;
+
+/// Kuyruga yazilacak tek bir mesaj. `tur` yok cunku Faz I yalnizca e-posta
+/// yaziyor; SMS satirlarini Faz K ekleyecek ve o zaman burasi genisler.
+export type YeniBildirim = {
+  randevuId: string;
+  sablon: SablonKimligi;
+  /// Ne zaman GONDERILEBILIR. Anlik mesajlarda "simdi", hatirlatmada
+  /// randevudan bir gun once. Gecmis bir deger "hemen gonderilebilir" demek.
+  planlananZaman: Date;
+};
+
+/// Gonderim katmanina donen satir: kuyruk kaydi + sablonun ihtiyac duydugu
+/// randevu verisi tek sorguda. Ayri ayri okunsaydi her mesaj icin bes sorgu
+/// acilirdi ve bu kod `after()` icinde, yanit gonderildikten sonra kosuyor -
+/// oradaki her ek gecikme Worker'in omrunu uzatiyor.
+export type BekleyenBildirim = {
+  id: string;
+  sablon: SablonKimligi;
+  randevuId: string;
+  isletmeSlug: string;
+  iptalToken: string;
+  musteriEposta: string | null;
+  isletmeAd: string;
+  isletmeTelefon: string | null;
+  saatDilimi: string;
+  musteriAd: string;
+  musteriTelefon: string;
+  hizmetAd: string;
+  personelAd: string;
+  baslangic: Date;
+};
+
+/// BILDIRIM KAPISI - iki kapsamli kapida da AYNI kod.
+///
+/// Neden ortak fonksiyon, neden iki yere kopyalanmadi: randevuyu YAZAN yol
+/// oturumsuz (`getHalkaAcikDb`), durumunu DEGISTIREN yol oturumlu
+/// (`getScopedDb`), ama ikisi de ayni kuyruga yaziyor ve ayni satirlari
+/// bosaltiyor. Iki kopya bir gun ayrisirdi - ornegin biri `tur = 'EPOSTA'`
+/// filtresini unuturdu ve Faz K'de eklenecek SMS satirlari e-posta olarak
+/// gonderilmeye calisilirdi.
+///
+/// DEGISMEZ 1 KORUNUYOR: `kiraci` bu fonksiyona parametre olarak geliyor ama
+/// bu dosyanin ICINDEN, iki cagri yerinin de kendi kapanis degiskeninden.
+/// Disari acilan yuzeyde kiraci yine verilemiyor.
+function bildirimKapisi(db: Veritabani, kiraci: string) {
+  return {
+    /// Kuyruga toplu yazar. Bos dizi gecerli girdi: e-postasi olmayan bir
+    /// musteride yazilacak satir kalmayabiliyor.
+    async bildirimKuyrugunaYaz(kayitlar: YeniBildirim[]): Promise<number> {
+      if (kayitlar.length === 0) return 0;
+
+      const yazilan = await db
+        .insert(bildirimKuyrugu)
+        .values(
+          kayitlar.map((k) => ({
+            isletmeId: kiraci,
+            randevuId: k.randevuId,
+            tur: "EPOSTA" as const,
+            sablon: k.sablon,
+            planlananZaman: k.planlananZaman,
+          })),
+        )
+        .returning({ id: bildirimKuyrugu.id });
+
+      return yazilan.length;
+    },
+
+    /// Bir randevunun ZAMANI GELMIS, hala bekleyen e-posta satirlari.
+    ///
+    /// `randevuId`e bagli olmasi bilincli: Faz I'de bosaltma istegin icinden
+    /// (`after`) tetikleniyor ve yalnizca o istegin dokundugu randevuyu
+    /// ilgilendiriyor. Kuyrugun TAMAMINI tarayan sorgu Faz K'nin cron
+    /// yolunda gelecek - orasi kiraci-ustu okuyacagi icin ayri bir tasarim
+    /// karari, bu kapiya ait degil.
+    async gonderilecekBildirimleriGetir(
+      randevuId: string,
+      simdi: Date,
+    ): Promise<BekleyenBildirim[]> {
+      const satirlar = await db
+        .select({
+          id: bildirimKuyrugu.id,
+          sablon: bildirimKuyrugu.sablon,
+          randevuId: bildirimKuyrugu.randevuId,
+          isletmeSlug: isletme.slug,
+          iptalToken: randevu.iptalToken,
+          musteriEposta: musteri.eposta,
+          isletmeAd: isletme.ad,
+          isletmeTelefon: isletme.telefon,
+          saatDilimi: isletme.saatDilimi,
+          musteriAd: musteri.ad,
+          musteriTelefon: musteri.telefon,
+          hizmetAd: hizmet.ad,
+          personelAd: personel.ad,
+          baslangic: randevu.baslangic,
+        })
+        .from(bildirimKuyrugu)
+        .innerJoin(randevu, eq(randevu.id, bildirimKuyrugu.randevuId))
+        .innerJoin(isletme, eq(isletme.id, bildirimKuyrugu.isletmeId))
+        .innerJoin(musteri, eq(musteri.id, randevu.musteriId))
+        .innerJoin(hizmet, eq(hizmet.id, randevu.hizmetId))
+        .innerJoin(personel, eq(personel.id, randevu.personelId))
+        .where(
+          and(
+            eq(bildirimKuyrugu.isletmeId, kiraci),
+            eq(bildirimKuyrugu.randevuId, randevuId),
+            eq(bildirimKuyrugu.durum, "BEKLIYOR"),
+            // Faz K'de kuyruga SMS satirlari da girecek; e-posta bosaltmasi
+            // onlari almamali.
+            eq(bildirimKuyrugu.tur, "EPOSTA"),
+            lte(bildirimKuyrugu.planlananZaman, simdi),
+          ),
+        )
+        .orderBy(asc(bildirimKuyrugu.planlananZaman));
+
+      // `sablon` kolonu duz metin (sema orada bilerek enum kullanmadi).
+      // Taninmayan bir deger COKMEK yerine ELENIYOR: bir gun silinen ya da
+      // yeniden adlandirilan bir sablon, kuyrukta kalan eski satirlar
+      // yuzunden butun bosaltmayi kirmasin.
+      return satirlar.filter(
+        (s): s is BekleyenBildirim => sablonGecerliMi(s.sablon),
+      );
+    },
+
+    /// Mesaji GONDERMEDEN ONCE ustlenir: kosullu UPDATE, `BEKLIYOR` ->
+    /// `GONDERILDI` (DEGISMEZ 3). 0 satir donerse baska bir kosum ayni satiri
+    /// almis demektir ve cagiran taraf gondermeden geciyor.
+    ///
+    /// NEDEN ONCE ISARETLIYORUZ: alternatif "gonder, sonra isaretle" ve o
+    /// sirada iki es zamanli bosaltma (istegin `after`'i ile Faz K'nin cron'u)
+    /// ayni mesaji IKI KEZ gonderebilir. Bedeli bilinsin - isaretledikten
+    /// sonra Worker olurse mesaj gonderilmeden "gonderildi" kalir. Iki riskten
+    /// bunu sectik: musteriye ayni onayi iki kez yollamak, kaybolan bir onay
+    /// mailinden daha gorunur ve daha guven kirici.
+    async bildirimiUstlen(id: string, simdi: Date): Promise<number> {
+      const sonuc = await db
+        .update(bildirimKuyrugu)
+        .set({ durum: "GONDERILDI", gonderimZamani: simdi })
+        .where(
+          and(
+            eq(bildirimKuyrugu.id, id),
+            eq(bildirimKuyrugu.isletmeId, kiraci),
+            eq(bildirimKuyrugu.durum, "BEKLIYOR"),
+          ),
+        )
+        .returning({ id: bildirimKuyrugu.id });
+
+      return sonuc.length;
+    },
+
+    /// Ustlenilmis bir mesaj gonderilemedi. DEGISMEZ 5: `sebep` saglayicinin
+    /// ham yaniti degil, `email.ts`in ozetledigi kisa kod.
+    async bildirimiHataliIsaretle(id: string, sebep: string): Promise<void> {
+      await db
+        .update(bildirimKuyrugu)
+        .set({ durum: "HATA", hataMetni: sebep, gonderimZamani: null })
+        .where(
+          and(
+            eq(bildirimKuyrugu.id, id),
+            eq(bildirimKuyrugu.isletmeId, kiraci),
+          ),
+        );
+    },
+
+    /// Sahte modda gonderilmeyen mesajin gercek HTML'i, panelde gorulebilsin
+    /// diye. GERCEK MODDA YAZILMIYOR: her gonderilmis mesajin HTML'ini
+    /// saklamak kuyruk tablosunu gereksiz sisirirdi ve o mesaj zaten alicinin
+    /// gelen kutusunda.
+    async bildirimOnizlemesiniYaz(id: string, html: string): Promise<void> {
+      await db
+        .update(bildirimKuyrugu)
+        .set({ onizlemeHtml: html })
+        .where(
+          and(
+            eq(bildirimKuyrugu.id, id),
+            eq(bildirimKuyrugu.isletmeId, kiraci),
+          ),
+        );
+    },
+
+    /// Isletmeye giden bildirimlerin adresi.
+    ///
+    /// `kullanici` tablosundan okunuyor, `isletme`den DEGIL: isletmenin ayri
+    /// bir "bildirim adresi" alani yok ve eklemek goc demekti. SAHIP rolu
+    /// seciliyor cunku personelin gelen kutusuna isletmenin butun randevulari
+    /// dusmemeli. Birden fazla sahip varsa EN ESKISI: kayit akisi bugun tek
+    /// sahip yaziyor, yani bu dal pratikte tek satirla karsilasiyor; yine de
+    /// siralama VERILDI ki secim istekten istege degismesin.
+    async sahipEpostasiniGetir(): Promise<string | null> {
+      const [kayit] = await db
+        .select({ eposta: kullanici.eposta })
+        .from(kullanici)
+        .where(and(eq(kullanici.isletmeId, kiraci), eq(kullanici.rol, "SAHIP")))
+        .orderBy(asc(kullanici.olusturmaTarihi))
+        .limit(1);
+
+      return kayit?.eposta ?? null;
+    },
+
+    /// Randevu iptal edildiginde BEKLEYEN satirlari dusurur.
+    ///
+    /// NEDEN SILME, neden "IPTAL" durumu degil: `bildirim_durum` enum'unda
+    /// boyle bir deger yok ve eklemek goc demekti (Faz I'nin goc gerektirmeme
+    /// sozu bilincli - bkz. sema yorumu). Silinen sey zaten hic gonderilmemis
+    /// bir mesaj; gecmis kaydi degil, gelecege verilmis bir soz.
+    ///
+    /// GONDERILMIS satirlara dokunmuyor: musteri o maili aldi, kuyrugun onu
+    /// unutmasi paneldeki izi yok etmek olurdu.
+    async bekleyenBildirimleriDusur(randevuId: string): Promise<number> {
+      const silinen = await db
+        .delete(bildirimKuyrugu)
+        .where(
+          and(
+            eq(bildirimKuyrugu.isletmeId, kiraci),
+            eq(bildirimKuyrugu.randevuId, randevuId),
+            eq(bildirimKuyrugu.durum, "BEKLIYOR"),
+          ),
+        )
+        .returning({ id: bildirimKuyrugu.id });
+
+      return silinen.length;
+    },
+  };
+}
+
 /// Isletme oturumuna bagli, kiraci filtresi enjekte edilmis veri kapisi.
 export async function getScopedDb(oturum: IsletmeOturumu) {
   const db = await getDb();
@@ -142,6 +385,39 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
   };
 
   return {
+    // Kuyruga yazma ve bosaltma metotlari (Faz I). Iki kapida da AYNI kod -
+    // gerekcesi bildirimKapisi'nin basinda.
+    ...bildirimKapisi(db, kiraci),
+
+    /// Panelin gelistirici ekrani icin: kuyrugun SON satirlari.
+    ///
+    /// Yalnizca burada, halka acik kapida YOK: kuyrugu okumak isletmenin
+    /// musteri adlarini ve telefonlarini gormek demek, oysa oteki kapi
+    /// oturumsuz.
+    async bildirimleriListele(enCok: number) {
+      return db
+        .select({
+          id: bildirimKuyrugu.id,
+          tur: bildirimKuyrugu.tur,
+          sablon: bildirimKuyrugu.sablon,
+          durum: bildirimKuyrugu.durum,
+          planlananZaman: bildirimKuyrugu.planlananZaman,
+          gonderimZamani: bildirimKuyrugu.gonderimZamani,
+          hataMetni: bildirimKuyrugu.hataMetni,
+          onizlemeHtml: bildirimKuyrugu.onizlemeHtml,
+          olusturmaTarihi: bildirimKuyrugu.olusturmaTarihi,
+          randevuId: bildirimKuyrugu.randevuId,
+          musteriAd: musteri.ad,
+          baslangic: randevu.baslangic,
+        })
+        .from(bildirimKuyrugu)
+        .innerJoin(randevu, eq(randevu.id, bildirimKuyrugu.randevuId))
+        .innerJoin(musteri, eq(musteri.id, randevu.musteriId))
+        .where(eq(bildirimKuyrugu.isletmeId, kiraci))
+        .orderBy(desc(bildirimKuyrugu.olusturmaTarihi))
+        .limit(enCok);
+    },
+
     async isletmeyiGetir() {
       const [kayit] = await db
         .select()
@@ -836,6 +1112,10 @@ export async function getHalkaAcikDb(slug: string) {
   return {
     isletme: sahip,
 
+    // Kuyruga yazma ve bosaltma metotlari (Faz I). Panel kapisiyla AYNI kod;
+    // kuyrugu OKUYAN `bildirimleriListele` burada bilerek yok.
+    ...bildirimKapisi(db, kiraci),
+
     async personelleriListele() {
       return db
         .select({ id: personel.id, ad: personel.ad, unvan: personel.unvan })
@@ -1026,7 +1306,12 @@ export async function getHalkaAcikDb(slug: string) {
     /// Randevu SILINMIYOR: isletme iptali gormek istiyor. Slot da bosaliyor,
     /// cunku hem EXCLUDE kisiti hem musaitlik motoru yalnizca BEKLIYOR ve
     /// ONAYLI'yi dolu sayiyor.
-    async randevuIptalEt(token: string) {
+    ///
+    /// SATIR SAYISI DEGIL ID donuyor: cagiran taraf iptal bildirimlerini
+    /// kuyruga yazmak icin randevunun kimligine ihtiyac duyuyor ve onu ikinci
+    /// bir sorguyla okumak, bu arada silinmis bir kayitla yarisa girmek
+    /// demekti. `null` = 0 satir etkilendi.
+    async randevuIptalEt(token: string): Promise<string | null> {
       const sonuc = await db
         .update(randevu)
         .set({ durum: "IPTAL" })
@@ -1039,7 +1324,7 @@ export async function getHalkaAcikDb(slug: string) {
         )
         .returning({ id: randevu.id });
 
-      return sonuc.length;
+      return sonuc[0]?.id ?? null;
     },
 
     /// Saati DOLU sayan randevular.
