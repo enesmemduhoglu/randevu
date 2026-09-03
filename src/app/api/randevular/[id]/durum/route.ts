@@ -1,4 +1,8 @@
 import {
+  bildirimleriYanittanSonraGonder,
+  iptalBildirimleriniPlanla,
+} from "@/lib/bildirim";
+import {
   CIKILAMAZ_ACIKLAMASI,
   hedefDurumDogrula,
   gecisMumkunMu,
@@ -36,7 +40,40 @@ export async function PATCH(
   // Once-oku-sonra-yaz yapsaydik ikisi de kaydi uygun gorup ikisi de basarili
   // donerdi.
   const etkilenen = await kapi.db.randevuDurumunuDegistir(id, hedef.deger);
-  if (etkilenen > 0) return Response.json({ tamam: true });
+  if (etkilenen > 0) {
+    // BILDIRIM KARARIN ARDINDAN (Faz I) ve YALNIZCA iki hedefte:
+    //
+    // ONAYLI - musteri bekliyordu, cevabi hak ediyor.
+    // IPTAL  - musterinin plani degisti; ayrica bekleyen hatirlatma
+    //          dusuruluyor, yoksa iptal edilmis randevu icin "yarinki
+    //          randevunuz" maili giderdi.
+    //
+    // TAMAMLANDI ve GELMEDI'de mesaj YOK: ikisi de randevu saatinden SONRA
+    // isaretleniyor ve isletmenin kendi kaydi. Musteriye "gelmediniz" diyen
+    // bir mail atmak, kisiti zaten uygulanmis birine ikinci kez soylemek
+    // olurdu.
+    const simdi = new Date();
+    try {
+      if (hedef.deger === "IPTAL") {
+        await iptalBildirimleriniPlanla(kapi.db, id, simdi);
+        bildirimleriYanittanSonraGonder(kapi.db, id, simdi);
+      } else if (hedef.deger === "ONAYLI") {
+        await kapi.db.bildirimKuyrugunaYaz([
+          {
+            randevuId: id,
+            sablon: "MUSTERI_RANDEVU_ONAYLANDI",
+            planlananZaman: simdi,
+          },
+        ]);
+        bildirimleriYanittanSonraGonder(kapi.db, id, simdi);
+      }
+    } catch {
+      // Durum ZATEN degisti. Bildirim yazilamadi diye 500 donmek, panelde
+      // dogru gorunen bir karari kullaniciya "olmadi" diye gostermek olurdu.
+    }
+
+    return Response.json({ tamam: true });
+  }
 
   // Buradaki okuma karari DEGISTIRMIYOR, yalnizca 0 satirin iki sebebini
   // ayiriyor: kayit hic yok mu (404), yoksa var ama durumu artik uygun degil

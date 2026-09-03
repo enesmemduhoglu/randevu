@@ -1,3 +1,7 @@
+import {
+  bildirimleriYanittanSonraGonder,
+  iptalBildirimleriniPlanla,
+} from "@/lib/bildirim";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
 import { iptalTokenGecerliMi } from "@/lib/iptal-token";
 import { checkOrigin } from "@/lib/origin";
@@ -74,8 +78,26 @@ export async function POST(istek: Request) {
   // `ONAYLI`) `randevuIptalEt`'in where'inde duruyor, yani ayni linke iki kez
   // basildiginda ikinci istek 0 satir etkiliyor ve kaybediyor. Once-oku-
   // sonra-yaz yapsaydik iki istek de "aktif" gorup ikisi de basarili donerdi.
-  const etkilenen = await db.randevuIptalEt(token);
-  if (etkilenen > 0) {
+  const iptalEdilenId = await db.randevuIptalEt(token);
+  if (iptalEdilenId) {
+    // BILDIRIM KARARIN ARDINDAN (Faz I). Once bekleyen hatirlatma dusuruluyor,
+    // sonra iki iptal mesaji kuyruga giriyor - sirasi ve gerekcesi
+    // `bildirim.ts > iptalBildirimleriniPlanla` icinde.
+    //
+    // HATASI YUTULUYOR: randevu ZATEN iptal edildi. Kuyruga yazamamak
+    // yuzunden 500 donseydi musteri iptalin gerceklestigini ogrenemez ve
+    // ayni linke tekrar basardi - ikinci istek 409 alir, yani bu sefer
+    // "iptal edilemedi" der. Bildirim, kararin kendisinden daha az onemli.
+    const simdi = new Date();
+    try {
+      await iptalBildirimleriniPlanla(db, iptalEdilenId, simdi);
+      bildirimleriYanittanSonraGonder(db, iptalEdilenId, simdi);
+    } catch {
+      // Kuyruk satirlari yazilamadi. Sessiz degil: yazilabilmis olanlari
+      // Faz K'nin cron'u yine bulur, hicbiri yazilamadiysa da iptal karari
+      // dogru ve gorunur.
+    }
+
     return Response.json({ iptal: true }, { headers: ONBELLEKSIZ });
   }
 

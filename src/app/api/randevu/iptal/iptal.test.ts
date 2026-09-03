@@ -7,6 +7,7 @@ import {
   getHalkaAcikDb,
   getScopedDb,
   type IsletmeOturumu,
+  type ScopedDb,
 } from "@/lib/scoped-db";
 import { hataMetni, sahteIstek } from "@/lib/test-istek";
 import { gunBasi, gunEkle, yerelDenUtc } from "@/lib/zaman";
@@ -51,6 +52,9 @@ type Kurulum = {
   slug: string;
   personelId: string;
   hizmetId: string;
+  /// Panel kapisi: bildirim kuyrugunu OKUYAN metot yalnizca orada (halka acik
+  /// kapida bilerek yok - kuyruk musteri adi tasiyor ve o kapi oturumsuz).
+  db: ScopedDb;
 };
 
 async function isletmeKur(isletmeAdi: string): Promise<Kurulum> {
@@ -86,7 +90,12 @@ async function isletmeKur(isletmeAdi: string): Promise<Kurulum> {
     { haftaninGunu: 2, baslangicDk: 540, bitisDk: 1080 },
   ]);
 
-  return { slug: kayit.slug, personelId: personel.id, hizmetId: hizmet.id };
+  return {
+    slug: kayit.slug,
+    personelId: personel.id,
+    hizmetId: hizmet.id,
+    db,
+  };
 }
 
 async function halkaAcik(slug: string) {
@@ -164,6 +173,33 @@ describe("mutlu yol", () => {
     expect(yanit.status).toBe(200);
     expect(await yanit.json()).toEqual({ iptal: true });
     expect(await durumOku(a.slug, TOKEN_A)).toBe("IPTAL");
+  });
+
+  test("iptal bekleyen hatirlatmayi dusuruyor, iptal mesajlarini yaziyor", async () => {
+    // Faz I. Sira onemli: once bekleyenler dusuruluyor, sonra iptal mesajlari
+    // yaziliyor - ters olsaydi az once yazdigimiz mesajlar da silinirdi.
+    // Iptal edilmis randevu icin "yarinki randevunuz" maili gitmesi, urune
+    // duyulan guveni tek basina bitirirdi.
+    const a = await isletmeKur("A Salonu");
+    const randevu = await randevuKur(a, TOKEN_A);
+
+    const halka = await halkaAcik(a.slug);
+    await halka.bildirimKuyrugunaYaz([
+      {
+        randevuId: randevu.id,
+        sablon: "MUSTERI_HATIRLATMA",
+        planlananZaman: new Date(BASLANGIC.getTime() - 60 * 60 * 1000),
+      },
+    ]);
+
+    await POST(istek({ govde: { isletme: a.slug, token: TOKEN_A } }));
+
+    const sablonlar = (await a.db.bildirimleriListele(10)).map((k) => k.sablon);
+    expect(sablonlar).not.toContain("MUSTERI_HATIRLATMA");
+    expect(sablonlar.sort()).toEqual([
+      "ISLETME_RANDEVU_IPTAL",
+      "MUSTERI_RANDEVU_IPTAL",
+    ]);
   });
 
   test("yanit onbelleklenmiyor", async () => {
