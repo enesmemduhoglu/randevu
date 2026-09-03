@@ -8,7 +8,7 @@ import { KategoriKutucuklari } from "@/components/genel/kategori-kutucuklari";
 import { UstBar } from "@/components/genel/ust-bar";
 import { Button } from "@/components/ui/button";
 import { filtreSecenekleri, isletmeleriAra } from "@/lib/dizin";
-import { VITRIN_ILLERI } from "@/lib/dizin-girdi";
+import { VITRIN_ILLERI, ilSlugu } from "@/lib/dizin-girdi";
 
 // Ana sayfa MUSTERIYE konusuyor.
 //
@@ -86,8 +86,14 @@ export default async function KokSayfa() {
                     deyip ayni alti karti tekrar gostermek, kullaniciyi bos yere
                     bir tiklama ettirmek olurdu. */}
                 {sehir.toplam > sehir.kartlar.length ? (
+                  // Faz O: baglanti artik sorgu parametresine degil INIS
+                  // SAYFASINA gidiyor. Ikisi ayni listeyi gosteriyor ama
+                  // `/dizin?il=...` dizine girmiyor (canonical inis sayfasini
+                  // gosteriyor); ana sayfadan cikan baglantinin dizine giren
+                  // sayfaya isaret etmesi, ic baglanti degerinin dogru yere
+                  // akmasi demek.
                   <Link
-                    href={`/dizin?il=${encodeURIComponent(sehir.il)}`}
+                    href={`/dizin/${ilSlugu(sehir.il)}`}
                     className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
                   >
                     {sehir.toplam} işletmenin tümü
