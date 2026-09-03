@@ -30,7 +30,12 @@ const UUID_BICIMI =
 /// bu, ele alinmadigi icin 500'e doner. Oysa bozuk bir id istemcinin hatasi -
 /// dogru cevap 400. Ayrica kotu bicimli id'yi erken elemek, her istegin
 /// veritabanina en az bir sorgu acmasini da onluyor.
-function kimlikDogrula(ham: unknown, alan: string): Dogrulama<string> {
+///
+/// DISA ACIK (Faz J): `/api/randevularim/[id]/iptal` id'yi URL YOLUNDAN
+/// aliyor, yani govdeden gelenden daha da acik bir yuzey - kullanici adres
+/// cubuguna ne yazarsa o geliyor. Regex'i orada tekrar yazmak, iki kopyanin
+/// bir gun ayrisip birinin daha gevsek kalmasi demekti.
+export function kimlikDogrula(ham: unknown, alan: string): Dogrulama<string> {
   if (typeof ham !== "string" || !UUID_BICIMI.test(ham.trim())) {
     return { tamam: false, hata: `${alan} seçilmedi` };
   }
