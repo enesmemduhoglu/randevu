@@ -4,8 +4,8 @@ import Link from "next/link";
 
 import { DizinFiltresi } from "@/components/dizin/dizin-filtresi";
 import { DizinKarti } from "@/components/dizin/dizin-karti";
-import { Logo } from "@/components/marka/logo";
-import { TemaDugmesi } from "@/components/tema-dugmesi";
+import { AltBilgi } from "@/components/genel/alt-bilgi";
+import { UstBar } from "@/components/genel/ust-bar";
 import {
   EN_COK_SAYFA,
   filtreSecenekleri,
@@ -27,7 +27,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "İşletme dizini — Randevu al",
+  // Kok layout'un "%s · Randevu" sablonu marka adini kendisi ekliyor.
+  title: "İşletme dizini",
   description:
     "İl ve kategoriye göre işletme bulun, uygun saati seçin, hesap açmadan randevu alın.",
 };
@@ -76,12 +77,11 @@ export default async function DizinSayfasi(props: PageProps<"/dizin">) {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="flex items-center justify-between px-5 py-4">
-        <Logo />
-        <TemaDugmesi />
-      </header>
+      {/* Sayfanin kendi filtresinde arama alani var; ust bardaki ikinci kutu
+          hangisinin ne aradigi sorusunu doguruyordu. */}
+      <UstBar arama={false} />
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-5 pb-16">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-5 pt-8 pb-16">
         <div className="space-y-2 pb-8">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
             İşletme dizini
@@ -203,6 +203,8 @@ export default async function DizinSayfasi(props: PageProps<"/dizin">) {
           </div>
         )}
       </main>
+
+      <AltBilgi />
     </div>
   );
 }

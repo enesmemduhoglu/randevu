@@ -9,14 +9,23 @@ bu belgedeki hiçbir karar değişmez.
 
 ## Kime konuşuyoruz
 
-**Birincil: işletme sahibi.** Kuaför, berber, güzellik uzmanı, terapist, özel
-ders veren eğitmen. Yazılımcı değil. Paneli günde saatlerce açık tutuyor,
-çoğu zaman müşterisiyle ilgilenirken telefondan bakıyor. Kendi işini bizden
-iyi biliyor.
+İki kitle var ve **hangisinin birincil olduğu ekrana göre değişir.** Faz N'e
+kadar bu bölüm işletme sahibini koşulsuz birinci sayıyordu; ürün kimliği
+kararıyla (`TODOS.md > Ürün kimliği`) ön kapı müşteriye açıldı ve ayrım
+yerini aldı.
 
-**İkincil: randevu alan müşteri.** Bizi tanımıyor, tanımak da istemiyor.
-Telefondan giriyor ve 30 saniyede işini bitirmek istiyor. Onun için biz bir
-ürün değil, o işletmeye ulaşmanın yoluyuz.
+**Halka açık yüzeyde birincil: randevu alan müşteri.** Kök sayfa, `/dizin`,
+`/r/<slug>`. Bizi tanımıyor, tanımak da istemiyor. Telefondan giriyor ve 30
+saniyede işini bitirmek istiyor. Onun için biz bir ürün değil, o işletmeye
+ulaşmanın yoluyuz — ve artık işletmeyi **bulduğu** yer.
+
+**Panelde ve `/isletmeler-icin`de birincil: işletme sahibi.** Kuaför, berber,
+güzellik uzmanı, terapist, özel ders veren eğitmen. Yazılımcı değil. Paneli
+günde saatlerce açık tutuyor, çoğu zaman müşterisiyle ilgilenirken telefondan
+bakıyor. Kendi işini bizden iyi biliyor.
+
+Aşağıdaki ses tonu kuralları **ikisi için de** geçerli; değişen kitle değil,
+hangi ekranda kime seslenildiği.
 
 ## Nasılız
 

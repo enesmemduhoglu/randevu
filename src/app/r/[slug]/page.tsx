@@ -33,7 +33,11 @@ export async function generateMetadata(
   if (!db) return { title: "Randevu sayfası bulunamadı" };
 
   return {
-    title: `${db.isletme.ad} — Randevu al`,
+    // MUTLAK baslik: kok layout'un "%s · Randevu" sablonu buraya UYGULANMIYOR.
+    // Bu baglanti isletmenin kendi sayfasi ve WhatsApp'ta paylasiliyor; sonuna
+    // bizim marka adimizi eklemek hem gereksiz uzun hem de isletmenin sayfasini
+    // bizim sayfamiz gibi gosterirdi.
+    title: { absolute: `${db.isletme.ad} — Randevu al` },
     description: `${db.isletme.ad} için uygun saatleri görün, hesap açmadan randevu alın.`,
   };
 }
