@@ -10,7 +10,11 @@
 // Bedeli: DB gecersiz bir degeri engellemiyor. Kabul edildi, cunku bu alanlar
 // yalnizca TEK bir yoldan yaziliyor (panel ayarlari) ve o yol buradan geciyor.
 
-import type { Dogrulama } from "@/lib/girdi";
+import {
+  cozulememisKarakterHatasi,
+  cozulememisKarakterVar,
+  type Dogrulama,
+} from "@/lib/girdi";
 import { slugUret } from "@/lib/slug";
 
 /// Turkiye'nin 81 ili, plaka sirasinda.
@@ -131,6 +135,11 @@ export function ilceDogrula(ham: unknown): Dogrulama<string | null> {
   if (kirpilmis === "") return { tamam: true, deger: null };
   if (kirpilmis.length > ILCE_EN_COK) {
     return { tamam: false, hata: `İlçe en fazla ${ILCE_EN_COK} karakter olabilir` };
+  }
+  // Ilce serbest metin ve dizin kartinda gorunuyor - "Beikta" diye yazilmis
+  // bir ilce, arayanin bulamayacagi bir kayit demek.
+  if (cozulememisKarakterVar(kirpilmis)) {
+    return { tamam: false, hata: cozulememisKarakterHatasi("İlçe") };
   }
   return { tamam: true, deger: kirpilmis };
 }
