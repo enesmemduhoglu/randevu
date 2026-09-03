@@ -55,6 +55,17 @@ anda gelen ikinci karar boylece kaybeder.
 hatasinda throw etmez, `{ data, error }` doner ve donusu okumayan cagri
 reddedilen gonderimi iz birakmadan yutar. *(warden kapisi bloklar.)*
 
+> **Faz I'de bu kapi da metin arayamaz hale geldi.** `email.ts` SDK degil duz
+> `fetch` kullaniyor - `resend` paketi bundle'a giriyor ve kullanilan yuzey tek
+> bir POST. Yani warden'in aradigi `resend.emails.send` bicimi hic olusmuyor.
+> Gercek zorlama `src/lib/degismezler.test.ts`'te: `api.resend.com` YALNIZCA
+> `email.ts`'te gecebiliyor. Ayni sey Faz B ve Faz E'de de yasandi - kapinin
+> gormedigi kural testle geri geliyor.
+>
+> Kuyruga yazma ve bosaltma `src/lib/bildirim.ts`'te, metin uretimi
+> `src/lib/bildirim-sablon.ts`'te (saf: DB ve ag yok). Kuyruk metotlari
+> `scoped-db.ts`'in ICINDE ve iki kapida da ayni kod.
+
 **5. Sirlar log'a ve hata metinlerine girmez.** Token, anahtar ve baglanti
 dizesi hicbir `console.*` ya da kullaniciya donen hata govdesinde tasinmaz.
 

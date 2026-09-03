@@ -2252,8 +2252,9 @@ Yalnızca ürün kimliği yüzünden değil. Plan üç ayrı yerden bayattı:
   (`degismezler.test.ts:119`, `slug.ts:8`). Test zorluyor, sözleşme bilmiyordu —
   `CLAUDE.md`'ye eklendi.
 
-Yeni faz sırası: **N** (ön kapı) → **I** (bildirim) → **O** (keşfedilebilirlik) →
-**J** (müşteri hesabı) → **P** (sağlamlaştırma) → **K** (SMS).
+Yeni faz sırası: ~~**N** (ön kapı)~~ → ~~**I** (bildirim)~~ →
+**O** (keşfedilebilirlik) → **J** (müşteri hesabı) → **P** (sağlamlaştırma) →
+**K** (SMS).
 
 ---
 
@@ -2369,3 +2370,205 @@ gidiyor ve o skill `skillOverrides`'ta **model çağrısına kapalı**. Yerleşi
 UX kararları `ui-ux-pro-max` (product/ux alanları) ve deponun kendi
 `docs/tasarim-sistemi.md`'siyle verildi; yeni palet ya da tipografi
 üretilmedi — mevcut token'lar kullanıldı.
+
+---
+
+## Faz I — bildirim altyapısı
+
+**Kapandı:** `email.ts > gonder()` adaptörü, `bildirim-sablon.ts` (altı şablon),
+`bildirim.ts` (hangi olayda ne kuyruğa girer, kuyruk nasıl boşalır), kuyruk
+metotlarının `scoped-db.ts`'e eklenmesi, üç route'un bağlanması ve
+`/panel/gelistirici/bildirimler` ekranı.
+
+**489 test** (34 dosya). `npm run tip`, `npm run lint`, `npm test`,
+`npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1664.74 KiB
+gzip** (önceki 1635.64 — +29.1 KiB). **Göç yok** — `bildirim_kuyrugu` tablosu
+Faz E'de tam da bu faz göç istemesin diye kurulmuştu.
+
+### Kararlar
+
+- **Resend SDK'sı EKLENMEDİ, düz `fetch` var.** Kullanılan yüzey tek bir POST
+  ve bu depo sert bir bundle sınırıyla yaşıyor (3 MiB gzip). Yan etkisi:
+  DEĞİŞMEZ 4'ü zorlayan warden kapısı `resend.emails.send` metnini arıyor ve o
+  metin artık hiç oluşmuyor — yani kapı bir şey görmüyor. Gerçek zorlama
+  `degismezler.test.ts`'e taşındı: `api.resend.com` yalnızca `email.ts`'te
+  geçebiliyor. **Aynı hikâyenin üçüncü tekrarı** (Faz B'de Prisma→Drizzle,
+  Faz E'de `panelKapisi`): kapının göremediği kural testle geri geliyor.
+
+- **Anahtar yoksa gönderim SAHTEYE DÜŞMÜYOR.** `BILDIRIM_MODU=gercek` ama
+  `RESEND_API_KEY` yoksa kuyruğa `anahtar-yok` hatası yazılıyor. Sahteye
+  düşseydi üretimde hiçbir mail gitmez ve kuyruk "gönderildi" derdi — Faz L'de
+  Turnstile'ın aylarca sessizce kapalı kalmasıyla birebir aynı hata sınıfı.
+  `wrangler.jsonc > vars` içindeki `"gercek"` de teste bağlandı.
+
+- **Önce üstlen, sonra gönder.** `bildirimiUstlen` koşullu UPDATE ile satırı
+  `BEKLIYOR` → `GONDERILDI` yapıyor; 0 satır dönerse gönderim atlanıyor.
+  Alternatif ("gönder, sonra işaretle") aynı mesajı iki kez gönderebilirdi —
+  Faz K'nin cron'u istek içi boşaltmayla yarışacak. **Bedeli bilinerek
+  seçildi:** işaretledikten sonra Worker ölürse mesaj gönderilmeden
+  "gönderildi" kalır. Müşteriye aynı onayı iki kez yollamak, kaybolan bir onay
+  mailinden daha görünür ve daha güven kırıcı.
+
+- **Gönderim yanıttan SONRA (`after`).** Müşteriyi "randevunuz alındı"
+  ekranına götürmeden önce Resend'in cevabını beklemek, iyi günde yüzlerce ms
+  eklerdi. **Ölçüldü, varsayılmadı:** derlenmiş worker'da (`.open-next/
+  server-functions/default/handler.mjs`) OpenNext'in `provideNextAfterProvider`
+  fonksiyonu `Symbol.for("@next/request-context")`e `waitUntil` bağlıyor — yani
+  `after` workerd'de gerçekten yanıttan sonra koşuyor.
+
+- **Kuyruğa yazma yanıt ÖNCESİNDE, tek INSERT.** Satırın var olması garanti
+  olsun ki `after` hiç koşmasa bile Faz K'nin cron'u mesajı bulabilsin.
+
+- **Kuyruk yazma hatası YUTULUYOR.** Randevu (ya da iptal, ya da onay) zaten
+  yazıldı. Bildirim yüzünden 500 dönmek, müşteriye "olmadı" deyip takvimde
+  duran bir randevu bırakmak olurdu — müşteri tekrar dener, bu kez "saat dolu"
+  alır ve nedenini anlamaz.
+
+- **Konu satırında işletme adı EK ALMIYOR:** "Randevunuz onaylandı — Çağdaş
+  Berber". "Berber'deki randevunuz" istenirdi ama Türkçe'de bu ek ünlü uyumuna
+  göre değişiyor ve adı kullanıcı yazıyor. Faz N'de şehir başlıkları için
+  verilen kararın aynısı; tire eki gereksiz kılıyor.
+
+- **Şablon metni GÖNDERİM ANINDA üretiliyor, kuyrukta saklanmıyor.**
+  Hatırlatma yazılmasıyla gönderilmesi arasında ~24 saat var; metin donmuş
+  olsaydı arada personeli değişen bir randevu için yanlış isim taşıyan bir
+  hatırlatma giderdi. Bunun bedeli: alıcı adresi de kolon olarak tutulmuyor,
+  şablon kimliğinin önekinden (`MUSTERI_` / `ISLETME_`) seçiliyor.
+
+- **Adresi olmayan mesaj sessizce düşürülmüyor, `adres-yok` hatası yazılıyor.**
+  Randevu formunda e-posta zorunlu değil (telefon var, SMS Faz K'de) — yani bu
+  beklenen bir durum. Ama panelde "neden mail gitmedi" sorusunun görünür bir
+  cevabı olmalı.
+
+- **İptalde önce bekleyenler düşürülüyor, sonra iptal mesajları yazılıyor.**
+  Sıra ters olsaydı az önce yazılan mesajlar da silinirdi. Düşürülen şey
+  pratikte hatırlatma: iptal edilmiş randevu için ertesi gün "yarınki
+  randevunuz" maili gitmesi, ürüne duyulan güveni tek başına bitirirdi.
+  **Silme, "IPTAL" durumu değil:** enum'da öyle bir değer yok ve eklemek göç
+  demekti. Silinen şey zaten hiç gönderilmemiş bir mesaj — geçmiş kaydı değil,
+  geleceğe verilmiş bir söz. Gönderilmiş satırlara dokunulmuyor.
+
+- **TAMAMLANDI ve GELMEDI'de mesaj YOK.** İkisi de randevu saatinden sonra
+  işaretleniyor ve işletmenin kendi kaydı. "Gelmediniz" diyen bir mail,
+  kısıtı zaten uygulanmış birine ikinci kez söylemek olurdu.
+
+- **`bildirimleriListele` yalnızca panel kapısında.** Kuyruk müşteri adı ve
+  randevu saati taşıyor; halka açık kapı oturumsuz.
+
+- **Kuyruk metotları iki kapıda da AYNI kod** (`bildirimKapisi` yardımcısı).
+  Randevuyu yazan yol oturumsuz, durumunu değiştiren yol oturumlu, ama ikisi de
+  aynı kuyruğa yazıyor. İki kopya bir gün ayrışırdı — biri `tur = 'EPOSTA'`
+  filtresini unutur ve Faz K'nin SMS satırları e-posta olarak gönderilmeye
+  çalışılırdı.
+
+- **`randevuIptalEt` satır sayısı yerine ID dönüyor.** Çağıran taraf iptal
+  bildirimleri için randevunun kimliğine ihtiyaç duyuyor; ikinci bir sorguyla
+  okumak, bu arada silinmiş bir kayıtla yarışa girmek demekti.
+
+- **Hatırlatma 24 saat önce.** Müşterinin plan değiştirebileceği kadar erken,
+  unutmayacağı kadar geç. Yarından yakın randevuya hatırlatma hiç yazılmıyor:
+  yazılsaydı ilk boşaltmada hemen gönderilir ve müşteri "yarınki randevunuz"
+  mailini randevuyu aldığı dakikada alırdı.
+
+### Ortaya çıkan gerçek hata — üretim değişkenleri `next dev`'e sızıyordu
+
+Faz I'nin bildirim ekranını yerelde denerken çıktı: `/r/<slug>` üzerinden
+randevu alınmaya çalışılınca **"Doğrulama tamamlanamadı. Sayfayı yenileyip
+yeniden deneyin."** dönüyordu.
+
+**Zincir:** `next.config.ts` içindeki `initOpenNextCloudflareForDev()`,
+`next dev` sırasında `getCloudflareContext()`i çalışır kılıyor — amacı yerelde
+Hyperdrive binding'ine ulaşmak. Yan etkisi, `wrangler.jsonc > vars` içindeki
+**üretim değişkenlerinin de yerelde okunması**. Faz L'de oraya
+`TURNSTILE_MODU: "gercek"` yazıldı ve o günden beri `next dev` bot kapısını
+gerçek modda koşturuyordu. Üretim site anahtarı yalnızca
+`randevu.enesmemduhoglu.tech` için kayıtlı olduğundan widget `localhost`'ta
+**Turnstile 110200** (bilinmeyen alan adı) veriyor, jeton hiç üretilmiyor,
+sunucu da jetonsuz isteği 403'e çeviriyordu.
+
+`.env.example` "yerelde sahte" diyordu ama bu **ulaşılamaz bir vaatti**:
+`cfMod ?? process.env.TURNSTILE_MODU` zincirinde cf değeri önce geliyor, yani
+`.env`e ne yazılırsa yazılsın eziliyordu.
+
+**Faz I bunu ikinci kez üretiyordu.** `BILDIRIM_MODU: "gercek"` da aynı yoldan
+`next dev`e sızacaktı: yerel denemeler gerçek modda koşup `anahtar-yok`
+hatasıyla dolacak, anahtar girilseydi de **gerçek adreslere mail gidecekti**.
+Planın "test ve yerel her zaman sahte" sözü tutulmuyordu.
+
+**Çözüm — `src/lib/mod.ts`:** modu seçen kural iki dosyadan çıkarılıp tek yere
+alındı ve ortama bağlandı.
+
+- Üretimde (`NODE_ENV === "production"`) karar Cloudflare değişkeninin, `.env`
+  yedek. Yerel bir dosyanın üretimin kararını ezmesi istenmiyor — "sessizce
+  sahte moda düşmüş üretim" bu deponun iki kez yaşadığı hata.
+- Yerelde ve testte **yalnızca** `.env`. Gelistiricinin makinesinde üretim
+  yapılandırmasının kendiliğinden devreye girmesi, geliştirmeyi engellemekten
+  başka bir şey yapmıyor.
+- Gevşetme yönü tek taraflı: bu dal üretimi hiçbir koşulda gevşetemiyor, çünkü
+  `NODE_ENV` üretim paketinde `next build` tarafından sabitleniyor.
+
+`turnstile-alani.tsx` de aynı kurala bağlandı: widget artık üretim dışında hiç
+çizilmiyor. Sunucu kapısıyla istemci kutusu **aynı anda açılıp kapanmalı** —
+ayrışırlarsa ya müşteri çözemeyeceği bir kutuyla karşılaşır ya da kapı jeton
+bekler ve kutu hiç çizilmez. (Dosyadaki eski yorum "anahtar yoksa çizilmiyor,
+sunucu da aynı koşulda sahte" diyordu; iki yarısı da artık doğru değildi.)
+
+**Neden testler görmedi:** ikisi de `process.env` üzerinden koşuyor ve vitest'te
+Cloudflare bağlamı hiç yok — yani testlerin gördüğü dünyada bu çakışma
+oluşmuyor. Faz M ve Faz N'deki hatalarla aynı sınıf: yalnızca gerçek tarayıcıda
+gerçek ortamda ortaya çıkan bir kusur. `src/lib/mod.test.ts` artık zinciri
+kilitliyor (5 test).
+
+**Tarayıcıdan uçtan uca doğrulandı** (`next dev`, tohumlanmış `randevu_dev`):
+randevu alma → kuyrukta `MUSTERI_RANDEVU_ONAYLANDI` + `ISLETME_YENI_RANDEVU`
+`GONDERILDI`, önizleme HTML'i dolu; iptal → `MUSTERI_RANDEVU_IPTAL` +
+`ISLETME_RANDEVU_IPTAL`. Turnstile hata kutusu yok. Yarınki randevuda
+hatırlatma satırı **yazılmadı** — hatırlatma zamanı geçmişte kalıyor, tasarlanan
+davranış canlıda da doğrulanmış oldu.
+
+### Bilerek kapsam dışı
+
+- **Hatırlatmanın zamanı gelince gönderilmesi.** Kuyruk satırı yazılıyor ama
+  onu boşaltacak zamanlayıcı yok: boşaltma bugün yalnızca o randevuya dokunan
+  bir istekle tetikleniyor. Faz K'nin `workers/hatirlatici/` cron'u bunu
+  bağlayacak — kuyruğun tamamını tarayan sorgu kiracı-üstü olacağı için ayrı
+  bir tasarım kararı ve `dizin.ts` gibi kendi dar yüzeyini isteyecek.
+- **SMS yok** (`sms.ts` yazılmadı) — Faz K.
+- **Yeniden deneme yok.** `HATA` satırı orada kalıyor; kimse tekrar denemiyor.
+  Cron gelince "hatalıyı N kez tekrar dene" kararı verilebilir.
+- **İşletme bildirimi AÇILIP KAPANAMIYOR.** Sahibin gelen kutusuna her randevu
+  düşüyor. Ayar alanı göç demekti ve bugün kaç randevunun geldiği bilinmiyor.
+- **Personele bildirim yok.** Sahip rolü seçiliyor; personelin gelen kutusuna
+  işletmenin bütün randevuları düşmemeli.
+- **Müşterinin göreceği bir "gönderim geçmişi" yok.** Ekran
+  `/panel/gelistirici/*` altında, işletmenin günlük işine ait değil.
+
+### Doğrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` — **489 test geçti** (34 dosya, gerçek Postgres); yeni:
+  `bildirim-sablon.test.ts` (9), `bildirim.test.ts` (11), `mod.test.ts` (5),
+  `degismezler.test.ts` +3, route testlerine +2 (kuyruğa yazıldığı ve iptalde
+  hatırlatmanın düştüğü)
+- `npm run build` başarılı, 37 route
+- `cf:kur` + `wrangler deploy --dry-run`: 1664.74 KiB gzip; `env.BILDIRIM_MODU
+  ("gercek")` binding listesinde görünüyor
+- **Uçtan uca (tarayıcı, `next dev`):** randevu alma ve iptal akışları gerçekten
+  koşturuldu; kuyruğun dört satırı da `GONDERILDI` ve önizleme HTML'leri dolu
+- **Gözle (tarayıcı eklentisi):** altı şablonun gerçek HTML'i tek sayfada
+  işlendi — Türkçe karakterler, tablo yerleşimi, iptal bağlantısının yalnızca
+  müşteri mesajlarında olması, işletme mesajlarında müşteri telefonunun
+  biçimlenmiş hali (`0533 987 65 43`) doğrulandı
+
+### Elle yapılması gerekenler (Faz I)
+
+- [ ] **MERGE ETMEDEN ÖNCE:** `wrangler secret put RESEND_API_KEY`. Merge anı
+      yayın anı; anahtar girilmezse ilk randevudan itibaren her mesaj kuyruğa
+      `anahtar-yok` yazar.
+- [ ] `/panel/gelistirici/bildirimler` ekranı **gözle görülmedi** — panele
+      girmek için giriş yapmak gerekiyor ve şifre girmek asistanın yapabileceği
+      bir şey değil. Sayfa derleniyor, beslediği sorgu testte ve yerel
+      `randevu_dev`de artık altı kuyruk satırı hazır duruyor (Işıl Güzellik
+      Salonu) — panele girip ekrana bakmak yeterli.
+- [ ] Üretimde ilk randevudan sonra kuyruğun `GONDERILDI` gösterdiği ve mailin
+      gerçekten geldiği doğrulanmalı (Resend panelinden de bakılabilir).
