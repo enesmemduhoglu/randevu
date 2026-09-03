@@ -2102,3 +2102,155 @@ gider, geri gitmez; bir yayını geri almak şemayı geri almıyor. Bu yüzden:
 - Sıra artık "önce göç, sonra **merge**" — "sonra yayın" değil. Merge anı yayın
   anı olduğu için aradaki pencere kapandı; göç merge'den önce koşmazsa kolon
   yokken kod canlıya çıkar.
+
+---
+
+## Teknik borç — 3 Eylül 2026
+
+Ürün kimliği tartışması sırasında sayıldı. Hiçbiri acil değil, hiçbiri de
+kendiliğinden geçmiyor. **Faz P**'de toplu halledilecek.
+
+Sağlık taraması aynı gün yapıldı ve şunlar **temiz** çıktı: `src/` içinde 0
+TODO/FIXME/HACK, 0 `@ts-ignore`, 0 `eslint-disable`, 0 `any`. 14.337 satır
+kaynağa karşı 6.535 satır test. Yani aşağıdakiler zanaat sorunu değil, biriken
+kapsam.
+
+### 1. `scoped-db.ts` 1065 satır
+
+DEĞİŞMEZ 1 gereği kiracıya bağlı her sorgu buradan geçiyor — dosyanın büyümesi
+tasarımın sonucu, hatası değil. Ama 1065 satır okunabilirlik sınırını geçti.
+
+**Bölme ekseni tablo değil, KULLANIM olmalı.** Test dosyaları
+(`scoped-db-randevu.test.ts`, `scoped-db-hizmet.test.ts`) bu ayrımı zaten
+yapmış; kaynak onları takip etsin.
+
+> **Bölerken dikkat:** `getScopedDb`'nin kapanış değişkeni (`isletmeId`) tek
+> yerde kalmalı. Her parça kendi bağlantısını kurarsa değişmez zorlanamaz hale
+> gelir — Faz B'de Prisma'dan Drizzle'a geçerken aynı kapı bir kez sessizce
+> kaybolmuştu ve iki faz boyunca yalnızca incelemeye bağlı kaldı. ESLint
+> `no-restricted-imports` muaf listesi ve `degismezler.test.ts` de
+> güncellenmeli.
+
+### 2. `/panel/gelistirici/vitrin` üretimde açık
+
+264 satırlık bileşen vitrini (Faz C'de tasarım doğrulaması için yazıldı) canlıda
+erişilebilir. Sızıntı değil — oturum arkasında ve kiracı verisi göstermiyor —
+ama üretim yüzeyinde geliştirici aracı durmamalı ve bundle'a giriyor.
+
+Karar: **silme, env bayrağıyla kapat.** Vitrin tasarım değişikliğinde hâlâ işe
+yarıyor; yerelde açık, üretimde 404 olsun.
+
+### 3. Uyarı ve hata takibi yok
+
+> **Düzeltme (aynı gün):** bu madde ilk yazıldığında "gözlemlenebilirlik yok"
+> deniyordu. Yanlış — `wrangler.jsonc`'de **`observability.enabled: true` zaten
+> var**, yani Workers Logs açık ve geçmiş Cloudflare panelinden sorgulanabiliyor.
+> Eksik olan log değil, **loga bakan bir şey**.
+
+Üretimde bir hata olsa kimse haberdar olmuyor: log düşüyor ama uyarı çıkmıyor ve
+kimse panele bakmıyor. `/saglik` de bu boşluğu kapatmıyor — L3'te gerçek bir
+şema sorununu **yakalamadığı** görüldü, çünkü yalnızca `select version()`
+koşuyor.
+
+En az gereken: yakalanmamış istisnaların bir kanala düşmesi (hata takibi ya da
+Workers Analytics Engine üstüne bir uyarı), `/saglik`'in şemayı gerçekten
+kontrol etmesi.
+
+> **DEĞİŞMEZ 5 burada kritik.** Hata takibine giden yükte token, anahtar ve
+> bağlantı dizesi olmayacak. Üçüncü parti bir servise gönderiyorsak süzgeç tek
+> bir kapıdan geçmeli — `email.ts > gonder()` deseninin aynısı.
+
+### 4. `robots.txt` ve `sitemap.xml` yok
+
+Faz M'de bilerek ertelendi: *"bugün dizinde üç işletme var, boş bir dizini
+indekslettirmenin faydası yok."* **Ürün yönü pazaryerine döndüğü için bu gerekçe
+artık geçerli değil** — dizinin Google'da bulunması ürünün kendisi.
+
+Gereken: `app/robots.ts` ve `app/sitemap.ts`, `/r/<slug>` sayfalarının sitemap'e
+girmesi, ve `/dizin`'in **filtre parametrelerinin indekslenmemesi** — faceted
+navigation yinelenen içerik üretiyor ve pazaryeri SEO'sunda en sık görülen
+başarısızlık sebebi bu.
+
+---
+
+## Ürün kimliği — 3 Eylül 2026
+
+**Karar: bu bir randevu sitesidir, bir randevu yazılımı değil.** Siteye giren
+kişi randevu almaya gelmiştir. Ana sayfa bir arama yüzeyi olur (Booksy modeli),
+işletme tanıtımı `/isletmeler-icin`'e taşınır.
+
+### Nereden çıktı
+
+Kök sayfa işletmeye konuşuyordu — *"Hizmetlerinizi tanımlayın, çalışma
+saatlerinizi belirleyin"* — ve müşteri yolu sayfanın dibinde tek satır gri
+metindi. Faz M dizini ekledi ama **ön kapıyı çevirmedi**; dizin ürüne bir
+eklenti olarak geldi, ürünün kendisi olarak değil.
+
+Kullanıcının cümlesi: *"kullanıcı bu siteyi sadece birinin instasından görüpte
+kullanmasın. herhangi bir işini halletmek için randevu almak istediğinde bu
+siteye girsin."*
+
+### Araştırmadan gelen üç bulgu
+
+1. **Hepsi arzla başladı.** Booksy tek bir topluluğa (berberler) odaklanıp
+   abonelikli SaaS olarak büyüdü — "bir pazaryeri değil ve randevu başına para
+   almıyor". Fresha işletmelere **bedava yazılım** verip arzı topladı, tüketici
+   pazaryerini sonra ekledi. Sektörün ortak reçetesi: önce arzı tohumla,
+   tek-oyunculu modda çalışan bir ürün yap, coğrafi olarak yoğunlaş.
+2. **Ama "arz-önce" ile "işletme odaklı arayüz" aynı şey değil.** Booksy bugün
+   tamamen tüketici yüzlü. Yani tüketici yüzlü siteyi şimdi kurmakla, büyümeyi
+   tek tek salon kaydederek yapmak çelişmiyor. İtirazım bu noktada düzeldi.
+3. **Türkiye'de tüketici-önce konum boş.** Kolay Randevu, Salon Randevu (URL'i
+   `/isletmeler-icin`), RandevuKur, Hızlıappy, EnRandevu, Kuaförüm Yanımda —
+   hepsi "randevu programı/yazılımı" diyor. Tüketiciye konuşan tek örnek
+   Online Güzellik.
+
+Para modelinde de ortak desen var: Fresha %20, Booksy %30 (opsiyonel Boost),
+Treatwell %35 — hepsi **yalnızca pazaryerinden gelen YENİ müşterinin ilk
+randevusunda**, ve **üçü de dönen müşteriden hiçbir şey almıyor**. Pazaryeri
+keşfi paraya çeviriyor, kullanımı değil.
+
+### Reddedilen alternatif
+
+**Saf SaaS'ta kalmak** (benim ilk önerimdi). Gerekçesi geçerliydi: pazaryeri bir
+özellik değil arz problemi, ve prod'da bugün **2 işletme, 0'ı yayında, 1 randevu
+(bizim testimiz)** var. Boş bir pazaryeri ana sayfası bugünkünden kötüdür.
+
+Reddedildi çünkü bulgu 2 ikisini uzlaştırıyor: ön kapıyı tüketiciye çevirmek,
+büyüme stratejisini değiştirmeyi gerektirmiyor. Kabul edilen bedel: dizin
+dolana kadar ana sayfa boş görünecek. Karşılığı, boş durumun dürüst kurulması
+ve iki şehre odaklanma.
+
+### Verilen kararlar
+
+| Konu | Karar |
+|---|---|
+| Ön kapı | Booksy modeli — arama + kategori kutucukları + şehir bölümleri |
+| Coğrafi kapsam | **Bursa + İstanbul** |
+| Kategori | Faz M'deki **dokuz kategori** yeterli |
+| Para modeli | İşletmeye şimdilik bedava; komisyon dizin müşteri getirince |
+| `/r/<slug>` | **Kalır ve kritiktir** — tek-oyunculu mod, dizinin dolmasının ön koşulu |
+
+### Sonuç: Faz I'nin gönderen kimliği netleşti
+
+Bildirim fazı bilerek bu karardan sonraya bırakıldı, çünkü şablonun kime ait
+olduğu kimliğe bağlıydı. Artık belli: **platform önde**
+(`Randevu <bildirim@randevu.enesmemduhoglu.tech>`), işletme adı konunun içinde.
+Saf SaaS seçilseydi tersi olurdu ve sonradan değiştirmek şablonları, `marka.ts`'i
+ve gönderen adresini birlikte etkilerdi.
+
+### `docs/plan.md` baştan yazıldı
+
+Yalnızca ürün kimliği yüzünden değil. Plan üç ayrı yerden bayattı:
+
+- **Teknoloji:** mimari bölümü, kod örneği, veri modeli ve riskler tablosu
+  **Prisma** anlatıyordu. Faz B'de Drizzle'a geçilmişti; `package.json`'da
+  Prisma yok. Bağlantı da "Direct connection" diyordu, oysa Supavisor session
+  mode kullanılıyor (direct IPv6-only ve erişilemiyor).
+- **Fazlar:** K'de bitiyordu. L, L3 ve M plan dışı kalmıştı.
+- **Değişmezler:** 11 madde vardı, ama kod ve test **DEĞİŞMEZ 12**'yi kullanıyordu
+  (`degismezler.test.ts:119`, `slug.ts:8`). Test zorluyor, sözleşme bilmiyordu —
+  `CLAUDE.md`'ye eklendi.
+
+Yeni faz sırası: **N** (ön kapı) → **I** (bildirim) → **O** (keşfedilebilirlik) →
+**J** (müşteri hesabı) → **P** (sağlamlaştırma) → **K** (SMS).
