@@ -3,6 +3,8 @@
 import Script from "next/script";
 import { useEffect } from "react";
 
+import { uretimMi } from "@/lib/mod";
+
 // Turnstile widget'i. Formun icinde duruyor ve jetonu `cf-turnstile-response`
 // adli gizli bir alana kendisi yaziyor - bu yuzden `FormData` ile okunabiliyor
 // ve ayri bir state'e gerek kalmiyor.
@@ -32,10 +34,18 @@ export function TurnstileAlani({ hata }: { hata: string | null }) {
     if (hata) window.turnstile?.reset();
   }, [hata]);
 
-  // Anahtar tanimsizsa widget HIC cizilmiyor. Yerel gelistirmede ve testte
-  // durum bu; sunucu tarafi da ayni kosulda `sahte` moda dusuyor, yani iki
-  // taraf ayni anda aciliyor ve ayni anda kapaniyor.
-  if (!SITE_ANAHTARI) return null;
+  // WIDGET, SUNUCU KAPISIYLA AYNI ANDA ACILIP KAPANIYOR. Ikisi ayrisirsa
+  // musteri cozemeyecegi bir kutuyla karsilasir ya da tam tersi, kapi jeton
+  // bekler ve kutu hic cizilmez.
+  //
+  // Iki kosul da sart:
+  //   - Anahtar yoksa cizilecek bir sey yok.
+  //   - Uretim disinda cizilmiyor, cunku sunucu tarafi da orada `sahte`
+  //     (bkz. mod.ts). Faz I'de bulundu: `.env`de uretim site anahtari
+  //     varken widget `next dev`de de ciziliyordu ve uretim anahtari
+  //     localhost icin kayitli olmadigindan kirmizi bir Turnstile 110200
+  //     kutusu gosteriyordu.
+  if (!SITE_ANAHTARI || !uretimMi()) return null;
 
   return (
     <div>
