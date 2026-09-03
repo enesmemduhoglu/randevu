@@ -51,6 +51,10 @@ export type DizinFiltresi = {
   il?: string;
   kategori?: string;
   sayfa?: number;
+  /// Kac kart donsun. Ana sayfadaki sehir bolumleri butun sayfayi degil ilk
+  /// birkac isletmeyi gosteriyor. Ust siniri `SAYFA_BOYUTU`; cagiran taraf
+  /// daha buyugunu isteyerek sayfalamayi asamiyor.
+  enCok?: number;
 };
 
 export const SAYFA_BOYUTU = 24;
@@ -85,6 +89,14 @@ export async function isletmeleriAra(filtre: DizinFiltresi): Promise<{
   const sayfa = Math.min(Math.max(1, Math.trunc(filtre.sayfa ?? 1)), EN_COK_SAYFA);
 
   const arama = (filtre.arama ?? "").trim().slice(0, ARAMA_EN_COK);
+
+  // Kart sayisi cagiran tarafca kisilabiliyor ama BUYUTULEMIYOR: ust sinir
+  // yine `SAYFA_BOYUTU`. Aksi halde `enCok: 10000` yazan bir cagri, sayfalama
+  // sinirinin etrafindan dolasip tek istekte butun dizini cekerdi.
+  const limit = Math.min(
+    Math.max(1, Math.trunc(filtre.enCok ?? SAYFA_BOYUTU)),
+    SAYFA_BOYUTU,
+  );
 
   // Il ve kategori KAPALI LISTEYE karsi kontrol ediliyor. Listede olmayan bir
   // deger filtreyi uygulamamak yerine BOS SONUC uretmeli miydi? Hayir: bozuk
@@ -167,7 +179,11 @@ export async function isletmeleriAra(filtre: DizinFiltresi): Promise<{
       // urun karari ve henuz verilmedi; rastgele ya da id sirasi ise ayni
       // sorgunun iki cagrisinda farkli sira uretip sayfalamayi bozardi.
       .orderBy(asc(isletme.ad))
-      .limit(SAYFA_BOYUTU)
+      .limit(limit)
+      // Atlama `limit`e degil `SAYFA_BOYUTU`ya bagli: sayfa numarasinin
+      // anlami kirpilmis bir vitrin cagrisiyla degismemeli, yoksa `/dizin`in
+      // 2. sayfasi ile ana sayfadan gelen bir baglanti farkli kayitlari
+      // gosterirdi. Vitrin zaten yalnizca ilk sayfayi istiyor.
       .offset((sayfa - 1) * SAYFA_BOYUTU),
 
     // Sayim AYRI sorgu ve join'siz: join'li sorguda `count(*)` gruplama

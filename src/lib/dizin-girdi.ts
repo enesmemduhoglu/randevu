@@ -50,6 +50,17 @@ export const KATEGORILER = [
 
 export type Kategori = (typeof KATEGORILER)[number];
 
+/// Ana sayfada kendi bolumu olan iller.
+///
+/// Neden 81 il degil de iki: pazaryeri yerel bir urun, kullanicinin isine
+/// yarayan tek sey kendi sehrindeki isletme. 81 baslikli bir ana sayfa
+/// Turkiye'nin tamamini kapsadigimizi soylerdi - bugun dogru degil. Ikiye
+/// odaklanma karari `TODOS.md > Urun kimligi` maddesinde: arz once bu iki
+/// sehirde toplanacak.
+///
+/// Buyumesi ucuz: listeye bir il eklemek yeter, goc gerekmiyor.
+export const VITRIN_ILLERI = ["Bursa", "İstanbul"] as const satisfies readonly Il[];
+
 /// Turk alfabesindeki harf sirasi. Kucuk ve buyuk harfler ayni sirayi
 /// paylasiyor, yani "İstanbul" ile "istanbul" ayni yere dusuyor.
 const TR_ALFABE = "aAbBcCçÇdDeEfFgGğĞhHıIiİjJkKlLmMnNoOöÖpPrRsSşŞtTuUüÜvVyYzZ";

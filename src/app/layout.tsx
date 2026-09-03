@@ -23,11 +23,21 @@ const fraunces = Fraunces({
   display: "swap",
 });
 
+// Metadata MUSTERIYE konusuyor. Faz N'e kadar isletmeye konusuyordu ("Küçük
+// işletmeler için randevu yönetimi") - yani arama sonucunda gorunen cumle
+// urunu bir yazilim gibi tanitiyordu. Urun kimligi karariyla (TODOS.md > Urun
+// kimligi) burasi da cevrildi: siteye giren kisi randevu almaya geliyor.
+//
+// `title.template`: alt sayfalar kendi basligini yaziyor ve marka adi sonuna
+// kendiliginden ekleniyor; `default` ise yalnizca kok sayfa icin.
 export const metadata: Metadata = {
-  title: "Randevu",
+  title: {
+    default: "Randevu — kuaför, berber ve güzellik salonu randevusu",
+    template: "%s · Randevu",
+  },
   description:
-    "Küçük işletmeler için randevu yönetimi. Hizmetlerinizi tanımlayın, " +
-    "çalışma saatlerinizi belirleyin, randevularınızı tek takvimden yönetin.",
+    "Yakınınızdaki kuaför, berber ve güzellik salonlarını bulun. Uygun saati " +
+    "görün, hesap açmadan randevunuzu alın.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
