@@ -282,6 +282,11 @@ hatayı sarmalıyor ve `hata.code` sarmalayıcıda yok.
 10. **Renk değeri kodda sabit yazılmaz** — semantic token, e-posta `marka.ts`
 11. **Cookie'lerin `Domain` niteliği köke genişletilmez** — oturum yalnızca
     `randevu.enesmemduhoglu.tech` host'una bağlı
+1b. **Müşteri kapısı: `getMusteriDb` aynı disiplini `kullaniciId` üzerinde tekrarlar.**
+    Müşterinin randevuları tanımı gereği çok kiracılı; filtre yine kapanış değişkeni,
+    çağıran veremez. Muafiyet değil, kapının ikinci ekseni *(`degismezler.test.ts`
+    dosya metnini tarıyor)*
+
 12. **Kiracı-üstü okuma yalnızca `dizin.ts`'te ve dar.** Yalnızca `isletme` + `hizmet`;
     hizmet yalnızca toplama; dönen tip elle yazılı ve kapalı; çağıran tablo/kolon adı
     veremez; salt okunur *(`degismezler.test.ts` dosya metnini tarıyor)*
@@ -312,19 +317,19 @@ karar kaydı `TODOS.md`'de.
 | **N** — ön kapı | Ortak üst bar/alt bilgi, müşteri kök sayfası, `/isletmeler-icin` |
 | **I** — bildirim altyapısı | `email.ts`, kuyruk yazma/boşaltma, altı şablon, önizleme ekranı |
 | **O** — keşfedilebilirlik | `/dizin/[il]`, `/dizin/[il]/[kategori]`, `robots.ts`, `sitemap.ts`, faceted navigation kapısı |
+| **J** — müşteri hesabı | `/uye-ol`, gerçek `/randevularim`, `getMusteriDb` (DEĞİŞMEZ 1'in ikinci ekseni), sahipliğe bağlı iptal, bağlantıyla ekleme |
 
 ### Sıradakiler
-
-**Faz J — müşteri hesabı**
-`/randevularim`, misafir randevusunu telefon/e-posta eşleşmesiyle hesaba bağlama,
-`getMusteriDb` kapsamı ve kendi IDOR testleri.
 
 **Faz P — sağlamlaştırma**
 `TODOS.md > Teknik borç` bölümündeki dört madde: `scoped-db.ts` bölünmesi, vitrinin
 üretimde kapatılması, uyarı/hata takibi, `/saglik`'in şemayı gerçekten kontrol etmesi.
 
 **Faz K — SMS ve hatırlatma**
-`sms.ts > gonder()` adaptörü. `workers/hatirlatici/` — ayrı, küçük bir Worker; Cron
+`sms.ts > gonder()` adaptörü. **Faz J'nin bıraktığı iş burada kapanıyor:** telefon
+doğrulanmış bir kimlik olunca misafir randevularını numarayla toplu bağlamak güvenli
+hale geliyor (bugün yalnızca iptal bağlantısıyla tek tek ekleniyor — gerekçe
+`TODOS.md > Faz J`). `workers/hatirlatici/` — ayrı, küçük bir Worker; Cron
 Trigger'la `POST /api/cron/hatirlatma` yolunu paylaşılan sırla çağırır. Ayrı Worker, çünkü
 OpenNext'in ürettiği Worker `fetch` export ediyor; `scheduled` handler'ı oraya iliştirmek
 adaptörün iç yapısına bağımlılık yaratır.
