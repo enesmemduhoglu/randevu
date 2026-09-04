@@ -1,8 +1,10 @@
 import { SearchIcon } from "lucide-react";
 import Link from "next/link";
 
+import { UstBarHesabi } from "@/components/genel/ust-bar-hesabi";
 import { Logo } from "@/components/marka/logo";
 import { TemaDugmesi } from "@/components/tema-dugmesi";
+import { auth } from "@/lib/auth";
 
 // Halka acik sayfalarin ortak ust bari: `/`, `/dizin`, `/isletmeler-icin` ve
 // `/randevularim`.
@@ -12,8 +14,21 @@ import { TemaDugmesi } from "@/components/tema-dugmesi";
 // markamizi ve "Isletme misiniz?" cagrisini koymak, isletmenin musterisini
 // isletmenin sayfasindan geri cagirmak olurdu.
 //
-// Sunucu bileseni: tema dugmesi disinda etkilesimi yok, yani menu icin
-// istemciye JavaScript gitmiyor.
+// OTURUMU YANSITIYOR (Faz J sonrasi). Onceden "Randevularım" herkese
+// gorunuyor, "Giriş yap" ise ALT BILGIDE duruyor ve oturum acikken bile
+// ciziliyordu. Sonucu somut bir hataydi: isletme sahibi "Giriş yap"a basinca
+// `/giris` onu zaten girisli gorup `/panel`e atiyordu - dugme hem yanlis
+// yerdeydi hem yanlis seyi soyluyordu. Oturum acikken "Giriş yap" artik hic
+// cizilmiyor, yani o yonlendirme de olusamiyor.
+//
+// BEDELI ACIKCA: `auth()` cagrisi `cookies()` okuyor, yani bu bileseni
+// kullanan her sayfa DINAMIK oluyor. Pratikte tek kaybimiz
+// `/isletmeler-icin` - digerlerinin hepsi zaten `force-dynamic`. Alternatifi
+// oturumu her sayfadan prop olarak gecirmekti; o da statik kalan sayfada
+// girisli kullaniciya "Giriş yap" gostermeye devam ederdi, yani duzeltilen
+// hatanin ta kendisini bir sayfada birakirdi.
+//
+// Sunucu bileseni: tema dugmesi ve hesap menusu disinda etkilesimi yok.
 
 type Props = {
   /// Ust barda arama kutusu gorunsun mu. Kendi arama yuzeyi olan sayfalarda
@@ -34,7 +49,10 @@ type Props = {
 const BAGLANTI =
   "min-h-11 items-center rounded-lg px-3 text-sm font-medium transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
 
-export function UstBar({ arama = true }: Props) {
+export async function UstBar({ arama = true }: Props) {
+  const oturum = await auth();
+  const isletmeTarafi = oturum !== null && oturum.rol !== "MUSTERI";
+
   return (
     // Yapiskan: dizinde asagi inen kullanici aramaya donmek icin en yukari
     // kaydirmak zorunda kalmamali. Yari saydam zemin + blur, altindan gecen
@@ -76,19 +94,65 @@ export function UstBar({ arama = true }: Props) {
         )}
 
         <nav className="flex items-center gap-1">
-          <Link href="/randevularim" className={`inline-flex ${BAGLANTI}`}>
-            Randevularım
-          </Link>
+          {oturum ? (
+            // GIRISLI. Bardaki tek baglanti kisinin gidecegi yer: musteri
+            // randevularina, isletme paneline. Isletmenin randevu listesi de
+            // erisilebilir kaliyor ama hesap menusunun ICINDE - bar dar ve
+            // isletme sahibinin oradaki isi gunde bir kez, panele girmek.
+            <Link
+              href={isletmeTarafi ? "/panel" : "/randevularim"}
+              className={`inline-flex ${BAGLANTI}`}
+            >
+              {isletmeTarafi ? "Panel" : "Randevularım"}
+            </Link>
+          ) : (
+            // GIRISSIZ. "Randevularım" burada ≥sm'de duruyor: o sayfa girissiz
+            // halde zaten bir uyelik karti, yani yanindaki "Giriş yap" ile
+            // ayni isi yapiyor ve mobilde ikisini birden gostermek bari iki
+            // satira cikariyor (olcum yukarida, BAGLANTI'nin yaninda).
+            <>
+              <Link
+                href="/randevularim"
+                className={`hidden sm:inline-flex ${BAGLANTI}`}
+              >
+                Randevularım
+              </Link>
+              <Link href="/giris" className={`inline-flex ${BAGLANTI}`}>
+                Giriş yap
+              </Link>
+            </>
+          )}
 
-          {/* Mobilde gizli ve bu bir eksiklik degil: ust barin dar ekrandaki
-              isi musteriyi randevusuna goturmek. Isletme sahibi icin ayni
-              baglanti alt bilgide ve ana sayfanin sonunda duruyor. */}
-          <Link
-            href="/isletmeler-icin"
-            className={`hidden sm:inline-flex ${BAGLANTI}`}
-          >
-            İşletme misiniz?
-          </Link>
+          {/* Isletme tarafindaki kisiye GOSTERILMIYOR: zaten isletme. Mobilde
+              gizli ve bu bir eksiklik degil - ust barin dar ekrandaki isi
+              musteriyi randevusuna goturmek. Isletme sahibi icin ayni baglanti
+              alt bilgide ve ana sayfanin sonunda duruyor. */}
+          {isletmeTarafi ? null : (
+            <Link
+              href="/isletmeler-icin"
+              className={`hidden sm:inline-flex ${BAGLANTI}`}
+            >
+              İşletme misiniz?
+            </Link>
+          )}
+
+          {oturum ? (
+            <UstBarHesabi
+              ad={oturum.ad}
+              eposta={oturum.eposta}
+              rol={oturum.rol}
+              birincil={
+                isletmeTarafi
+                  ? { metin: "Panel", yol: "/panel" }
+                  : { metin: "Randevularım", yol: "/randevularim" }
+              }
+              ikincil={
+                isletmeTarafi
+                  ? { metin: "Randevularım", yol: "/randevularim" }
+                  : undefined
+              }
+            />
+          ) : null}
 
           <TemaDugmesi />
         </nav>
