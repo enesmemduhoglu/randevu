@@ -321,6 +321,12 @@ karar kaydı `TODOS.md`'de.
 
 ### Sıradakiler
 
+**Faz Q — kalkan 2**
+Misafir randevusu kalıyor (gerekçe `TODOS.md > Faz J üstüne gelen düzeltmeler`);
+kalkan burada güçleniyor: IP hız sınırının sıkılaştırılması, telefon başına günlük
+randevu tavanı, işletme başına günlük yeni-müşteri tavanı, panelde şüpheli yoğunluk
+uyarısı.
+
 **Faz P — sağlamlaştırma**
 `TODOS.md > Teknik borç` bölümündeki dört madde: `scoped-db.ts` bölünmesi, vitrinin
 üretimde kapatılması, uyarı/hata takibi, `/saglik`'in şemayı gerçekten kontrol etmesi.
