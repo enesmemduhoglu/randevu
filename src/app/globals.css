@@ -305,4 +305,15 @@
   h3 {
     @apply font-heading;
   }
+  /* Chrome, `<select>`in acilan listesini kutunun KENDI zemin rengiyle
+     boyuyor. Bizim kutularin zemini yari saydam (`bg-transparent`,
+     `dark:bg-input/30`) oldugu icin liste beyaz cikiyordu; secenek metni ise
+     `--foreground`i miras aliyor, yani koyu temada acik gri. Sonuc beyaz
+     uzerine beyaz: iller okunmuyordu (`<html style="color-scheme:dark">`
+     zaten yaziliyor, yetmiyor - popup rengini o degil kutunun zemini
+     belirliyor). Secenege OPAK bir zemin verilerek kirilma kaynaginda
+     kapatiliyor; boylece yeni bir `<select>` eklendiginde tekrar etmiyor. */
+  option {
+    @apply bg-popover text-popover-foreground;
+  }
 }

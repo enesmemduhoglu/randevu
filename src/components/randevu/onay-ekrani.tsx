@@ -29,11 +29,20 @@ export type AlinanRandevu = {
 export function OnayEkrani({
   randevu,
   iptalYolu,
+  hesabaEklendi,
   saatDilimi,
   onYeniden,
 }: {
   randevu: AlinanRandevu;
   iptalYolu: string;
+  /// Randevu oturumu acik bir hesaba baglandi mi (Faz J).
+  ///
+  /// Bu bayrak metni degistirmek ZORUNDA. Kutunun "hesabiniz olmadigi icin
+  /// kaybederseniz geri getiremiyoruz" cumlesi Faz G'de dogruydu; hesabi olan
+  /// biri icin artik yanlis ve bosuna endiselendiriyor - randevu
+  /// `/randevularim`da duruyor. Yanlis bir uyari, hic uyari olmamasindan
+  /// kotu: kullaniciya sistemin kendisini tanimadigini soyluyor.
+  hesabaEklendi: boolean;
   saatDilimi: string;
   onYeniden: () => void;
 }) {
@@ -122,11 +131,15 @@ export function OnayEkrani({
         <div className="flex items-start gap-2">
           <LinkIcon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
           <div className="space-y-1">
-            <p className="text-sm font-medium">Bu bağlantıyı saklayın</p>
+            <p className="text-sm font-medium">
+              {hesabaEklendi
+                ? "Randevunuz hesabınıza eklendi"
+                : "Bu bağlantıyı saklayın"}
+            </p>
             <p className="text-sm text-muted-foreground">
-              Randevunuzu görüntüleyebileceğiniz ve iptal edebileceğiniz tek
-              adres bu. Hesabınız olmadığı için kaybederseniz geri
-              getiremiyoruz — işletmeyi aramanız gerekir.
+              {hesabaEklendi
+                ? "Randevularım sayfasından görebilir ve iptal edebilirsiniz. Aşağıdaki bağlantı da çalışıyor — başka bir cihazdan açmak ya da paylaşmak isterseniz."
+                : "Randevunuzu görüntüleyebileceğiniz ve iptal edebileceğiniz tek adres bu. Hesabınız olmadığı için kaybederseniz geri getiremiyoruz — işletmeyi aramanız gerekir."}
             </p>
           </div>
         </div>
@@ -142,7 +155,9 @@ export function OnayEkrani({
           </Button>
 
           <Button asChild variant="ghost" className="h-10">
-            <Link href={iptalYolu}>Randevumu görüntüle</Link>
+            <Link href={hesabaEklendi ? "/randevularim" : iptalYolu}>
+              {hesabaEklendi ? "Randevularıma git" : "Randevumu görüntüle"}
+            </Link>
           </Button>
         </div>
       </div>

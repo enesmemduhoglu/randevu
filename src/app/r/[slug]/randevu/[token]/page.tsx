@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { DurumRozeti } from "@/components/randevu/durum-rozeti";
 import { IptalKarti } from "@/components/randevu/iptal-karti";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardAction,
@@ -12,7 +12,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { gunAdi, paraBicimle, saatBicimle, sureBicimle, telefonBicimle } from "@/lib/bicim";
+import {
+  paraBicimle,
+  saatBicimle,
+  sureBicimle,
+  tarihUzun,
+  telefonBicimle,
+} from "@/lib/bicim";
 import { iptalTokenGecerliMi } from "@/lib/iptal-token";
 import { getHalkaAcikDb } from "@/lib/scoped-db";
 import { yerelParcalar, type YerelParcalar } from "@/lib/zaman";
@@ -38,50 +44,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/// `bicim.ts` gun adlarini tasiyor ama ay adlarini tasimiyor ve o dosya bu
-/// fazda degismiyor; liste bu yuzden burada. `Intl` ile yerellestirilmedi -
-/// zaman.ts'in gerekcesi ayni: ICU derlemesine gore cikti degisebiliyor,
-/// bizimse tek bir dilimiz var.
-const AY_ADLARI = [
-  "Ocak",
-  "Şubat",
-  "Mart",
-  "Nisan",
-  "Mayıs",
-  "Haziran",
-  "Temmuz",
-  "Ağustos",
-  "Eylül",
-  "Ekim",
-  "Kasım",
-  "Aralık",
-];
-
-/// Randevu durumunun musteriye gorunen yuzu. Renkler semantic token
-/// (DEGISMEZ 10): `--durum-*` degiskenleri hem acik hem koyu temada tanimli.
-const DURUM_GORUNUMU: Record<string, { etiket: string; sinif: string }> = {
-  BEKLIYOR: {
-    etiket: "Onay bekliyor",
-    sinif: "bg-durum-bekliyor-zemin text-durum-bekliyor",
-  },
-  ONAYLI: {
-    etiket: "Onaylandı",
-    sinif: "bg-durum-onayli-zemin text-durum-onayli",
-  },
-  IPTAL: {
-    etiket: "İptal edildi",
-    sinif: "bg-durum-iptal-zemin text-durum-iptal",
-  },
-  TAMAMLANDI: {
-    etiket: "Tamamlandı",
-    sinif: "bg-durum-tamamlandi-zemin text-durum-tamamlandi",
-  },
-  GELMEDI: {
-    etiket: "Gelinmedi",
-    sinif: "bg-durum-gelmedi-zemin text-durum-gelmedi",
-  },
-};
-
 /// "Su an" okumasi bilesenin DISINDA: React Compiler render govdesindeki
 /// `Date.now()` cagrisini saf olmayan olarak isaretliyor (react-hooks/purity)
 /// ve hakli - ayni render iki kez kosarsa iki farkli sonuc cikabilir. Sayfa
@@ -94,8 +56,13 @@ function saatiYaz(p: YerelParcalar): string {
   return saatBicimle(p.saat * 60 + p.dakika);
 }
 
+/// Faz J'de `bicim.ts > tarihUzun`a devredildi. Bu dosyada kendi ay adi
+/// listesi ve kendi yazimi vardi; gerekcesi "bicim.ts ay adlarini tasimiyor"
+/// diye yaziliydi ve o cumle Faz H'den beri DOGRU DEGILDI - takvim yazimlari
+/// o fazda bicim.ts'e tasinmisti. Iki liste yan yana durdugu surece birinde
+/// duzeltilen bir ay adi otekinde eski kalabilirdi.
 function tarihiYaz(p: YerelParcalar): string {
-  return `${p.gun} ${AY_ADLARI[p.ay - 1]} ${p.yil} ${gunAdi(p.haftaninGunu)}`;
+  return tarihUzun(p);
 }
 
 function Satir({ baslik, children }: { baslik: string; children: ReactNode }) {
@@ -136,7 +103,6 @@ export default async function RandevuDetaySayfasi({
   const baslangic = yerelParcalar(randevu.baslangic, saatDilimi);
   const bitis = yerelParcalar(randevu.bitis, saatDilimi);
 
-  const gorunum = DURUM_GORUNUMU[randevu.durum];
   const aktif = randevu.durum === "BEKLIYOR" || randevu.durum === "ONAYLI";
 
   // Saati gecmis bir randevuda iptal dugmesi anlamsiz: iptal, saati yeniden
@@ -182,7 +148,7 @@ export default async function RandevuDetaySayfasi({
             {paraBicimle(randevu.hizmetFiyatKurus)}
           </CardDescription>
           <CardAction>
-            <Badge className={gorunum.sinif}>{gorunum.etiket}</Badge>
+            <DurumRozeti durum={randevu.durum} />
           </CardAction>
         </CardHeader>
 

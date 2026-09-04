@@ -81,10 +81,13 @@ export async function POST(istek: Request) {
   }
 
   if (kayit.rol === "MUSTERI") {
-    // Musteri hesabinin paneli yok (Faz J). `devam` degeri de kasitli olarak
-    // yok sayiliyor: o parametre panel yollarini tasiyor ve musteriyi oraya
-    // gondermek onu erisemeyecegi bir sayfaya birakirdi.
-    return Response.json({ yon: "/" });
+    // Musteri hesabinin paneli yok; kendi randevu listesine gidiyor (Faz J).
+    //
+    // `devam` degeri kasitli olarak YOK SAYILIYOR: o parametre korunan bir
+    // sayfaya oturumsuz girildiginde ekleniyor ve korunan sayfalarin hepsi
+    // panel yollari. Musteriyi oraya gondermek, onu erisemeyecegi bir sayfaya
+    // birakip geri attirirdi.
+    return Response.json({ yon: "/randevularim" });
   }
 
   // `devam` kullanicinin URL'inden geliyor; guvenliYol acik yonlendirme

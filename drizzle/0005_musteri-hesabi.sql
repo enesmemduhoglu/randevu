@@ -1,0 +1,3 @@
+ALTER TABLE "randevu" ADD COLUMN "kullanici_id" uuid;--> statement-breakpoint
+ALTER TABLE "randevu" ADD CONSTRAINT "randevu_kullanici_id_kullanici_id_fk" FOREIGN KEY ("kullanici_id") REFERENCES "public"."kullanici"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "randevu_kullanici_baslangic_idx" ON "randevu" USING btree ("kullanici_id","baslangic") WHERE "randevu"."kullanici_id" is not null;

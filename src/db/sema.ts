@@ -436,6 +436,26 @@ export const randevu = pgTable(
     // edilemez olmali: bagimsiz bir rastgele deger, id'den TURETILMIYOR.
     iptalToken: text("iptal_token").notNull(),
 
+    // Randevuyu HESABINDA goren kisi (Faz J). NULL = misafir randevusu; bugun
+    // randevularin cogu boyle ve oyle kalacak - hesap acmak hicbir zaman sart
+    // olmayacak.
+    //
+    // NEDEN `musteri.kullaniciId` DEGIL DE BURADA. `musteri` satiri kiraci
+    // basina ve TELEFONLA tekilleniyor; sahiplik orada tutulsaydi "bu numara
+    // benim" diyen herkes o numaranin o salondaki tum gecmisini gorurdu.
+    // Telefon bugun DOGRULANMIS bir kimlik degil - SMS Faz K'de. Randevu
+    // basina sahiplikte ise kanit randevunun kendi iptal token'i: kisi
+    // yalnizca elinde linki olan randevuyu hesabina ekleyebiliyor, yani
+    // baskasinin numarasiyla randevu alan biri yine yalnizca KENDI
+    // randevusunu goruyor.
+    //
+    // `set null`: hesap silinirse randevu duruyor. Randevu isletmenin
+    // takviminde de bir kayit ve musterinin hesabiyla birlikte silinmesi,
+    // isletmenin gecmisinden habersizce satir goturmek olurdu.
+    kullaniciId: uuid("kullanici_id").references(() => kullanici.id, {
+      onDelete: "set null",
+    }),
+
     olusturmaTarihi: timestamp("olusturma_tarihi", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -451,6 +471,12 @@ export const randevu = pgTable(
     index("randevu_isletme_baslangic_idx").on(t.isletmeId, t.baslangic),
     index("randevu_personel_baslangic_idx").on(t.personelId, t.baslangic),
     index("randevu_musteri_id_idx").on(t.musteriId),
+    // `/randevularim`in TEK sorgusu: "bu hesabin randevulari, yeniden eskiye".
+    // Kismi indeks: satirlarin cogunda `kullanici_id` NULL (misafir randevusu)
+    // ve NULL'lari indekste tasimanin bu sorguya faydasi yok.
+    index("randevu_kullanici_baslangic_idx")
+      .on(t.kullaniciId, t.baslangic)
+      .where(sql`${t.kullaniciId} is not null`),
   ],
 );
 

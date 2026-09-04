@@ -85,6 +85,10 @@ export function RandevuAkisi({
   const [sonuc, setSonuc] = useState<{
     randevu: AlinanRandevu;
     iptalYolu: string;
+    /// Randevu oturumu acik bir hesaba baglandi mi (Faz J). Onay ekraninin
+    /// metni buna gore degisiyor - baglanmis bir randevuda "baglantiyi
+    /// kaybederseniz geri getiremiyoruz" cumlesi artik dogru degil.
+    hesabaEklendi: boolean;
   } | null>(null);
 
   // Personel adimi yalnizca SECILEN HIZMETI veren birden fazla kisi varsa
@@ -250,6 +254,7 @@ export function RandevuAkisi({
       const cevap = (await yanit.json().catch(() => null)) as {
         randevu?: AlinanRandevu;
         iptalYolu?: string;
+        hesabaEklendi?: boolean;
         hata?: string;
       } | null;
 
@@ -279,7 +284,14 @@ export function RandevuAkisi({
         return;
       }
 
-      setSonuc({ randevu: cevap.randevu, iptalYolu: cevap.iptalYolu });
+      setSonuc({
+        randevu: cevap.randevu,
+        iptalYolu: cevap.iptalYolu,
+        // Alani tasimayan bir yanit "baglanmadi" sayiliyor: eksik bir bayrak
+        // yuzunden kullaniciya randevusunun hesabinda oldugunu SOYLEMEK,
+        // olmadigini soylemekten cok daha kotu.
+        hesabaEklendi: cevap.hesabaEklendi === true,
+      });
       setAdim("onay");
     } catch {
       setGonderimHatasi(
@@ -393,6 +405,7 @@ export function RandevuAkisi({
         <OnayEkrani
           randevu={sonuc.randevu}
           iptalYolu={sonuc.iptalYolu}
+          hesabaEklendi={sonuc.hesabaEklendi}
           saatDilimi={saatDilimi}
           onYeniden={yenidenBasla}
         />

@@ -1,8 +1,10 @@
+import { auth } from "@/lib/auth";
 import { saatBicimle, tarihUzun } from "@/lib/bicim";
 import {
   bildirimleriYanittanSonraGonder,
   randevuOlustuKayitlari,
 } from "@/lib/bildirim";
+import { getMusteriDb } from "@/lib/musteri-db";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
 import { hizSiniriAsildiMi } from "@/lib/hiz-siniri";
 import { iptalTokenUret } from "@/lib/iptal-token";
@@ -205,8 +207,42 @@ export async function POST(istek: Request) {
       // Yukaridaki gerekce. Randevu duruyor, bildirim gitmiyor.
     }
 
+    // HESABA BAGLAMA (Faz J). Oturumu acik olan kisi randevusunu
+    // `/randevularim`de gormeli - randevuyu ALDIGI an, sonradan link
+    // yapistirmadan.
+    //
+    // NEDEN `randevuOlustur`A `kullaniciId` PARAMETRESI EKLENMEDI. O yol
+    // oturumsuz ve girdisinin tamami govdeden geliyor; oraya bir kullanici
+    // kimligi alani koymak, istemcinin BASKASININ hesabina randevu
+    // yazdirabilecegi bir yuzey acardi - alani her cagri yerinde oturumdan
+    // doldurmayi hatirlamaya bagli, yani unutmakla bozulan bir kural olurdu.
+    //
+    // Bunun yerine sahiplenme TEK kuraldan geciyor: token'i gosteren
+    // sahiplenir. `getMusteriDb`nin filtresi kendi kapanis degiskeni, yani
+    // buradan baska bir kullanicinin kimligi verilemiyor.
+    //
+    // HATASI YUTULUYOR: randevu ZATEN alindi. Baglayamamak yuzunden 500
+    // donmek, musteriye "olmadi" deyip takvimde duran bir randevu birakmak
+    // olurdu. Kurtarma yolu da acik - musteri linki `/randevularim`daki
+    // kutuya yapistirip ekleyebiliyor.
+    let hesabaEklendi = false;
+    try {
+      const oturum = await auth();
+      if (oturum) {
+        const musteriDb = await getMusteriDb(oturum.kullaniciId);
+        const ekleme = await musteriDb.randevuyuHesabaEkle(iptalToken);
+        hesabaEklendi = ekleme.durum === "eklendi";
+      }
+    } catch {
+      // Yukaridaki gerekce. Randevu duruyor, baglanti kurulmadi.
+    }
+
     return Response.json(
       {
+        // Onay ekrani buna gore konusuyor: baglanmis bir randevuda
+        // "kaybederseniz geri getiremiyoruz" cumlesi ARTIK DOGRU DEGIL ve
+        // musteriyi bosuna endiselendirirdi.
+        hesabaEklendi,
         randevu: {
           id: sonuc.randevu.id,
           baslangic: sonuc.randevu.baslangic.toISOString(),

@@ -2759,3 +2759,181 @@ değer sayesinde "bağlantı hiç konulmasın" dalı da gereksiz kaldı.
 - [ ] Üretimde `robots.txt` ve `sitemap.xml` bir kez açılıp `Host` satırının ve
       adreslerin `randevu.enesmemduhoglu.tech` olduğu doğrulanmalı
       (`NEXT_PUBLIC_SITE_URL` derleme anında gömülüyor).
+
+## Faz J — müşteri hesabı
+
+**Kapandı:** `/uye-ol` müşteri üyeliği, gerçek `/randevularim` listesi,
+`getMusteriDb` kapısı (DEĞİŞMEZ 1'in ikinci ekseni), sahipliğe bağlı iptal,
+iptal bağlantısıyla randevuyu hesaba ekleme, yarım kalan müşteri kaydının
+kurtarma yolu.
+
+**570 test** (42 dosya). `npm run tip`, `npm run lint`, `npm test`,
+`npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1728.15 KiB
+gzip** (önceki 1693.13 — +35 KiB). **Göç var:** `0005_musteri-hesabi.sql`.
+
+### Kararlar
+
+- **Sahiplik RANDEVU BAŞINA, müşteri satırı başına değil.** Şemada Faz E'den
+  kalma boş bir `musteri.kullanici_id` vardı ve planın "telefon/e-posta
+  eşleşmesiyle bağlama" cümlesi oraya işaret ediyordu. O eksen seçilmedi.
+
+  `musteri` satırı kiracı başına ve **telefonla** tekilleniyor
+  (`musteri_isletme_telefon_idx`); telefon ise bugün doğrulanmış bir kimlik
+  değil — SMS Faz K'de. Sahiplik orada tutulsaydı şu delik açık kalırdı:
+  saldırgan kurbanın numarasıyla bir randevu alır, kendi iptal token'ıyla o
+  müşteri satırını sahiplenir ve **kurbanın o salondaki tüm geçmişini okur**.
+  Delik ancak SMS doğrulamasıyla kapanıyordu, yani Faz K'ye kadar açık
+  kalacaktı.
+
+  Randevu başına sahiplikte kanıt randevunun **kendi** iptal token'ı: kişi
+  yalnızca elinde linki olan randevuyu ekleyebiliyor. Aynı saldırgan yine
+  yalnızca KENDİ randevusunu görüyor. Bedeli: misafirken alınmış eski
+  randevular listeye kendiliğinden gelmiyor, elde bağlantı olması gerekiyor.
+  SMS geldiğinde telefonla toplu bağlama bunun ÜSTÜNE eklenebilir.
+
+- **`getMusteriDb` DEĞİŞMEZ 12 gibi bir muafiyet DEĞİL, kapının ikinci
+  ekseni.** Müşterinin randevuları tanımı gereği çok kiracılı — iki ayrı
+  salondan randevu almış biri ikisini de tek listede görüyor — yani
+  `isletmeId` filtresi orada doğru soruyu soramıyor. `scoped-db`ye metot
+  eklemek de olmazdı: o kapının sözleşmesi "tek kiracı" ve onu delen bir
+  metot, kapının bütün çağıranlara verdiği güvenceyi zayıflatırdı.
+
+  Filtre yine **parametre değil kapanış değişkeni**. Karşılığı `dizin.ts`
+  disiplini: yalnızca `randevu` yazılabiliyor ve o da iki kolonda (`durum`,
+  `kullanici_id`); okunan alanlar elle yazılı ve kapalı; `musteri` tablosu hiç
+  import edilmiyor, yani `not` ve `telefon` sızamıyor; `iptalToken` dönmüyor.
+
+- **Rol kontrolü YOK.** Filtre `kullaniciId` olduğu için güvenlik role bağlı
+  değil: SAHIP rolündeki biri de bu kapıdan yalnızca kendi randevularını
+  görüyor. Şart koymak güvenliğe hiçbir şey katmaz, buna karşılık başka bir
+  salondan randevu alan işletme sahibini kendi listesinden mahrum bırakırdı —
+  o kişi de bir müşteri.
+
+- **Üyelik işletme kaydından AYRI bir fonksiyon ve ayrı bir route.**
+  `isletmeKaydiOlustur` üç kaydı tek transaction'da yazıyor ve slug üretiyor;
+  müşteride yazılacak tek satır var, yani transaction'ın koruyacağı bir
+  bütünlük yok. Tek route'ta bir bayrakla toplamak, gövdesinin yarısı
+  okunmayan bir dal üretirdi.
+
+- **Oturumlu randevu alırken bağlama sunucuda, ama `randevuOlustur`a
+  `kullaniciId` parametresi EKLENMEDİ.** O yol oturumsuz ve girdisinin tamamı
+  gövdeden geliyor; oraya bir kullanıcı kimliği alanı koymak, istemcinin
+  **başkasının hesabına** randevu yazdırabileceği bir yüzey açardı — alanı her
+  çağrı yerinde oturumdan doldurmayı hatırlamaya bağlı, yani unutmakla bozulan
+  bir kural. Bunun yerine aynı tek kural kullanılıyor: token'ı gösteren
+  sahiplenir.
+
+- **`kullanici_auth_user_id` tekil kalıyor.** Bir Supabase hesabı ya işletmeye
+  ya müşteriye ait; ikisine birden değil. İşletme sahibi müşteri hesabı da
+  istiyorsa ayrı bir e-posta ile üye oluyor. Alternatifi kullanıcı başına rol
+  listesi tutmaktı ve bunun bedeli `auth.ts`'in tamamını yeniden yazmak.
+
+- **Hesap sayımı (enumeration) kapalı tutuldu.** "Bu adres müşteri olarak
+  kayıtlı" ile "işletme olarak kayıtlı" ayrımı yapılmıyor; iki durum da aynı
+  metni alıyor.
+
+### Ortaya çıkan gerçek hata — ikinci kayıt yolu `/kayit/tamamla`yı sessizce yanlış hale getirdi
+
+`/kayit/tamamla` Faz D'den beri var ve yaptığı şey bir **işletme** açmak. Faz
+J ikinci bir kayıt yolu ekleyince o ekran kendiliğinden yanlış oldu.
+
+Zincir şu: `/api/uye-ol` önce Supabase'de hesap açıyor, sonra `kullanici`
+satırını yazıyor. İki ayrı sistem, aralarında transaction yok — veritabanı o
+an erişilemezse hesap açılmış, satır yazılmamış oluyor. Böyle biri giriş
+yaptığında `/api/giris` onu `/kayit/tamamla`ya gönderiyor ve karşısına
+**"İşletme adı"** kutusu çıkıyordu. Doldurursa MUSTERI değil **SAHIP** oluyor
+— randevu almaya gelen kişi kendini bir işletme panelinde buluyor. Üstelik
+`kullanici_auth_user_id` tekil olduğu için bunun geri dönüşü de yok.
+
+Kod incelemesiyle görülmesi zor bir sınıf: eklenen dosyada değil, **eklenmeyen
+bir dalda**. Ekran artık iki türü de tamamlayabiliyor (`/api/uye-ol/tamamla`)
+ve varsayılan hâlâ işletme — bu ekrana düşmenin yolu neredeyse her zaman
+işletme kaydının yarıda kalması, çünkü müşteri kaydı tek satır yazıyor ve
+kırılma penceresi çok daha dar.
+
+### Yol boyunca temizlenen
+
+- **Durum rozeti ve renkleri** `/r/[slug]/randevu/[token]` sayfasında gömülüydü.
+  `/randevularim` ikinci bir müşteri ekranı getirdi; kopyalansaydı bir gün
+  birinde eklenen bir durum ötekinde eksik kalırdı ve eksik dal `undefined`
+  rozet olarak, yani **sessizce** çıkardı. `DurumRozeti` bileşenine çıktı.
+
+  Etiketler `randevu-durum.ts > DURUM_ETIKETLERI` ile birleştirilmedi: o liste
+  panelin dili ("Onaylı", "Gelmedi"), rozet müşterinin dili ("Onaylandı",
+  "Gelinmedi"). Tek listeye indirmek, iki taraftan birine ötekinin cümlesini
+  okuturdu.
+
+- **Ay adı listesi** aynı dosyada ikinci kez duruyordu; gerekçesi "bicim.ts ay
+  adlarını taşımıyor" diye yazılıydı ve o cümle **Faz H'den beri doğru
+  değildi** — takvim yazımları o fazda `bicim.ts`e taşınmıştı.
+  `tarihUzun`a devredildi.
+
+- **Koyu temada `<select>` açılır listesi okunmuyordu.** Chrome popup'ı kutunun
+  kendi zemin rengiyle boyuyor; kutularımızın zemini yarı saydam olduğu için
+  liste beyaz çıkıyor, seçenek metni `--foreground`u miras alıp açık gri
+  kalıyordu. `color-scheme: dark` yetmiyor — popup rengini o değil kutunun
+  zemini belirliyor. `option`a opak zemin verilerek kırılma kaynağında
+  kapatıldı.
+
+### Bilerek kapsam dışı
+
+- **Telefonla toplu geçmiş bağlama.** Yukarıdaki ilk karar. SMS doğrulaması
+  (Faz K) gelmeden güvenli değil.
+- **`musteri.kullanici_id` doldurulmuyor.** Panelde "bu müşterinin hesabı var"
+  göstergesi olurdu ama aynı telefon deliği o alanı da güvenilmez yapıyor.
+  Kolon şemada duruyor; Faz K'de anlamı netleşecek.
+- **Şifre sıfırlama yok** — işletme tarafında da yok, ikisi birlikte gelmeli.
+- **Sayfalama yok.** Liste 200 randevuda kesiliyor. O sınıra dayanmak için
+  yıllarca düzenli randevu almak gerekiyor ve o gün geldiğinde doğru çözüm
+  sayfalama değil "geçmişi yıl yıl aç" olur.
+- **Müşteri profil ekranı yok** (ad/telefon düzenleme, favori işletme, "tekrar
+  randevu al" kısayolu).
+- **Üst bar oturum durumunu göstermiyor.** "Randevularım" bağlantısı herkese
+  görünüyor ve oturumsuz tıklayan üyelik kartını görüyor — bu bilinçli, hesap
+  açmadan da randevusuna ulaşabileceğini orada öğreniyor.
+
+### Doğrulama
+
+- `npm run tip`, `npm run lint` temiz
+- `npm test` — **570 test geçti** (42 dosya, gerçek Postgres); yeni:
+  `musteri-db.test.ts` (16), `uye-ol.test.ts` (7), `uye-ol/tamamla.test.ts` (5),
+  `randevularim/ekle.test.ts` (9), `randevularim/[id]/iptal.test.ts` (4),
+  `kayit.test.ts`e müşteri kaydı (5), `degismezler.test.ts`e müşteri kapısı (5)
+- `npm run build` başarılı, 45 route
+- `cf:kur` + `wrangler deploy --dry-run`: **1728.15 KiB gzip**
+- **Göç:** boş DB'de ve gerçek veri taşıyan `randevu_dev`'de (9 işletme,
+  4 randevu) uygulandı, veri korundu; `drizzle-kit check` temiz, ikinci
+  `generate` "No schema changes" dedi (göz ile doğrulandı). Backfill yok —
+  `NULL` zaten doğru varsayılan. Geri alma tek satır:
+  `ALTER TABLE randevu DROP COLUMN kullanici_id`.
+
+**IDOR testi `musteri-db.test.ts`'te** ve route'da değil, bilerek: route'un
+sızdırmama güvencesi tamamen kapının `where` koşullarına dayanıyor — oturumdan
+kimliği alıp sonucu HTTP koduna çeviriyor. Route seviyesinde aynı şeyi sınamak
+`cookies()` gerektiriyor (vitest'in node ortamında yok, aynı gerekçe
+`giris.test.ts`te yazılı) ve o test filtrenin **kendisini** değil yalnızca
+çağrılıp çağrılmadığını gösterirdi. İki ayrı hesap ve iki ayrı işletme
+kuruluyor; başkasının randevusu listede görünmüyor, iptal edilemiyor ve
+**gerçekten ONAYLI kalıyor**, bağlanmış randevu ikinci hesap tarafından
+çalınamıyor, eşzamanlı iki iptalden tam olarak biri kazanıyor.
+
+**Elle (`next dev`, tohumlanmış `randevu_dev`, tarayıcı eklentisi):** gerçek
+bir oturumla `/randevularim` render oldu — yani `auth() → getMusteriDb →
+liste` zinciri çalışma zamanında doğrulandı; `/uye-ol` oturumluyken role göre
+`/panel`e yönlendiriyor; oturumsuz `/randevularim` üyelik kartını gösteriyor;
+token sayfası ortak rozet ve `tarihUzun` ile doğru çiziliyor. **390px** (iframe
+içinde gerçek dar görünüm, `scrollWidth` 386 — yatay taşma yok) ve **açık/koyu
+tema** gözle doğrulandı.
+
+### Elle yapılması gerekenler (Faz J)
+
+- [ ] **Müşteri hesabı gerektiren adımlar elle sınanmalı.** Hesap açmak ve
+      şifreyle giriş yapmak ajanın yapmadığı işler, o yüzden şunlar
+      doğrulanmadı: `/uye-ol` formunun mutlu yolu, oturumluyken randevu alıp
+      onay ekranında "Randevunuz hesabınıza eklendi" görmek, listede kart +
+      iptal düğmesi, "Elinizdeki randevuyu ekleyin" kutusuna link yapıştırma,
+      aynı linki ikinci kez eklemenin hata vermemesi.
+- [ ] **Prod'a önce göç, sonra merge** (`npm run db:uygula:prod -- --onayla`).
+      `0005_musteri-hesabi.sql` toplayıcı ve geri alınabilir.
+- [ ] Alt bilgideki "Giriş yap" bağlantısı oturum açıkken de görünüyor
+      (Faz N'den kalma, Faz J'de dokunulmadı). Faz P'ye aday.
