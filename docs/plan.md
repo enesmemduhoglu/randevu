@@ -12,9 +12,12 @@
 güzellik salonu, tırnak, cilt bakımı, masaj, diş, veteriner — kullanıcı işletmeyi bulur,
 uygun saati görür, hesap açmadan randevusunu alır.
 
-Aynı zamanda işletme için tam bir randevu yazılımıdır: hizmetler, personel, çalışma
-saatleri, takvim, müşteri geçmişi. **Pazaryeri hiç olmasa bile tek başına değerlidir** — bu
+Aynı zamanda işletme için bir randevu yazılımıdır: hizmetler, personel, çalışma
+saatleri, takvim. **Pazaryeri hiç olmasa bile tek başına değerlidir** — bu
 cümle bir slogan değil, ürünün kurucu kısıtı (bkz. İlke 2).
+
+> Bu cümle bugün **tam** değil ve öyle yazılmıyor: elle randevu ekleme ve müşteri
+> geçmişi henüz yok (Faz H2). Telefonla gelen randevuyu salon panele giremiyor.
 
 Dağıtım Cloudflare Workers üzerinde, `randevu.enesmemduhoglu.tech` adresinde.
 
@@ -132,7 +135,7 @@ Kapı dışı dosyalar; ham `db` ve dış SDK çağrıları **yalnızca** burada
 | `src/lib/site.ts` | Kanonik adres; `robots.ts`, `sitemap.ts` ve `metadataBase` buradan okur |
 | `src/lib/bildirim.ts` | Hangi olayda ne kuyruğa girer, kuyruk nasıl boşalır |
 | `src/lib/bildirim-sablon.ts` | Saf metin üretimi; DB'ye ve ağa dokunmuyor |
-| `src/lib/sms.ts` | `gonder()` — SMS'in tek çıkış noktası (Faz K) |
+| `src/lib/sms.ts` | `gonder()` — SMS'in tek çıkış noktası. **Henüz yok**, Faz K'de gelecek |
 | `src/lib/marka.ts` | Renk/tipografi sabitleri; e-posta şablonları buradan okur |
 
 ### workerd'in dayattığı üç kısıt
@@ -309,7 +312,7 @@ karar kaydı `TODOS.md`'de.
 | **F** — müsaitlik motoru | `musaitlik.ts` saf fonksiyon; DST, öğle arası, gün sınırı testleri |
 | **G** — halka açık randevu | `/r/[slug]` akışı, `POST /api/randevu`, iptal token'ı |
 | **G2** — bot koruması | Turnstile |
-| **H** — panel takvimi | Gün/hafta/ay, durum değiştirme, müşteri geçmişi |
+| **H** — panel takvimi | Gün/hafta/ay, randevu detayı, durum değiştirme |
 | **CI/CD** | `dogrula` + `yayinla`; merge anı yayın anı |
 | **L** — kalkan | Worker rate limiting; Turnstile'ın üretimde sessizce kapalı olduğu bulundu |
 | **L3** — "gelmedi" kısıtı | Gelmeyen müşteriye randevu kısıtı, işletme ayarlı |
@@ -318,18 +321,31 @@ karar kaydı `TODOS.md`'de.
 | **I** — bildirim altyapısı | `email.ts`, kuyruk yazma/boşaltma, altı şablon, önizleme ekranı |
 | **O** — keşfedilebilirlik | `/dizin/[il]`, `/dizin/[il]/[kategori]`, `robots.ts`, `sitemap.ts`, faceted navigation kapısı |
 | **J** — müşteri hesabı | `/uye-ol`, gerçek `/randevularim`, `getMusteriDb` (DEĞİŞMEZ 1'in ikinci ekseni), sahipliğe bağlı iptal, bağlantıyla ekleme |
+| **P** — tur sonrası düzeltmeler | Geliştirici ekranları üretimde kapandı, hatırlatma vaadi düzeltildi, arama kategori + hizmet adına da bakıyor, kaybolan filtre, misafir→üye köprüsü, `/giris`'te iki çıkış, eksik sayfa başlıkları, `/gizlilik` |
 
 ### Sıradakiler
+
+**Faz H2 — elle randevu ve müşteri listesi**
+Faz H beş iş olarak tarif edilmişti; **elle randevu ekleme** ile **müşteri listesi ve
+geçmişi** o fazda ayrılıp H2'ye bırakıldı (gerekçe `TODOS.md > Faz H > Faz ikiye
+bölündü`) ve sonra yol haritasından tümden düştü. Sonucu somut: telefonla gelen
+randevuyu salon panele giremiyor, yani ürün "tam bir randevu yazılımı" vaadinin bu
+parçasını bugün karşılamıyor. İlk iş mimari bir karar — müsaitlik motorunu panel
+tarafına bağlamak (`TODOS.md > Faz H > Bilerek kapsam dışı`). L3'ün "gelmedi" kısıtını
+panelden görme ve kaldırma ekranı da buraya bağlı.
+
+**Faz P2 — sağlamlaştırma (kalanlar)**
+Faz P teknik borcun iki maddesini kapattı (vitrin üretimde kapalı, `/saglik` arama
+motorundan çekildi). Kalanlar: `scoped-db.ts` bölünmesi, uyarı/hata takibi ve
+`/saglik`'in şemayı gerçekten kontrol etmesi. **Şifre sıfırlama da burada** — bugün
+hiç yok ve `kullanici_auth_user_id` tekil olduğu için şifresini unutan kullanıcı
+kalıcı olarak kilitleniyor, aynı e-postayla yeniden kayıt da olamıyor.
 
 **Faz Q — kalkan 2**
 Misafir randevusu kalıyor (gerekçe `TODOS.md > Faz J üstüne gelen düzeltmeler`);
 kalkan burada güçleniyor: IP hız sınırının sıkılaştırılması, telefon başına günlük
 randevu tavanı, işletme başına günlük yeni-müşteri tavanı, panelde şüpheli yoğunluk
 uyarısı.
-
-**Faz P — sağlamlaştırma**
-`TODOS.md > Teknik borç` bölümündeki dört madde: `scoped-db.ts` bölünmesi, vitrinin
-üretimde kapatılması, uyarı/hata takibi, `/saglik`'in şemayı gerçekten kontrol etmesi.
 
 **Faz K — SMS ve hatırlatma**
 `sms.ts > gonder()` adaptörü. **Faz J'nin bıraktığı iş burada kapanıyor:** telefon

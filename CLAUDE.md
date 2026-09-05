@@ -61,8 +61,10 @@ yollari (Cron) muaftir.
 beklenen durumu `where`'e koy ve etkilenen satir sayisi 0 ise 409 don. Ayni
 anda gelen ikinci karar boylece kaybeder.
 
-**4. E-posta yalnizca `src/lib/email.ts > gonder()`, SMS yalnizca
-`src/lib/sms.ts > gonder()`.** `resend.emails.send`'i dogrudan cagirma: SDK API
+**4. E-posta yalnizca `src/lib/email.ts > gonder()`.** (SMS icin ayni kural
+`src/lib/sms.ts > gonder()`'de olacak - **o dosya henuz YOK**, Faz K'de
+geliyor. Bugun SMS kanali yok: butun bildirimler e-postayla gidiyor.)
+`resend.emails.send`'i dogrudan cagirma: SDK API
 hatasinda throw etmez, `{ data, error }` doner ve donusu okumayan cagri
 reddedilen gonderimi iz birakmadan yutar. *(warden kapisi bloklar.)*
 
