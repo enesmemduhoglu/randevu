@@ -48,7 +48,11 @@ export function kimlikDogrula(ham: unknown, alan: string): Dogrulama<string> {
 /// gonderilemez bir adres yazilmis olur ve hata cok sonra gorunur.
 const EPOSTA_BICIMI = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-function istegeBagliEposta(ham: unknown): Dogrulama<string | null> {
+/// DISA ACIK (Faz H2): panelden elle girilen randevu da ayni musteri
+/// alanlarini yaziyor. Ayri bir kopya yazsaydik ikisi bir gun ayrisirdi -
+/// ornegin biri 254 karakter sinirini kaybederdi ve ayni sema kolonuna iki
+/// farkli kural bakardi.
+export function istegeBagliEposta(ham: unknown): Dogrulama<string | null> {
   if (ham === undefined || ham === null || ham === "") {
     return { tamam: true, deger: null };
   }
@@ -65,7 +69,7 @@ function istegeBagliEposta(ham: unknown): Dogrulama<string | null> {
 
 /// Musterinin randevuya yazdigi not. Uzunluk sinirli: sinirsiz metin, halka
 /// acik bir yoldan veritabanina istenen kadar veri yazmak demek.
-function notDogrula(ham: unknown): Dogrulama<string | null> {
+export function notDogrula(ham: unknown): Dogrulama<string | null> {
   if (ham === undefined || ham === null) return { tamam: true, deger: null };
   if (typeof ham !== "string") return { tamam: false, hata: "Not okunamadı" };
 
@@ -82,7 +86,7 @@ function notDogrula(ham: unknown): Dogrulama<string | null> {
 /// sunucunun dilimine gore yorumlanirdi ve DEGISMEZ 7 tam da bunu yasakliyor.
 /// Slotun gercekten alinabilir olup olmadigi burada degil, isletmenin
 /// saatDilimi'yle calisan musaitlik motorunda sinaniyor.
-function baslangicDogrula(ham: unknown): Dogrulama<Date> {
+export function baslangicDogrula(ham: unknown): Dogrulama<Date> {
   if (typeof ham !== "string" || !ham.trim()) {
     return { tamam: false, hata: "Randevu saati seçilmedi" };
   }
