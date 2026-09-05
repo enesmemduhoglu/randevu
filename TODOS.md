@@ -3359,17 +3359,40 @@ Faz P sonundaki 1634 KiB'den **+135 KiB** — yeni sayfa, form bileşeni ve
 ikonlar. Bütçenin yarısında duruyoruz ama artış tek bir ekran için küçük
 değil; sonraki panel ekranlarında ölçüm sürmeli.
 
-### Yayın hattında yeni bir uyarı: "Workers Builds"
+### İKİNCİ BİR YAYIN HATTI BAĞLANMIŞ: Cloudflare "Workers Builds"
 
 PR #33'te Cloudflare'ın **Workers Builds** entegrasyonu bir commit status'u
 düşürüyor ve **fail** veriyor. Bu kontrol `main`'in son commit'inde YOK, yani
-entegrasyon yeni bağlanmış.
+entegrasyon yeni bağlanmış ve ilk kez burada göründü.
 
-Kodla ilgisi görünmüyor: aynı build yerelde geçiyor (`npm run cf:kur` →
-`Worker saved in .open-next\worker.js`) ve CI'daki `tip - lint - test - build`
-işi de geçti. Depodaki yayın hattı zaten **GitHub Actions**'taki "Cloudflare
-Workers yayini" işi (`docs/yayin.md`), yani şu an **iki ayrı yayın hattı**
-aynı Worker'a bakıyor olabilir. Dashboard'daki build log'u okunup entegrasyon
-ya düzeltilmeli ya da kaldırılmalı — merge'i bloklamıyor ama her PR'da kırmızı
-bir kontrol bırakıyor.
+**Kodla ilgisi yok.** Build log'u sebebi tek başına söylüyor: `next build`in
+prerender adımında `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+tanımsız olduğu için `src/lib/supabase/sunucu.ts` fırlatıyor. İki koşumda iki
+farklı sayfada patlamış (`/isletmeler-icin` ve `/giris`) — prerender sırası
+rastgele, sebep aynı. `ci.yml` bu değişkenleri veriyor (`dogrula` işine sahte
+değerler, `yayinla` işine gerçek `vars`), Cloudflare'ın build ortamına ise
+kimse vermemiş.
+
+**Ama asıl mesele başarısızlık değil, entegrasyonun kendisi.** Üç ayrı sorun
+üst üste duruyor:
+
+1. **Yanlış komut.** Cloudflare `npm run build` koşuyor, `npm run cf:kur`
+   değil — başarılı olsa bile OpenNext bundle'ı üretmiyor.
+2. **İki yayın hattı.** Depodaki sözleşme "merge anı yayın anı" ve yayını
+   `ci.yml`deki *Cloudflare Workers yayini* işi yapıyor (`docs/yayin.md`).
+   İkinci bir hat aynı Worker'a bakıyor.
+3. **En tehlikelisi:** Workers Builds **dal başına** koşuyor. Yapılandırması
+   düzeltilip yeşile dönseydi, merge edilmemiş bir PR dalını üretime
+   yayınlayabilirdi. Bugün onu engelleyen tek şey, eksik bir env değişkeni.
+
+**Öneri: entegrasyon kaldırılsın.** Cloudflare panelinde Workers → randevu →
+Settings → Builds bağlantısı sökülür; yayın `ci.yml`de kalır. İkinci seçenek
+(env'leri ekleyip komutu `cf:kur` yapmak) 3. maddeyi çözmüyor, dal koruması da
+ayrıca kurulmalı.
+
+> Yan bulgu, ayrı bir iş: **build zamanı bu iki değişkene bağımlı.** `/giris`
+> ve `/isletmeler-icin` `ƒ (Dynamic)` olarak işaretli olmasına rağmen
+> prerender denemesi `auth()` üzerinden Supabase istemcisini kuruyor ve env
+> yoksa build tümden düşüyor. CI bunu sahte değerlerle örtüyor. Sırların
+> yokluğunda build'in ayakta kalması Faz P2'ye yazılmalı.
 
