@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { DurumRozeti } from "@/components/randevu/durum-rozeti";
+import { HesabaEkleDugmesi } from "@/components/randevu/hesaba-ekle-dugmesi";
 import { IptalKarti } from "@/components/randevu/iptal-karti";
 import {
   Card,
@@ -19,15 +21,28 @@ import {
   tarihUzun,
   telefonBicimle,
 } from "@/lib/bicim";
+import { auth } from "@/lib/auth";
 import { iptalTokenGecerliMi } from "@/lib/iptal-token";
 import { getHalkaAcikDb } from "@/lib/scoped-db";
 import { yerelParcalar, type YerelParcalar } from "@/lib/zaman";
 
 // Musterinin randevusunu gordugu ve iptal edebildigi sayfa.
 //
-// OTURUMSUZ: yetkiyi URL'deki iptal token'i tasiyor. Kiraci yine slug'dan
+// YETKIYI URL'DEKI IPTAL TOKEN'I TASIYOR - oturum degil. Kiraci yine slug'dan
 // cozuluyor ve `getHalkaAcikDb` filtreyi kapanis degiskeni olarak tutuyor
 // (DEGISMEZ 1) - baska bir salonun sayfasindan gelen token burada bulunamiyor.
+//
+// OTURUM Faz P'de OKUNMAYA BASLADI ama yetki icin DEGIL: sayfa yalnizca
+// "bu randevuyu hesabina ekle" teklifini gosterip gostermeyecegine karar
+// veriyor. Oturumsuz ziyaretci sayfayi eskisi gibi tam olarak goruyor ve
+// iptal edebiliyor; okunan oturum hicbir kapiyi acmiyor, yalnizca bir kutu
+// ciziyor.
+//
+// Bu teklif NEDEN BURADA duruyor, onay ekraninda degil: baglama ucu token
+// istiyor ve token tek basina yetki tasiyor. Onay ekranindan giris yoluna
+// gecirmek icin token'i `?devam=` gibi bir parametreye koymak gerekirdi ve o
+// deger sunucu erisim loglarina duserdi (DEGISMEZ 5'in ruhu). Token'in zaten
+// adres cubugunda oldugu tek yer burasi.
 //
 // Veri SUNUCUDA okunuyor; istemci bilesenine yalnizca hazir metinler gidiyor.
 
@@ -95,6 +110,14 @@ export default async function RandevuDetaySayfasi({
   // Yanlis token ile BASKA isletmenin token'i de ayni cevabi aliyor - sorgu
   // kiraci filtresini tasidigi icin ikincisi zaten bos donuyor.
   if (!randevu) notFound();
+
+  const oturum = await auth();
+  // Randevu zaten BU hesaba bagliysa teklif edilecek bir sey yok. Baskasina
+  // bagliysa da dugme cizilmiyor: uc o durumda 409 donuyor ve kullaniciya
+  // basacagi ama calismayacak bir dugme gostermek yanlis.
+  const hesabaEklenebilir =
+    oturum !== null && randevu.kullaniciId === null;
+  const buHesaba = oturum !== null && randevu.kullaniciId === oturum.kullaniciId;
 
   // DEGISMEZ 7: yerel saate cevirme yalnizca zaman.ts uzerinden ve isletmenin
   // saatDilimi alaniyla. Sunucunun dilimi (Workers'ta UTC, gelistirme
@@ -184,6 +207,59 @@ export default async function RandevuDetaySayfasi({
           </p>
         )}
       </div>
+
+      {/* HESAP KOPRUSU (Faz P).
+          
+          Uc durum, uc ayri cumle. Onceden bu sayfa oturumdan tamamen habersizdi
+          ve Faz J'nin "elinizdeki randevuyu ekleyin" kutusu `/randevularim`da
+          duruyordu - yani kullanicidan linki kopyalayip baska bir sayfaya gidip
+          GERI yapistirmasi bekleniyordu. Linki elinde tuttugu tek an burasi. */}
+      {buHesaba ? (
+        <p className="mt-6 rounded-lg bg-muted/50 px-4 py-3 text-center text-sm text-muted-foreground">
+          Bu randevu hesabınıza ekli.{" "}
+          <Link
+            href="/randevularim"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            Randevularım
+          </Link>
+        </p>
+      ) : hesabaEklenebilir ? (
+        <div className="mt-6 space-y-2 rounded-lg border border-border px-4 py-4">
+          <p className="text-sm text-muted-foreground">
+            Randevunuzu hesabınıza ekleyin; bu bağlantıyı saklamanız
+            gerekmesin.
+          </p>
+          <HesabaEkleDugmesi token={token} />
+        </div>
+      ) : oturum === null ? (
+        // OTURUMSUZ ZIYARETCI. Uyelik burada TEKLIF ediliyor ama randevunun
+        // onune GECMIYOR: sayfanin birincil eylemi iptal ve o yukarida duruyor.
+        //
+        // Baglantilar `devam` TASIMIYOR: tasisalardi degeri bu sayfanin adresi
+        // olurdu, o adres de token'i iceriyor ve `/giris?devam=...` istegi
+        // token'i sunucu loglarina sokardi. Kullanici giris yaptiktan sonra bu
+        // sayfaya kendi donuyor - baglanti e-postasinda ve tarayici gecmisinde.
+        <div className="mt-6 space-y-1 rounded-lg border border-dashed border-border px-4 py-4 text-center">
+          <p className="text-sm font-medium">Bu bağlantıyı saklamak istemiyorsanız</p>
+          <p className="text-sm text-muted-foreground">
+            <Link
+              href="/uye-ol"
+              className="font-medium text-primary underline underline-offset-4"
+            >
+              Üye olun
+            </Link>{" "}
+            ya da{" "}
+            <Link
+              href="/giris"
+              className="font-medium text-primary underline underline-offset-4"
+            >
+              giriş yapın
+            </Link>
+            , sonra bu sayfaya dönüp randevunuzu hesabınıza ekleyin.
+          </p>
+        </div>
+      ) : null}
 
       {telefonHref ? (
         // Cumle isletme adini almiyor: Turkce'de ek son unluye gore degisiyor

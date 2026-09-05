@@ -162,6 +162,30 @@ export function OnayEkrani({
         </div>
       </div>
 
+      {/* UYELIK DAVETI (Faz P) - yalnizca randevu bir hesaba baglanmadiysa.
+
+          Kutu yukarida "kaybederseniz geri getiremiyoruz" diyordu ve yaninda
+          hicbir cikis yolu yoktu; kullaniciya bir sorun bildirilip cozumu
+          verilmiyordu. Uyelik o cozum ve teklif edilecegi an tam da burasi.
+
+          BAGLANTI PARAMETRESIZ (`/uye-ol`). Randevuyu hesaba baglamak token
+          istiyor ve token tek basina yetki tasiyor (DEGISMEZ 5); onu
+          `?devam=` gibi bir parametreye koymak sunucu erisim loglarina
+          sokardi. Tek tikla ekleme bu yuzden token sayfasinda duruyor -
+          kullanici oraya zaten "Randevumu görüntüle" dugmesinden ya da
+          e-postasindaki baglantidan gidiyor. */}
+      {hesabaEklendi ? null : (
+        <p className="text-sm text-muted-foreground">
+          <Link
+            href="/uye-ol"
+            className="font-medium text-primary underline underline-offset-4"
+          >
+            Üye olun
+          </Link>{" "}
+          — randevularınız tek listede dursun, bağlantı saklamanız gerekmesin.
+        </p>
+      )}
+
       <Button variant="ghost" className="h-10" onClick={onYeniden}>
         Yeni randevu al
       </Button>

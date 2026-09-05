@@ -422,3 +422,56 @@ describe("randevuDurumunuGetir", () => {
     expect(await db.randevuDurumunuGetir(randevuId)).toBe("IPTAL");
   });
 });
+
+// Faz P: token sayfasi randevunun bir hesaba bagli OLUP OLMADIGINI bilmek
+// zorunda - "Hesabıma ekle" dugmesini kime cizecegine ona gore karar veriyor.
+// Deger `getHalkaAcikDb > randevuTokenIleGetir` uzerinden geliyor, yani
+// oturumsuz halka acik kapidan; bu testler o alanin dogru dondugunu ve
+// sayfanin uc dalini besledigini kilitliyor.
+describe("token ile getirilen randevu hesap bagini tasiyor", () => {
+  test("baglanmamis randevuda kullaniciId NULL", async () => {
+    const salon = await salonKur("A Salonu");
+    await randevuKur(salon, TOKEN_1, 600);
+
+    const acik = await getHalkaAcikDb(salon.slug);
+    const kayit = await acik!.randevuTokenIleGetir(TOKEN_1);
+
+    // Sayfa bu dalda "üye olun" davetini ya da girisli kullaniciya
+    // "Hesabıma ekle" dugmesini gosteriyor.
+    expect(kayit?.kullaniciId).toBeNull();
+  });
+
+  test("baglandiktan sonra SAHIBININ kimligi donuyor", async () => {
+    const salon = await salonKur("A Salonu");
+    const ali = await musteriKur("Ali Veli");
+    await randevuKur(salon, TOKEN_1, 600);
+    await (await getMusteriDb(ali)).randevuyuHesabaEkle(TOKEN_1);
+
+    const acik = await getHalkaAcikDb(salon.slug);
+    const kayit = await acik!.randevuTokenIleGetir(TOKEN_1);
+
+    // Sayfa bunu oturumdakiyle KARSILASTIRIYOR; esitse "hesabınıza ekli"
+    // diyor, degilse hicbir dugme cizmiyor - uc o durumda 409 donuyor ve
+    // basildiginda calismayacak bir dugme gostermek yanlis olurdu.
+    expect(kayit?.kullaniciId).toBe(ali);
+  });
+
+  test("baskasinin hesabina bagli randevu da AYNI kapidan okunuyor", async () => {
+    // Token'i elinde tutan herkes sayfayi acabiliyor - degisen tek sey
+    // gosterilen kutu. Yetki modeli degismedi: baglama ucu sahipligi kendi
+    // dogruluyor ve baskasinin randevusuna 409 donuyor.
+    const salon = await salonKur("A Salonu");
+    const ali = await musteriKur("Ali Veli");
+    const veli = await musteriKur("Veli Ali");
+    await randevuKur(salon, TOKEN_1, 600);
+    await (await getMusteriDb(ali)).randevuyuHesabaEkle(TOKEN_1);
+
+    const acik = await getHalkaAcikDb(salon.slug);
+    const kayit = await acik!.randevuTokenIleGetir(TOKEN_1);
+
+    expect(kayit?.kullaniciId).not.toBe(veli);
+    expect(
+      (await (await getMusteriDb(veli)).randevuyuHesabaEkle(TOKEN_1)).durum,
+    ).toBe("baskasinin");
+  });
+});

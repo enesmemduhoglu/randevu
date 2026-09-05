@@ -32,14 +32,26 @@ export default async function GirisSayfasi({
       // hizmet ediyor ve "panelinize erismek icin" diyen bir baslik, randevusuna
       // bakmaya gelen musteriye yanlis kapiya geldigini dusundururdu.
       aciklama="E-posta ve şifrenizle hesabınıza girin."
-      alt={{
-        metin: "Hesabınız yok mu?",
-        // Alt baglanti MUSTERI kaydina gidiyor, isletme kaydina degil: bu
-        // sayfaya gelenlerin cogu musteri olacak ve isletme yolu zaten
-        // /isletmeler-icin uzerinden kendi hunisini tasiyor.
-        baglantiMetni: "Üye olun",
-        yol: "/uye-ol",
-      }}
+      // IKI CIKIS, tek degil (Faz P). Onceden yalnizca /uye-ol vardi ve bu
+      // GERI DONUSU OLMAYAN bir tuzakti: `kullanici_auth_user_id` tekil, yani
+      // buradan musteri olarak kaydolan isletme sahibinin e-postasi kalici
+      // olarak MUSTERI oluyor ve o adresle bir daha isletme acamiyor. Faz J
+      // ayni sinifi `/kayit/tamamla` icin duzeltmisti; catalin kendisi burada
+      // duruyordu.
+      //
+      // Musteri yolu ONDE: bu sayfaya gelenlerin cogu musteri olacak.
+      alt={[
+        {
+          metin: "Hesabınız yok mu?",
+          baglantiMetni: "Üye olun",
+          yol: "/uye-ol",
+        },
+        {
+          metin: "İşletme misiniz?",
+          baglantiMetni: "İşletmenizi ekleyin",
+          yol: "/kayit",
+        },
+      ]}
     >
       <GirisFormu devam={devam} />
     </KimlikKabugu>

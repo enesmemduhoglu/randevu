@@ -12,11 +12,13 @@ export default async function KayitSayfasi() {
     <KimlikKabugu
       baslik="Kayıt ol"
       aciklama="İşletmenizi tanımlayın; randevu sayfanız hemen ardından hazırlanır."
-      alt={{
-        metin: "Hesabınız var mı?",
-        baglantiMetni: "Giriş yapın",
-        yol: "/giris",
-      }}
+      alt={[
+        {
+          metin: "Hesabınız var mı?",
+          baglantiMetni: "Giriş yapın",
+          yol: "/giris",
+        },
+      ]}
     >
       <KayitFormu />
     </KimlikKabugu>
