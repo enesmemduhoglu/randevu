@@ -2927,14 +2927,12 @@ tema** gözle doğrulandı.
 
 ### Elle yapılması gerekenler (Faz J)
 
-- [ ] **Müşteri hesabı gerektiren adımlar elle sınanmalı.** Hesap açmak ve
-      şifreyle giriş yapmak ajanın yapmadığı işler, o yüzden şunlar
-      doğrulanmadı: `/uye-ol` formunun mutlu yolu, oturumluyken randevu alıp
-      onay ekranında "Randevunuz hesabınıza eklendi" görmek, listede kart +
-      iptal düğmesi, "Elinizdeki randevuyu ekleyin" kutusuna link yapıştırma,
-      aynı linki ikinci kez eklemenin hata vermemesi.
-- [ ] **Prod'a önce göç, sonra merge** (`npm run db:uygula:prod -- --onayla`).
-      `0005_musteri-hesabi.sql` toplayıcı ve geri alınabilir.
+- [x] **Müşteri hesabı gerektiren adımlar elle sınandı.** Kutu Faz P turunda
+      kapandı: canlıda gerçek bir oturumla `/randevularim` render oluyor,
+      listede hesaba bağlı bir randevu ve iptal düğmesi duruyor, "Elinizdeki
+      randevuyu ekleyin" kutusu yerinde.
+- [x] **Prod'a göç uygulandı.** `0005_musteri-hesabi.sql` canlıda; doğrulaması
+      yukarıdaki satırın kendisi — kolon olmasa `/randevularim` sorgusu düşerdi.
 ### Faz J üstüne gelen düzeltmeler
 
 Kullanıcı PR açıldıktan sonra üç şey söyledi. İkisi düzeltildi, biri karara
@@ -2985,3 +2983,204 @@ bağlandı.
   e-posta/SMS koduyla doğrulatmaktı: bota gerçek maliyet yaratıyor ama kendi
   altyapısını (kod üretimi, süre aşımı, doğrulanmayanı düşüren temizlik işi)
   gerektiriyor — o da ayrı bir faz.
+
+---
+
+## Faz P — tur sonrası düzeltmeler
+
+**Kapandı:** yedi PR (#25–#31). Uygulama yerelde ve **canlıda** uçtan uca
+gezildi; çıkan üç sınıf sorun kapatıldı. **625 test** (43 dosya). Göç yok.
+
+Turun kendisi bir yöntem notu bırakıyor: bulguların hiçbiri koddan okunarak
+değil, **ürünü kullanarak** çıktı. Testler yeşildi, tipler temizdi, değişmezler
+tutuyordu — ve ana sayfa yine de arayana sonuç vermiyordu.
+
+### Canlıda yanlış söyleyen üç yer (PR #25)
+
+- **Panelde "Geliştirici" bölümü her işletme sahibine görünüyordu.** Karar
+  `Teknik borç` maddesinde YAZILIYDI ("silme, env bayrağıyla kapat") ama
+  uygulanmamıştı — yani karar günlüğüne yazmak tek başına yetmiyor. Şimdi iki
+  kapı üst üste: sayfalar üretimde `notFound()`, menü bölümü çizilmiyor.
+  `degismezler.test.ts` ikisini de zorluyor.
+
+  > **Bilerek yapılmayan:** vitrin **bundle'dan çıkmıyor**, route hâlâ
+  > derleniyor. Teknik borcun "üretim yüzeyinde geliştirici aracı durmamalı"
+  > kısmı kapandı, "bundle'a giriyor" kısmı kapanmadı.
+
+- **Randevu formu olmayan bir SMS hatırlatması vaat ediyordu.** Telefon
+  alanının altında "Randevu hatırlatması da buraya gidiyor" yazıyordu; SMS
+  kanalı yok (Faz K), bütün bildirimler e-postayla gidiyor ve e-posta formda
+  isteğe bağlı. Yani telefonunu yazıp e-postasını boş bırakan müşteri hiçbir
+  şey almıyordu — üstelik `bildirim.ts` o satırı `adres-yok` diye **hata**
+  işaretliyordu. Vaat yalnızca yanlış değil, kuyrukta görünür bir arıza
+  üretiyordu.
+
+- **`/saglik` arama motoruna açıktı.** Sayfa halka açık kalıyor (teşhis değeri
+  tam da deploy sonrası tarayıcıdan açılabilmesinde) ama `robots.txt` +
+  `noindex` ile dizinden çekildi.
+
+### Arama vaadi karşılıyor (PR #26)
+
+Ana sayfa "Ne arıyorsunuz?" diyordu, sorgu yalnızca `isletme.ad` ve
+`isletme.slug`'a bakıyordu. Ölçüldü: `saç kesimi` **0 sonuç**, `kuaför` ise
+Kuaför kategorisindeki işletmeyi adında o kelime geçmediği için bulamıyordu.
+`/dizin` aynı kutuyu dürüstçe "İşletme adı" diye etiketliyordu — ön kapı
+dizinin verebileceğinden fazlasını vaat ediyordu.
+
+- **`exists` kullanıldı, JOIN değil.** `isletmeleriAra` iki sorgu koşuyor ve
+  ikisi de aynı `kosul`u paylaşıyor: kart sorgusu `hizmet`e LEFT JOIN atıp
+  topluyor, sayım sorgusu **join'siz** `count(*)`. Koşula doğrudan bir `hizmet`
+  kolonu koymak sayım sorgusunu kırar, kart sorgusunda LEFT JOIN'i fiilen
+  INNER'a çevirip hizmetsiz işletmeyi düşürür ve toplamaları bozardı.
+  Korelasyonlu `exists` her iki sorguda da kendi başına ayakta duruyor.
+
+- **Kategori eşleşmesi SQL'de değil, kapalı liste üzerinden JS'te.** `ilike`
+  küçültmeyi collation'la yapıyor ve `kuafor` yazan ziyaretçi `Kuaför`
+  kategorisini bulamazdı. Aynı tuzak işletme adı için Faz M'de yaşanmış ve
+  orada `slug` kolonuyla çözülmüştü.
+
+- **Hizmet adında katlama SQL'de.** `hizmet` tablosunda slug kolonu yok;
+  `lower(translate(...))` kullanılıyor ve tablo `slug.ts`ten **tek kaynak**
+  olarak okunuyor. `translate` önce, `lower` sonra — `lower('I')` collation'a
+  bağlı, `translate` değil.
+
+- **DEĞİŞMEZ 12 metni güncellendi:** `hizmet` artık **filtrelenebilir ama
+  döndürülemez**. Bir kolona göre süzmek o kolonun içeriğini dışarı vermiyor;
+  ziyaretçi zaten elindeki metni soruyor. Kart hâlâ yalnızca toplama gösteriyor.
+
+  > **Kapı kasıtlı ihlalle sınandı — yakaladı.** Korelasyon satırı kaldırılınca
+  > tam olarak üç test kırmızıya döndü; biri `exists`'in sabit-doğruya dönüp
+  > **bütün dizini** döndürmesini yakalayan çapraz kiracı testi.
+
+  > **Bilerek yapılmayan:** `pg_trgm` indeksi. Bir `CREATE EXTENSION` göçü demek
+  > ve korelasyon zaten `isletme_id` ile daralttığı için planlayıcı muhtemelen
+  > seçmezdi. Eşik: `hizmet` ~50k satırı geçerse yeniden bakılmalı. Türkçe dışı
+  > aksanlar (`Café`) da katlanmıyor — `unaccent` yine göç.
+
+### Kaybolan filtre (PR #27)
+
+Ana sayfadaki "Veteriner" kutucuğuna basan kullanıcı boş bir liste görüyor **ve
+Kategori kutusu "Tüm kategoriler" diyordu** — seçimi kayboluyordu. Sebep iki
+kaynağın çarpışması: kutucuklar sabit dokuz kategoriden (kapsamı göstermek
+için), filtre seçenekleri gerçek veriden (dürüst olmak için). İkisi de tek
+başına doğru; **çarpıştıkları yer ele alınmamıştı**.
+
+Listenin kaynağı değişmedi — yalnızca aktif seçim istisna tutuluyor. Boş durum
+ayrıca hangi filtrenin etkin olduğunu yazıyor.
+
+### Misafirden üyeye köprü (PR #28)
+
+Faz J "elinizdeki randevuyu ekleyin" kutusunu `/randevularim`a koymuştu, ama
+kullanıcının linki **elinde tuttuğu** tek an token sayfası; o sayfa da
+oturumdan tamamen habersizdi. Yani akış, kullanıcıdan linki kopyalayıp başka
+bir sayfaya gidip **geri** yapıştırmasını bekliyordu.
+
+- **Token hiçbir yeni URL'e konmadı.** Onay ekranından giriş yoluna geçirmek
+  için `?devam=<iptalYolu>` yazmak cazipti ama o değer sunucu erişim loglarına
+  düşerdi ve token tek başına yetki taşıyor (DEĞİŞMEZ 5'in ruhu). Tek tıkla
+  ekleme bu yüzden token'ın **zaten adres çubuğunda olduğu** sayfada duruyor;
+  onay ekranı düz bir `/uye-ol` daveti gösteriyor. Aynı gerekçeyle `/uye-ol`'a
+  `devam` desteği **eklenmedi** — bugün onu besleyecek güvenli bir çağıran yok.
+  (Yazıldı, sonra geri alındı: spekülatif kapsam.)
+
+- **Yetki modeli değişmedi.** Sayfayı hâlâ URL'deki token açıyor; oturum hiçbir
+  kapı açmıyor, yalnızca bir kutu çiziyor.
+
+- **`/giris` artık iki çıkış gösteriyor.** Tek bağlantı `/uye-ol`a — müşteri
+  kaydına — gidiyordu ve bu **geri dönüşü olmayan** bir tuzaktı:
+  `kullanici_auth_user_id` tekil, yani oradan kaydolan işletme sahibinin
+  e-postası kalıcı olarak MUSTERI oluyor ve o adresle bir daha işletme
+  açamıyor. Faz J aynı sınıfı `/kayit/tamamla` için düzeltmişti; **çatalın
+  kendisi giriş ekranındaydı** ve görülmemişti.
+
+### Akış pürüzleri (PR #29)
+
+- **Gün şeridi başlığı ay yazıyordu, oklar hafta atlıyordu.** `aria-label`
+  baştan beri doğruydu ("Sonraki hafta") — yani ekran okuyucu ile göz farklı
+  şey duyuyordu. Yazım panelin takviminde zaten vardı; `bicim.ts >
+  tarihAraligi`ya taşındı ve iki yer de oradan okuyor.
+- **"Devam et" slot seçilince aşağı kayıyordu** ve tıklama boşa gidiyordu —
+  turda gerçekten ıskalandı. Satır artık her zaman yer kaplıyor.
+- **Boş gün ipucu "Farketmez'i seçin" diyordu**, kullanıcı zaten Farketmez
+  seçmişken de.
+
+### Başlıklar ve KVKK (PR #30)
+
+- **`/giris`, `/kayit`, `/kayit/tamamla` ve bütün panel sayfaları** kök
+  layout'un ana sayfa başlığını taşıyordu. Faz J'de eklenen `/uye-ol` doğru
+  yapmıştı, eskiler geride kalmıştı — yani yeni sayfa eklendikçe **sessizce
+  tekrarlanan** bir sınıf. `degismezler.test.ts` artık her `page.tsx`'in
+  `metadata` ihraç etmesini zorluyor; kök sayfa muaf.
+
+- **`/gizlilik` eklendi.** Ürün ad, telefon ve e-posta topluyor ve Türkiye'de
+  tüketiciye açıktan hizmet veriyor; bugüne kadar formda tek satır
+  bilgilendirme, alt bilgide tek bir bağlantı yoktu.
+
+  > **Onay kutusu konmadı, bilinçli:** misafir randevusunun sürtünmesini
+  > artırmamak Faz J kararıydı ve buradaki işleme sözleşmenin ifası için
+  > gerekli olan işleme — ayrıca rıza alınması gereken bir şey değil. Gereken
+  > şey bilgilendirme.
+
+### Bilerek kapsam dışı (Faz P'nin tamamı için)
+
+- **Şifre sıfırlama.** Bugün hiç yok ve `kullanici_auth_user_id` tekil olduğu
+  için şifresini unutan kullanıcı **kalıcı olarak kilitleniyor** — aynı
+  e-postayla yeniden kayıt da olamıyor. Canlıda gerçek hesaplar var, yani bu
+  bugünkü en pahalı boşluk. Faz P2'ye alındı.
+- **`scoped-db.ts` bölünmesi** ve **uyarı/hata takibi** — teknik borcun kalan
+  iki maddesi, Faz P2.
+- **`/saglik`'in şemayı gerçekten kontrol etmesi** — bu turda yalnızca dizinden
+  çekildi, teşhis derinleştirilmedi.
+- **`/r/<slug>` bir profil sayfası değil, doğrudan form.** Dizinden gelen kişi
+  "Beşiktaş, İstanbul" yazan bir kart tıklıyor, karşısında adres yok, çalışma
+  saati yok, dizine dönüş yok. `/r/`'ye üst bar koymama kararı Instagram
+  trafiği içindi; pazaryeri ön kapısı kararından sonra o gerekçe tek başına
+  yetmiyor. Ayrı bir iş.
+- **Elle randevu ekleme ve müşteri listesi** — Faz H2, aşağıya bakın.
+
+### Ortaya çıkan: Faz H2 yol haritasından düşmüştü
+
+`plan.md` tamamlananlar tablosu Faz H'yi "müşteri geçmişi" dahil diye yazıyordu.
+Oysa Faz H kendi notunda ikiye bölünmüştü: **elle randevu ekleme** ile **müşteri
+listesi ve geçmişi** Faz H2'ye ayrılmıştı — ve H2 "Sıradakiler" listesinde hiç
+yoktu. İki belge birbiriyle çelişiyordu ve kimse fark etmemişti.
+
+Sonucu somut: **telefonla gelen randevuyu salon panele giremiyor.** Ürünün
+işletme tarafındaki en büyük fonksiyonel boşluğu bu ve `/isletmeler-icin` "tek
+takvim" derken bunu kapsıyormuş gibi duruyordu. H2 `plan.md`ye geri kondu,
+`plan.md`nin bağlam cümlesi de "tam bir randevu yazılımı" iddiasını bugünkü
+gerçeğe çekti.
+
+### Prod'a tohum atıldığı KAYDA GEÇMEMİŞTİ
+
+Canlı dizindeki yedi işletmenin **tamamı** `tohum-demo.ts` çıktısı. Betik
+`--prod --onayla` ile bunu destekliyor, yani bilinçli bir işti — ama TODOS'taki
+her tohum satırı `randevu_dev` diyor ve prod'a yazıldığı hiçbir yerde yazılı
+değildi. Kayıt buraya düşüyor.
+
+Bunun iki sonucu var ve ikisi de görülmeliydi: kayıtlar `sitemap.xml`'de, yani
+Google'a **uydurma salonlar** sunuluyor; ve `page.tsx`'in kendi yorumu
+"DÜRÜST BOŞ DURUM — sahte kart göstermek, tıklayınca hiçbir yere gitmeyen bir
+ürün demek" diyor. Kod bir ilkeyi savunurken veri onun tersini yapıyordu.
+
+### Elle yapılması gerekenler (Faz P)
+
+- [ ] **Prod'dan `berber` kaydını sil.** Adı düpedüz bozuk bir test kaydı ve
+      alfabetik sıra yüzünden Bursa vitrininin **ilk kartı**. Karar: tamamen
+      silinsin; bağlı randevu cascade ile gidiyor ve bu kabul edildi.
+      ```sql
+      begin;
+      select id, slug, ad from isletme where slug = 'berber';
+      delete from isletme where slug = 'berber';
+      commit;  -- ya da rollback;
+      ```
+      `SUPABASE_DB_URL` üzerinden, `prod-goc.ts` disipliniyle. Sitemap
+      `force-dynamic`, bir sonraki istekte kendiliğinden düşüyor. `auth.users`
+      girdisi kalıyor (DEĞİŞMEZ 9: FK yok).
+- [ ] **`/gizlilik` metnini hukukçuya okut ve iki yer tutucuyu doldur:** veri
+      sorumlusunun unvanı/başvuru adresi ve saklama süresi. Sayfada
+      `[doldurulacak]` olarak görünüyorlar.
+- [ ] **Oturumlu iki dal canlıda gözle doğrulanmalı:** panelde "Geliştirici"
+      bölümünün olmadığı, ve token sayfasında "Hesabıma ekle" düğmesinin
+      çıktığı. İkisi de yerelde giriş yapmayı gerektirdiği için ölçülemedi;
+      testle ve kod okumasıyla kilitli ama gözle görülmedi.
