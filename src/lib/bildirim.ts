@@ -73,23 +73,61 @@ export function randevuOlustuKayitlari(veri: {
     },
   ];
 
+  kayitlar.push(...hatirlatmaKaydi(veri));
+
+  return kayitlar;
+}
+
+/// PANELDEN elle girilen randevunun satirlari (Faz H2).
+///
+/// `ISLETME_YENI_RANDEVU` BILEREK YOK: randevuyu giren zaten isletmenin
+/// kendisi ve kendi yazdigi kaydi kendine haber vermek gurultuden ibaret.
+/// Musteri tarafi ise degismiyor - telefonla randevu alan kisi de onay
+/// mesajini ve hatirlatmayi hak ediyor, ustelik onay mesaji iptal linkini
+/// tasiyor ve o link musterinin randevuyu kendi iptal edebilecegi tek yol.
+///
+/// Elle girilen randevu her zaman ONAYLI basliyor (bkz. `randevuElleOlustur`),
+/// yani "alindi, onay bekliyor" dali burada hic yok.
+export function elleRandevuKayitlari(veri: {
+  randevuId: string;
+  baslangic: Date;
+  simdi: Date;
+}): YeniBildirim[] {
+  return [
+    {
+      randevuId: veri.randevuId,
+      sablon: "MUSTERI_RANDEVU_ONAYLANDI",
+      planlananZaman: veri.simdi,
+    },
+    ...hatirlatmaKaydi(veri),
+  ];
+}
+
+/// Hatirlatma satiri - iki olusturma yolunda da AYNI kural.
+///
+/// GECMISE HATIRLATMA YAZILMIYOR. Yarinden yakin bir randevuda hatirlatma
+/// zamani zaten gecmis olurdu ve satir yazilsaydi ilk bosaltmada HEMEN
+/// gonderilirdi - musteri "yarinki randevunuz" diyen bir maili randevuyu
+/// aldigi dakikada alirdi. Elle girilen randevularda bu dal DAHA SIK
+/// calisiyor: telefonla alinan randevunun cogu ayni haftanin icinde.
+function hatirlatmaKaydi(veri: {
+  randevuId: string;
+  baslangic: Date;
+  simdi: Date;
+}): YeniBildirim[] {
   const hatirlatmaZamani = new Date(
     veri.baslangic.getTime() - HATIRLATMA_ONCE_SAAT * 60 * 60 * 1000,
   );
 
-  // GECMISE HATIRLATMA YAZILMIYOR. Yarinden yakin bir randevuda hatirlatma
-  // zamani zaten gecmis olurdu ve satir yazilsaydi ilk bosaltmada HEMEN
-  // gonderilirdi - musteri "yarinki randevunuz" diyen bir maili randevuyu
-  // aldigi dakikada alirdi.
-  if (hatirlatmaZamani.getTime() > veri.simdi.getTime()) {
-    kayitlar.push({
+  if (hatirlatmaZamani.getTime() <= veri.simdi.getTime()) return [];
+
+  return [
+    {
       randevuId: veri.randevuId,
       sablon: "MUSTERI_HATIRLATMA",
       planlananZaman: hatirlatmaZamani,
-    });
-  }
-
-  return kayitlar;
+    },
+  ];
 }
 
 /// Randevu IPTAL EDILDIGINDE yazilacak satirlar. Iptali kimin yaptigina
