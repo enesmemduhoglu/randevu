@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -160,13 +160,24 @@ export function Takvim({
 
   return (
     <div className="space-y-5">
-      <div className="space-y-1">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
-          Takvim
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Randevularınızı görün, birine dokunup durumunu değiştirin.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+            Takvim
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Randevularınızı görün, birine dokunup durumunu değiştirin.
+          </p>
+        </div>
+
+        {/* Formu GORUNEN GUNLE aciyoruz: isletme bir gune bakarken "randevu
+            ekle" dediginde tarih zaten dogru geliyor ve bir adim eksiliyor. */}
+        <Button asChild>
+          <Link href={`/panel/randevu/yeni?tarih=${tarihMetni(tarih)}`}>
+            <PlusIcon aria-hidden="true" />
+            Randevu ekle
+          </Link>
+        </Button>
       </div>
 
       {/* Kontrol seridi. Mobilde alt alta sariyor; oklar ve "Bugün" bir arada

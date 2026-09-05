@@ -3,6 +3,7 @@
 import {
   CalendarCheckIcon,
   CalendarDaysIcon,
+  CalendarPlusIcon,
   ClockIcon,
   MailIcon,
   PaletteIcon,
@@ -54,6 +55,10 @@ const BOLUMLER: Bolum[] = [
     ogeler: [
       { ad: "Bugün", ikon: CalendarCheckIcon, yol: "/panel", tam: true },
       { ad: "Takvim", ikon: CalendarDaysIcon, yol: "/panel/takvim" },
+      // Menude de var, takvim basliginda da: telefonla gelen randevu gun
+      // icinde her ekrandan girilebilmeli ve o an panelin neresinde
+      // olundugunu tahmin edemiyoruz.
+      { ad: "Randevu ekle", ikon: CalendarPlusIcon, yol: "/panel/randevu/yeni" },
       { ad: "Hizmetler", ikon: ScissorsIcon, yol: "/panel/hizmetler" },
       { ad: "Personel", ikon: UsersIcon, yol: "/panel/personel" },
       { ad: "Çalışma saatleri", ikon: ClockIcon, yol: "/panel/calisma-saatleri" },
