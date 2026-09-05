@@ -77,6 +77,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     { url: `${kok}/isletmeler-icin`, changeFrequency: "monthly", priority: 0.5 },
+    // Aranan bir sayfa degil ama bulunabilir olmasi gerekiyor: KVKK metnine
+    // dogrudan adresten ulasmak isteyen biri cikabilir. Dusuk oncelik, cunku
+    // tarama butcesinin buraya harcanmasini istemiyoruz.
+    { url: `${kok}/gizlilik`, changeFrequency: "yearly", priority: 0.3 },
   ];
 
   const ilSayfalari: MetadataRoute.Sitemap = [...iller]

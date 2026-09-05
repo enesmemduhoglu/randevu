@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { KimlikKabugu } from "@/components/kimlik/kabuk";
@@ -11,6 +12,10 @@ import { auth, authKimligi } from "@/lib/auth";
 // transaction yok - veritabani o an erisilemezse hesap acilmis ama kayit
 // yazilmamis olur. O kisi icin auth() null donuyor, yani panele giremiyor;
 // /giris'e gonderilse giris basarili olur ve dongu bir daha baslardi.
+
+export const metadata: Metadata = {
+  title: "Kaydı tamamlayın",
+};
 
 export default async function TamamlaSayfasi() {
   // Kaydi zaten tam olan buraya dusmemeli. Hedef ROLE gore ayriliyor (Faz J):

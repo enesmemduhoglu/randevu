@@ -403,3 +403,45 @@ describe("DEGISMEZ 1 - musteri kapisi ikinci eksende, yuzeyi dar", () => {
     expect(kod).toContain("isNull(randevu.kullaniciId)");
   });
 });
+
+describe("Faz P - her sayfanin kendi basligi var", () => {
+  // NEDEN: `/giris`, `/kayit`, `/kayit/tamamla` ve butun panel sayfalari
+  // aylarca kok layout'un ANA SAYFA basligini tasidi ("Randevu — kuaför,
+  // berber ve güzellik salonu randevusu"). Kimse fark etmedi cunku hicbir sey
+  // kirilmiyor; yalnizca sekme adi ve arama sonucu yanlis oluyor. Faz J'de
+  // eklenen `/uye-ol` dogru yapmisti, eskiler geride kalmisti - yani bu, yeni
+  // sayfa eklendikce SESSIZCE tekrarlanan bir sinif.
+  //
+  // Kok sablon "%s · Randevu" (layout.tsx), yani sayfaya dusen is tek satir.
+
+  /// KOK SAYFA MUAF ve bu bilincli: `/` icin dogru baslik zaten layout'un
+  /// `title.default` degeri. Ona ayrica bir baslik yazmak, ayni metni iki
+  /// yerde tutmak olurdu.
+  const MUAFLAR = new Set([join(APP, "page.tsx")]);
+
+  function sayfaDosyalari(dizin: string): string[] {
+    const bulunan: string[] = [];
+    for (const ad of readdirSync(dizin)) {
+      const tam = join(dizin, ad);
+      if (statSync(tam).isDirectory()) bulunan.push(...sayfaDosyalari(tam));
+      else if (ad === "page.tsx") bulunan.push(tam);
+    }
+    return bulunan;
+  }
+
+  const sayfalar = sayfaDosyalari(APP).filter((yol) => !MUAFLAR.has(yol));
+
+  test("taranacak sayfa bulundu", () => {
+    expect(sayfalar.length).toBeGreaterThan(0);
+  });
+
+  test.each(
+    sayfalar.map((y) => [y.replace(process.cwd(), "").replace(/\\/g, "/"), y]),
+  )("%s metadata ihrac ediyor", (_ad, yol) => {
+    const metin = readFileSync(yol, "utf-8");
+    const var_ =
+      metin.includes("export const metadata") ||
+      metin.includes("export async function generateMetadata");
+    expect(var_).toBe(true);
+  });
+});

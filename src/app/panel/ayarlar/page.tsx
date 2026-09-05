@@ -1,9 +1,17 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AyarlarFormu } from "@/components/panel/ayarlar-formu";
 import { DizinYayinKarti } from "@/components/panel/dizin-yayin-karti";
 import { isletmeOturumu } from "@/lib/auth";
 import { getScopedDb } from "@/lib/scoped-db";
+
+export const metadata: Metadata = {
+  title: "Ayarlar",
+  // Panel oturum arkasinda ve robots.txt zaten /panel/ yolunu
+  // engelliyor; meta etiketi ikinci kapi (bkz. /saglik ve /r/*/randevu/).
+  robots: { index: false, follow: false },
+};
 
 export default async function AyarlarSayfasi() {
   const oturum = await isletmeOturumu();

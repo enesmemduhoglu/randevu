@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { PersonelListesi } from "@/components/panel/personel-listesi";
 import { isletmeOturumu } from "@/lib/auth";
 import { getScopedDb } from "@/lib/scoped-db";
+
+export const metadata: Metadata = {
+  title: "Personel",
+  // Panel oturum arkasinda ve robots.txt zaten /panel/ yolunu
+  // engelliyor; meta etiketi ikinci kapi (bkz. /saglik ve /r/*/randevu/).
+  robots: { index: false, follow: false },
+};
 
 export default async function PersonelSayfasi() {
   const oturum = await isletmeOturumu();
