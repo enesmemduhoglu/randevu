@@ -322,17 +322,16 @@ karar kaydı `TODOS.md`'de.
 | **O** — keşfedilebilirlik | `/dizin/[il]`, `/dizin/[il]/[kategori]`, `robots.ts`, `sitemap.ts`, faceted navigation kapısı |
 | **J** — müşteri hesabı | `/uye-ol`, gerçek `/randevularim`, `getMusteriDb` (DEĞİŞMEZ 1'in ikinci ekseni), sahipliğe bağlı iptal, bağlantıyla ekleme |
 | **P** — tur sonrası düzeltmeler | Geliştirici ekranları üretimde kapandı, hatırlatma vaadi düzeltildi, arama kategori + hizmet adına da bakıyor, kaybolan filtre, misafir→üye köprüsü, `/giris`'te iki çıkış, eksik sayfa başlıkları, `/gizlilik` |
+| **H2a** — elle randevu | `/panel/randevu/yeni`, `POST /api/randevular`, müsaitlik motoru iki kapıya bağlandı (`MusaitlikKapisi`), serbest saat istisnası, `kaynak: ISLETME` |
 
 ### Sıradakiler
 
-**Faz H2 — elle randevu ve müşteri listesi**
-Faz H beş iş olarak tarif edilmişti; **elle randevu ekleme** ile **müşteri listesi ve
-geçmişi** o fazda ayrılıp H2'ye bırakıldı (gerekçe `TODOS.md > Faz H > Faz ikiye
-bölündü`) ve sonra yol haritasından tümden düştü. Sonucu somut: telefonla gelen
-randevuyu salon panele giremiyor, yani ürün "tam bir randevu yazılımı" vaadinin bu
-parçasını bugün karşılamıyor. İlk iş mimari bir karar — müsaitlik motorunu panel
-tarafına bağlamak (`TODOS.md > Faz H > Bilerek kapsam dışı`). L3'ün "gelmedi" kısıtını
-panelden görme ve kaldırma ekranı da buraya bağlı.
+**Faz H2 — müşteri listesi ve geçmişi** *(ikinci yarı)*
+Fazın ilk yarısı — **elle randevu ekleme** — kapandı: müsaitlik motoru iki kapıya
+birden bağlandı, panel serbest saat de yazabiliyor, kaynak `ISLETME` ayrımı artık
+gerçek (`TODOS.md > Faz H2`). Kalanı: `/panel/musteriler`, müşteri geçmişi, müşteri
+kaydını düzenleme (bugün elle randevu mevcut müşterinin adını **bilerek**
+güncellemiyor) ve L3'ün "gelmedi" kısıtını panelden görme/kaldırma ekranı.
 
 **Faz P2 — sağlamlaştırma (kalanlar)**
 Faz P teknik borcun iki maddesini kapattı (vitrin üretimde kapalı, `/saglik` arama
