@@ -25,6 +25,7 @@ export function SaatIzgarasi({
   saatDilimi,
   durum,
   hata,
+  personelSecildi,
   onSec,
   onYenile,
 }: {
@@ -35,6 +36,8 @@ export function SaatIzgarasi({
   saatDilimi: string;
   durum: "yukleniyor" | "hazir" | "hata";
   hata: string | null;
+  /// Belirli bir personel secili mi. Bos gun ipucu buna bagli.
+  personelSecildi: boolean;
   onSec: (slot: Slot) => void;
   onYenile: () => void;
 }) {
@@ -75,9 +78,14 @@ export function SaatIzgarasi({
         />
         <div className="space-y-1">
           <p className="font-medium">Bu gün için uygun saat yok</p>
+          {/* IPUCU KOSULLU (Faz P). Onceden "Farketmez daha cok saat aciyor"
+              cumlesi, kullanici ZATEN "Farketmez" secmisken de ciziliyordu -
+              yani yapamayacagi bir sey oneriliyordu. Ipucu ancak belirli bir
+              personel secildiginde bir sey anlatiyor. */}
           <p className="text-sm text-muted-foreground">
-            Başka bir gün seçin. Kimin uygun olduğu fark etmiyorsa personel
-            adımında “Farketmez” daha çok saat açıyor.
+            {personelSecildi
+              ? "Başka bir gün seçin. Kimin uygun olduğu fark etmiyorsa personel adımında “Farketmez” daha çok saat açıyor."
+              : "Başka bir gün seçin."}
           </p>
         </div>
       </div>

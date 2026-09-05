@@ -160,3 +160,23 @@ export function tarihUzun(tarih: YerelTarih): string {
 export function gunVeAy(tarih: YerelTarih): string {
   return `${tarih.gun} ${ayAdi(tarih.ay)}`;
 }
+
+/// "5 – 11 Eylül 2026" — bir gun araliginin basligi.
+///
+/// TEKRAR ETMEYEN parcalar atiliyor: iki tarih ayni aydaysa ay bir kez, ayni
+/// yildaysa yil bir kez yaziliyor. "5 Eylül 2026 – 11 Eylül 2026" teknik
+/// olarak dogru ama okunmuyor ve dar ekranda satiri ikiye cikariyor.
+///
+/// Panelin takviminden (Faz H) buraya TASINDI: ayni yazim Faz P'de randevu
+/// akisinin gun seridinde de gerekti. Iki yerde iki kopya durdugu surece
+/// birinde duzeltilen bir sinir durumu (yil sinirini asan hafta) otekinde
+/// yanlis kalabilirdi.
+export function tarihAraligi(ilk: YerelTarih, son: YerelTarih): string {
+  if (ilk.yil !== son.yil) {
+    return `${gunVeAy(ilk)} ${ilk.yil} – ${gunVeAy(son)} ${son.yil}`;
+  }
+  if (ilk.ay === son.ay) {
+    return `${ilk.gun} – ${gunVeAy(son)} ${son.yil}`;
+  }
+  return `${gunVeAy(ilk)} – ${gunVeAy(son)} ${son.yil}`;
+}

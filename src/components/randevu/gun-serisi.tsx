@@ -4,8 +4,8 @@ import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
 
 import {
-  ayVeYil,
   gunKisaAdi,
+  tarihAraligi,
   tarihUzun,
 } from "@/components/randevu/ortak";
 import { Button } from "@/components/ui/button";
@@ -51,12 +51,14 @@ export function GunSerisi({
     if (uzaklik <= maksIleriGun) gunler.push(uzaklik);
   }
 
+  // BASLIK GORUNEN ARALIGI YAZIYOR, ay adini degil (Faz P). Onceden "Eylül
+  // 2026" yaziyordu ve oklar arasinda duran bir ay adi, oklarin AY atladigini
+  // soyluyordu - oysa serit hafta hafta ilerliyor. `aria-label` bastan beri
+  // dogruydu ("Sonraki hafta"), yani ekran okuyucu ile goz farkli sey
+  // duyuyordu. Yazim panelin takvimiyle ayni yerden geliyor.
   const ilk = gunEkle(bugun, gunler[0] ?? 0);
   const son = gunEkle(bugun, gunler[gunler.length - 1] ?? 0);
-  const baslik =
-    ilk.ay === son.ay && ilk.yil === son.yil
-      ? ayVeYil(ilk)
-      : `${ayVeYil(ilk)} – ${ayVeYil(son)}`;
+  const baslik = tarihAraligi(ilk, son);
 
   return (
     <div className="space-y-2">

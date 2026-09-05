@@ -28,6 +28,7 @@ export function ZamanSecimi({
   hata,
   uyari,
   geriEtiketi,
+  personelSecildi,
   onTarihSec,
   onSlotSec,
   onYenile,
@@ -46,6 +47,9 @@ export function ZamanSecimi({
   /// cunku listenin kendi hatasi degil: liste tazelenmis ve gecerli.
   uyari: string | null;
   geriEtiketi: string;
+  /// Belirli bir personel secili mi. Bos gun mesajindaki "Farketmez" ipucu
+  /// yalnizca o zaman anlamli - bkz. saat-izgarasi.tsx.
+  personelSecildi: boolean;
   onTarihSec: (tarih: YerelTarih) => void;
   onSlotSec: (slot: Slot) => void;
   onYenile: () => void;
@@ -69,6 +73,7 @@ export function ZamanSecimi({
       />
 
       <SaatIzgarasi
+        personelSecildi={personelSecildi}
         slotlar={slotlar}
         secili={seciliSlot}
         saatDilimi={saatDilimi}
@@ -78,16 +83,31 @@ export function ZamanSecimi({
         onYenile={onYenile}
       />
 
-      {seciliSlot ? (
-        <p className="text-sm text-muted-foreground">
-          Seçilen:{" "}
-          <span className="font-medium text-foreground">
-            {tarihUzun(tarih)} · {saatiGoster(seciliSlot.baslangic, saatDilimi)}
-            {" – "}
-            {saatiGoster(seciliSlot.bitis, saatDilimi)}
-          </span>
-        </p>
-      ) : null}
+      {/* SATIR HER ZAMAN YER KAPLIYOR (Faz P). Onceden yalnizca secim varken
+          ciziliyordu ve ortaya cikisi altindaki "Devam et" dugmesini asagi
+          itiyordu - yani slota basip hemen devam etmeye giden tiklama bosa
+          gidiyordu. Klasik yerlesim kaymasi; olculdu, gercekten iskalatiyor.
+          Bos halde `invisible`: yer ayrilmis kaliyor ama ekran okuyucu bos bir
+          satir duymuyor (`aria-hidden`). */}
+      <p
+        aria-hidden={seciliSlot ? undefined : true}
+        className={`text-sm text-muted-foreground ${seciliSlot ? "" : "invisible"}`}
+      >
+        {seciliSlot ? (
+          <>
+            Seçilen:{" "}
+            <span className="font-medium text-foreground">
+              {tarihUzun(tarih)} ·{" "}
+              {saatiGoster(seciliSlot.baslangic, saatDilimi)}
+              {" – "}
+              {saatiGoster(seciliSlot.bitis, saatDilimi)}
+            </span>
+          </>
+        ) : (
+          // Gorunmez ama satir yuksekligini veren bir yer tutucu.
+          " "
+        )}
+      </p>
 
       <div className="flex items-center justify-between gap-3">
         <Button variant="ghost" className="h-10" onClick={onGeri}>

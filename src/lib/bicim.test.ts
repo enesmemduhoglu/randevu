@@ -12,6 +12,7 @@ import {
   saatBicimle,
   saatiDakikayaCevir,
   sureBicimle,
+  tarihAraligi,
   tarihUzun,
   telefonBicimle,
 } from "@/lib/bicim";
@@ -204,3 +205,25 @@ function gunKisaltmasiHarfi(gun: number): string {
 function pazardanItibaren(gun: number) {
   return { yil: 2026, ay: 9, gun: 6 + gun };
 }
+
+// Faz P: aralik yazimi panelin takviminden `bicim.ts`e tasindi cunku randevu
+// akisinin gun seridi de ayni yazimi kullaniyor. Ucu de sinir durumu.
+test("tarih araligi ayni ayda ayi bir kez yaziyor", () => {
+  expect(
+    tarihAraligi({ yil: 2026, ay: 9, gun: 5 }, { yil: 2026, ay: 9, gun: 11 }),
+  ).toBe("5 – 11 Eylül 2026");
+});
+
+test("ay siniri asiliyorsa iki ay da yaziliyor", () => {
+  expect(
+    tarihAraligi({ yil: 2026, ay: 9, gun: 28 }, { yil: 2026, ay: 10, gun: 4 }),
+  ).toBe("28 Eylül – 4 Ekim 2026");
+});
+
+test("yil siniri asiliyorsa iki yil da yaziliyor", () => {
+  // Yilbasini kapsayan hafta: "29 Aralık – 4 Ocak 2027" okuyucuya hangi yilin
+  // araligi oldugunu soylemezdi.
+  expect(
+    tarihAraligi({ yil: 2026, ay: 12, gun: 28 }, { yil: 2027, ay: 1, gun: 3 }),
+  ).toBe("28 Aralık 2026 – 3 Ocak 2027");
+});
