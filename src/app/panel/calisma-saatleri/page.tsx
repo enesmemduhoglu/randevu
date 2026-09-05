@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import {
@@ -6,6 +7,13 @@ import {
 } from "@/components/panel/calisma-saatleri-duzeni";
 import { isletmeOturumu } from "@/lib/auth";
 import { getScopedDb } from "@/lib/scoped-db";
+
+export const metadata: Metadata = {
+  title: "Çalışma saatleri",
+  // Panel oturum arkasinda ve robots.txt zaten /panel/ yolunu
+  // engelliyor; meta etiketi ikinci kapi (bkz. /saglik ve /r/*/randevu/).
+  robots: { index: false, follow: false },
+};
 
 export default async function CalismaSaatleriSayfasi({
   searchParams,

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { HizmetListesi } from "@/components/panel/hizmet-listesi";
@@ -7,6 +8,13 @@ import { getScopedDb } from "@/lib/scoped-db";
 // Veri sunucuda okunuyor, listeleme istemciye prop olarak gidiyor. Boylece
 // veritabani sorgusu istemci paketine hic inmiyor ve kiraci filtresi
 // scoped-db'de kaliyor (DEGISMEZ 1).
+
+export const metadata: Metadata = {
+  title: "Hizmetler",
+  // Panel oturum arkasinda ve robots.txt zaten /panel/ yolunu
+  // engelliyor; meta etiketi ikinci kapi (bkz. /saglik ve /r/*/randevu/).
+  robots: { index: false, follow: false },
+};
 
 export default async function HizmetlerSayfasi() {
   const oturum = await isletmeOturumu();

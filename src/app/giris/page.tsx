@@ -1,9 +1,14 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { GirisFormu } from "@/components/kimlik/giris-formu";
 import { KimlikKabugu } from "@/components/kimlik/kabuk";
 import { auth } from "@/lib/auth";
 import { guvenliYol } from "@/lib/girdi";
+
+export const metadata: Metadata = {
+  title: "Giriş yap",
+};
 
 export default async function GirisSayfasi({
   searchParams,

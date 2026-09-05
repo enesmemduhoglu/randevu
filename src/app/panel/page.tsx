@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { CheckIcon, GlobeIcon } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -19,6 +20,13 @@ import { getScopedDb } from "@/lib/scoped-db";
 // auth() ve isletmeOturumu() burada tekrar cagriliyor gibi gorunuyor ama
 // duzenle ayni istekte kosuyorlar ve auth() `cache` ile sarili: JWT bir kez
 // dogrulaniyor, kullanici satiri bir kez okunuyor.
+
+export const metadata: Metadata = {
+  title: "Bugün",
+  // Panel oturum arkasinda ve robots.txt zaten /panel/ yolunu
+  // engelliyor; meta etiketi ikinci kapi (bkz. /saglik ve /r/*/randevu/).
+  robots: { index: false, follow: false },
+};
 
 export default async function PanelSayfasi() {
   const oturum = await auth();

@@ -36,6 +36,14 @@ export function AltBilgi() {
           >
             İşletme misiniz?
           </Link>
+          {/* Faz P: ilk gercek yasal sayfa. Dosyanin basligindaki "olmayan
+              sayfaya baglanti verme" kurali korunuyor - bu sayfa VAR. */}
+          <Link
+            href="/gizlilik"
+            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Gizlilik
+          </Link>
         </nav>
       </div>
     </footer>

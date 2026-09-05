@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { CalendarX2Icon } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -83,6 +84,13 @@ const SAATLER = [
   { saat: "12:00", durum: "dolu" },
   { saat: "12:30", durum: "bos" },
 ] as const;
+
+export const metadata: Metadata = {
+  title: "Bileşen vitrini",
+  // Panel oturum arkasinda ve robots.txt zaten /panel/ yolunu
+  // engelliyor; meta etiketi ikinci kapi (bkz. /saglik ve /r/*/randevu/).
+  robots: { index: false, follow: false },
+};
 
 export default function VitrinSayfasi() {
   if (uretimMi()) notFound();

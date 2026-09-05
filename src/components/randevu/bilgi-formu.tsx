@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeftIcon } from "lucide-react";
+import Link from "next/link";
 
 import { HataKutusu } from "@/components/kimlik/hata-kutusu";
 import { AdimBasligi } from "@/components/randevu/ortak";
@@ -170,6 +171,21 @@ export function BilgiFormu({
             gorunur olmali, yoksa etkilesim isteyen bir kutu ekranin disinda
             kalir ve gonderim sebebi anlasilmadan reddedilir. */}
         <TurnstileAlani hata={hata} />
+
+        {/* KVKK BILGILENDIRMESI (Faz P). ONAY KUTUSU DEGIL, bilincli: misafir
+            randevusunun surtunmesini artirmamak Faz J karariydi ve buradaki
+            isleme sozlesmenin ifasi icin gerekli olan isleme - yani ayrica
+            riza alinmasi gereken bir sey degil. Gereken sey BILGILENDIRME ve o
+            da eylemin hemen yaninda duruyor. */}
+        <p className="pt-1 text-xs text-muted-foreground">
+          Randevu alarak bilgilerinizin işlenmesini kabul etmiş olursunuz.{" "}
+          <Link
+            href="/gizlilik"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            Gizlilik metni
+          </Link>
+        </p>
 
         <div className="flex items-center justify-between gap-3 pt-1">
           <Button

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +59,13 @@ function zaman(an: Date, saatDilimi: string): string {
   const p = yerelParcalar(an, saatDilimi);
   return `${tarihUzun(p)} — ${saatBicimle(p.saat * 60 + p.dakika)}`;
 }
+
+export const metadata: Metadata = {
+  title: "Bildirimler",
+  // Panel oturum arkasinda ve robots.txt zaten /panel/ yolunu
+  // engelliyor; meta etiketi ikinci kapi (bkz. /saglik ve /r/*/randevu/).
+  robots: { index: false, follow: false },
+};
 
 export default async function BildirimlerSayfasi() {
   if (uretimMi()) notFound();

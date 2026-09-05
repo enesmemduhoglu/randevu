@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { Takvim } from "@/components/panel/takvim";
@@ -15,6 +16,13 @@ import { gunBasi, gunEkle, tarihAyristir, yerelGun } from "@/lib/zaman";
 // birakmak, sessizce makul bir varsayilana dusmekten kotu.
 //
 // `searchParams` Next 16'da bir PROMISE - `await` edilmeden okunamiyor.
+
+export const metadata: Metadata = {
+  title: "Takvim",
+  // Panel oturum arkasinda ve robots.txt zaten /panel/ yolunu
+  // engelliyor; meta etiketi ikinci kapi (bkz. /saglik ve /r/*/randevu/).
+  robots: { index: false, follow: false },
+};
 
 export default async function TakvimSayfasi({
   searchParams,
