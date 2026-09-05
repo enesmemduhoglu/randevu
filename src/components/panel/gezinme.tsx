@@ -16,6 +16,7 @@ import { usePathname } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { uretimMi } from "@/lib/mod";
 import { cn } from "@/lib/utils";
 
 // Gezinme istemci bileseni: aktif yolu isaretlemek icin usePathname gerekiyor.
@@ -36,6 +37,15 @@ type Oge = {
 
 type Bolum = {
   baslik?: string;
+  /// Yalnizca yerelde ciziliyor (Faz P). Sayfalarin kendisi de uretimde
+  /// `notFound()` donuyor; burasi MENUYU susturuyor.
+  ///
+  /// Iki kapi ust uste, cunku ikisi ayri sey soyluyor: sayfa kapisi adresi
+  /// yazan kisiye "burada bir sey yok" der, menu kapisi ise gercek bir salon
+  /// sahibinin panelinde "Geliştirici" diye bir baslik gormesini engeller.
+  /// Yalnizca menuyu gizlemek, adresi bilenlere acik birakmak olurdu; yalnizca
+  /// sayfayi kapatmak, menude 404'e goturen bir link birakirdi.
+  yalnizcaYerel?: boolean;
   ogeler: Oge[];
 };
 
@@ -52,6 +62,7 @@ const BOLUMLER: Bolum[] = [
   },
   {
     baslik: "Geliştirici",
+    yalnizcaYerel: true,
     ogeler: [
       {
         ad: "Bileşen vitrini",
@@ -79,9 +90,15 @@ function aktifMi(yol: string, oge: Oge) {
 export function Gezinme({ onGezindi }: { onGezindi?: () => void }) {
   const yol = usePathname();
 
+  // Suzme MAP'TEN ONCE: ayirici cizgi `sira > 0` kosuluna bakiyor ve suzme
+  // sonra yapilsaydi uretimde listenin basinda sahipsiz bir cizgi kalirdi.
+  const bolumler = BOLUMLER.filter(
+    (bolum) => !(bolum.yalnizcaYerel && uretimMi()),
+  );
+
   return (
     <nav aria-label="Panel gezinmesi" className="flex flex-col gap-1">
-      {BOLUMLER.map((bolum, sira) => (
+      {bolumler.map((bolum, sira) => (
         <div key={bolum.baslik ?? "ana"} className="flex flex-col gap-0.5">
           {sira > 0 ? (
             <Separator className="my-2 bg-sidebar-border" />

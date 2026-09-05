@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { connection } from "next/server";
 
 import { veritabaniniYokla } from "@/lib/saglik";
@@ -8,6 +9,16 @@ import { veritabaniniYokla } from "@/lib/saglik";
 //
 // Sorgunun kendisi src/lib/saglik.ts'te: src/app altindan @/lib/db import
 // etmek eslint kuraliyla yasak (degismez 1).
+//
+// ARAMA MOTORUNDAN CEKILDI (Faz P). Sayfa halka acik kaliyor - teshis degeri
+// tam da deploy'dan sonra tarayicidan acilabilmesinde - ama dizine girmesinin
+// hicbir faydasi yok ve her tarama bir Supabase gidis-donusu demek. Iki kapi
+// ust uste, `/r/*/randevu/` ile ayni gerekce: `robots.txt` bir RICA, meta
+// etiketi ise ancak sayfa TARANIRSA goruluyor; tek basina hicbiri yeterli degil.
+export const metadata: Metadata = {
+  title: "Sağlık",
+  robots: { index: false, follow: false },
+};
 
 export default async function SaglikSayfasi() {
   // Prerender'i burada kes: sorgu build aninda degil, istek aninda kosmali.

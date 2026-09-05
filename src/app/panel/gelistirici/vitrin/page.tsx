@@ -1,4 +1,5 @@
 import { CalendarX2Icon } from "lucide-react";
+import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,11 +14,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { uretimMi } from "@/lib/mod";
 
 // Bilesen vitrini: Faz C'nin gozle dogrulanabilir ciktisi. Token'lar, tipografi
 // ve bilesen durumlari tek sayfada duruyor ki bir sey bozuldugunda burada
 // gorulsun. Halka acik bir sayfa degil, gelistirici araci: Faz D'de panel
 // gelince /vitrin'den /panel/gelistirici/vitrin altina tasindi.
+//
+// URETIMDE KAPALI (Faz P). Sizinti degildi - oturum arkasindaydi ve kiraci
+// verisi gostermiyordu - ama gercek bir salon sahibi panelinde "Geliştirici"
+// diye bir bolum ve bir bilesen vitrini goruyordu. Silmek yerine kapatmak
+// secildi: vitrin tasarim degisikliginde hala tek bakista dogrulama araci.
+//
+// Kapi `notFound()`, `redirect()` DEGIL: yonlendirme "burada bir sey var ama
+// sana degil" der, oysa uretimde bu sayfa yok. Ayni sebeple menude de
+// cizilmiyor (gezinme.tsx > yalnizcaYerel).
 
 function Bolum({
   baslik,
@@ -74,6 +85,8 @@ const SAATLER = [
 ] as const;
 
 export default function VitrinSayfasi() {
+  if (uretimMi()) notFound();
+
   return (
     <div className="w-full max-w-3xl">
       {/* Kendi basligi ve tema dugmesi yok: sayfa artik panel kabugunun
@@ -197,7 +210,7 @@ export default function VitrinSayfasi() {
               <Label htmlFor="telefon">Telefon</Label>
               <Input id="telefon" inputMode="tel" placeholder="0532 123 45 67" />
               <p className="text-xs text-muted-foreground">
-                Randevu hatırlatması bu numaraya gidecek.
+                İşletme size bu numaradan ulaşacak.
               </p>
             </div>
             <div className="space-y-2">

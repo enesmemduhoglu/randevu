@@ -110,9 +110,14 @@ export function BilgiFormu({
             aria-describedby="telefon-yardim"
             className="h-10"
           />
+          {/* HATIRLATMA CUMLESI BURADAN KALDIRILDI. Metin "Randevu hatirlatmasi
+              da buraya gidiyor" diyordu ama SMS kanali yok (Faz K); butun
+              bildirimler e-postayla gidiyor. Telefonunu yazip e-postasini bos
+              birakan musteri hicbir sey almiyor ve `bildirim.ts` o satiri
+              `adres-yok` diye HATA isaretliyor - yani vaat yalnizca yanlis
+              degil, kuyrukta gorunur bir arizaya donusuyordu. */}
           <p id="telefon-yardim" className="text-xs text-muted-foreground">
-            İşletme size bu numaradan ulaşacak. Randevu hatırlatması da buraya
-            gidiyor.
+            İşletme size bu numaradan ulaşacak.
           </p>
         </div>
 
@@ -129,8 +134,16 @@ export function BilgiFormu({
             type="email"
             autoComplete="email"
             disabled={gonderiliyor}
+            aria-describedby="eposta-yardim"
             className="h-10"
           />
+          {/* Alan ISTEGE BAGLI kaliyor: misafir randevusunun surtunmesini
+              artirmamak Faz J karariydi. Degisen sey, bos birakmanin bedelinin
+              artik GORUNUR olmasi - kullanici neyi kaybettigini bilerek
+              geciyor. */}
+          <p id="eposta-yardim" className="text-xs text-muted-foreground">
+            Randevu onayı, iptal bağlantısı ve hatırlatma bu adrese gider.
+          </p>
         </div>
 
         <div className="space-y-2">
