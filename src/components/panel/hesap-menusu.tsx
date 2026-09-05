@@ -13,24 +13,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { basHarf, ROL_ETIKETLERI } from "@/lib/rol";
 
 // Hesap menusu: kimin oturumda oldugunu gosterir ve cikisi barindirir.
 // Istemci bileseni cunku Popover acilma durumunu tutuyor.
 
-/// Rol arayuzde teknik degeriyle gorunmez. "kullanici" kelimesi de hic gecmez
-/// (docs/marka.md terim sozlugu).
-export const ROL_ADI = {
-  SAHIP: "İşletme sahibi",
-  PERSONEL: "Personel",
-} as const;
-
-export type PanelRolu = keyof typeof ROL_ADI;
-
-/// Bas harf yalnizca susleme; okunacak bilgi zaten yaninda yaziyor.
-/// toLocaleUpperCase("tr") sart: "i" harfinin buyugu Turkce'de "İ".
-export function basHarf(ad: string) {
-  return ad.trim().charAt(0).toLocaleUpperCase("tr") || "?";
-}
+/// Panele girebilen roller. MUSTERI BILEREK YOK - `auth.ts > isletmeOturumu`
+/// onu zaten geciremiyor ve bu tip, o kapinin arayuzdeki karsiligi.
+/// Etiketlerin kendisi `@/lib/rol`de, cunku ayni harita halka acik ust barda
+/// da gerekiyor (orada MUSTERI de var).
+export type PanelRolu = "SAHIP" | "PERSONEL";
 
 type Props = {
   ad: string;
@@ -55,7 +47,7 @@ export function HesapMenusu({ ad, eposta, rol }: Props) {
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{ad}</span>
             <span className="block truncate text-xs font-normal text-muted-foreground">
-              {ROL_ADI[rol]}
+              {ROL_ETIKETLERI[rol]}
             </span>
           </span>
           <ChevronsUpDownIcon

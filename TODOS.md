@@ -2935,5 +2935,53 @@ tema** gözle doğrulandı.
       aynı linki ikinci kez eklemenin hata vermemesi.
 - [ ] **Prod'a önce göç, sonra merge** (`npm run db:uygula:prod -- --onayla`).
       `0005_musteri-hesabi.sql` toplayıcı ve geri alınabilir.
-- [ ] Alt bilgideki "Giriş yap" bağlantısı oturum açıkken de görünüyor
-      (Faz N'den kalma, Faz J'de dokunulmadı). Faz P'ye aday.
+### Faz J üstüne gelen düzeltmeler
+
+Kullanıcı PR açıldıktan sonra üç şey söyledi. İkisi düzeltildi, biri karara
+bağlandı.
+
+- **"Giriş yap" alt bilgiden üst bara taşındı ve üst bar oturumu yansıtıyor.**
+  Şikâyet somuttu: işletme hesabıyla girişliyken "Giriş yap"a basınca `/giris`
+  onu zaten girişli görüp `/panel`e atıyordu. Bağlantı oturum durumundan
+  habersizdi — hem yanlış yerdeydi hem yanlış şeyi söylüyordu. Artık oturum
+  açıkken o düğme hiç çizilmiyor, yani yönlendirme **oluşamıyor**.
+
+  Hesap menüsü yeniden uydurulmadı: panelde çözülmüş desen (`HesapMenusu` +
+  `CikisDugmesi`) üst bara taşındı, çıkış düğmesi birebir aynı bileşen. Ayrı
+  bir kardeş bileşen olmasının tek sebebi tetikleyicinin şekli — panelinki
+  geniş bir kenar çubuğu düğmesi, üst barınki dar ve yatay bir avatar. Rol
+  etiketi ve baş harf `src/lib/rol.ts`e çıktı, çünkü aynı harita artık iki
+  ayrı bileşen ağacında gerekiyor.
+
+  Bedeli açıkça kaydedilsin: `auth()` çerez okuyor, yani `UstBar` kullanan her
+  sayfa dinamik oldu. Pratikte tek kayıp `/isletmeler-icin` (○ → ƒ). Alternatif
+  oturumu her sayfadan prop geçirmekti; o da statik kalan sayfada girişli
+  kullanıcıya "Giriş yap" göstermeye devam ederdi — düzeltilen hatanın
+  kendisini bir sayfada bırakırdı.
+
+- **Hesap ayrımı bugünkü hâliyle kalıyor.** Veri tarafında ayrım zaten var: bir
+  Supabase hesabı ya işletmeye ya müşteriye ait (`kullanici_auth_user_id`
+  tekil). Eksik olan ayrım değil, **arayüzün oturumu göstermemesiydi** ve
+  yukarıdaki madde onu kapatıyor. Ayrı giriş adresleri (`/isletme/giris`) ve
+  aynı tarayıcıda iki oturum birden değerlendirildi, ikisi de bugün
+  gerekmiyor — ikincisi iki ayrı çerez ad alanı ve `auth.ts`in yeniden
+  yazılması demek, DEĞİŞMEZ 6 ve 11'e dokunur.
+
+- **Misafir randevusu KALIYOR.** Soru şuydu: "giriş yapmamış biri randevu
+  alabiliyor, birisi bot atıp sistemi tıkayabilir." Bugün üç kat koruma var —
+  Turnstile (üretimde `gercek`, `degismezler.test.ts` zorluyor), Worker hız
+  sınırı (`RANDEVU_SINIRI`, IP başına 5 istek/60sn) ve telefon başına en çok
+  3 açık randevu; bunların üstüne `gelmediKisitiGun`.
+
+  Üyelik zorunluluğu dördüncü bir kat olurdu ama **botu durdurmuyor**: kayıt da
+  ücretsiz ve otomatikleştirilebilir. Durdurduğu şey gerçek müşteri — ve ürün
+  kimliği kararının ("siteye giren kişi randevu almaya gelmiştir") tam
+  karşısına düşüyor.
+
+  Karar: üyelik zorunlu değil, kalkan ayrı bir fazda güçlendirilecek. Sıradaki
+  adımlar: IP hız sınırını sıkılaştırmak, telefon başına **günlük** randevu
+  tavanı, işletme başına günlük yeni-müşteri tavanı, ve panelde şüpheli
+  yoğunluğu gösteren bir uyarı. Reddedilen üçüncü seçenek, misafir randevusunu
+  e-posta/SMS koduyla doğrulatmaktı: bota gerçek maliyet yaratıyor ama kendi
+  altyapısını (kod üretimi, süre aşımı, doğrulanmayanı düşüren temizlik işi)
+  gerektiriyor — o da ayrı bir faz.

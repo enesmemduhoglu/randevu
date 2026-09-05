@@ -7,6 +7,12 @@ import { MARKA_ADI } from "@/lib/marka";
 // Kisa tutuldu: bugun burada dolduracak gercek bir icerik yok (hakkimizda,
 // gizlilik ve iletisim sayfalari yazilmadi) ve olmayan sayfalara baglanti
 // vermek, kullaniciyi 404'e goturmek olurdu. Sayfalar yazildikca buyur.
+//
+// "Giriş yap" BURADAN KALDIRILDI (Faz J sonrasi). Oturum durumundan habersiz
+// bir baglantiydi: girisli kullaniciya da ciziliyor ve tiklandiginda `/giris`
+// onu zaten girisli gorup panele atiyordu. Oturuma bagli her sey artik ust
+// barda ve orasi oturumu okuyor. Alt bilgi oturumdan BAGIMSIZ kaliyor -
+// boylece burasi ileride statik render'a geri donebilecek tek parca.
 
 export function AltBilgi() {
   return (
@@ -29,12 +35,6 @@ export function AltBilgi() {
             className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           >
             İşletme misiniz?
-          </Link>
-          <Link
-            href="/giris"
-            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            Giriş yap
           </Link>
         </nav>
       </div>
