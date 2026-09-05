@@ -357,6 +357,8 @@ export function RandevuAkisi({
 
       {adim === "zaman" && hizmet ? (
         <ZamanSecimi
+          // Belirli bir personel secildi mi: `null` = "Farketmez".
+          personelSecildi={personelId !== null}
           bugun={bugun}
           tarih={tarih}
           maksIleriGun={isletme.maksIleriGun}

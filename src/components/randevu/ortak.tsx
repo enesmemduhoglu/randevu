@@ -73,7 +73,13 @@ export function hizmetBilgisi(hizmet: HizmetOzeti): string {
 // bileseni de ayni adlari yaziyor ve bu dosya "use client" oldugu icin oradan
 // import edemiyordu. Akisin bilesenleri isimleri buradan almaya devam etsin
 // diye yeniden disa aciliyorlar - cagri yerleri degismedi.
-export { ayVeYil, gunKisaAdi, haftaninGunu, tarihUzun } from "@/lib/bicim";
+export {
+  ayVeYil,
+  gunKisaAdi,
+  haftaninGunu,
+  tarihAraligi,
+  tarihUzun,
+} from "@/lib/bicim";
 
 /// ISO an -> isletmenin dilimindeki "14:30".
 export function saatiGoster(iso: string, saatDilimi: string): string {

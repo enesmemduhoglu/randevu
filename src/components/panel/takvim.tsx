@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ayVeYil, gunVeAy, tarihUzun } from "@/lib/bicim";
+import { ayVeYil, tarihAraligi, tarihUzun } from "@/lib/bicim";
 import {
   GORUNUMLER,
   GORUNUM_ETIKETLERI,
@@ -81,16 +81,9 @@ function pencereBasligi(
   if (gorunum === "gun") return tarihUzun(tarih);
   if (gorunum === "ay") return ayVeYil(tarih);
 
-  const ilk = gunler[0];
-  const son = gunler[gunler.length - 1];
-
-  if (ilk.yil !== son.yil) {
-    return `${gunVeAy(ilk)} ${ilk.yil} – ${gunVeAy(son)} ${son.yil}`;
-  }
-  if (ilk.ay === son.ay) {
-    return `${ilk.gun} – ${gunVeAy(son)} ${son.yil}`;
-  }
-  return `${gunVeAy(ilk)} – ${gunVeAy(son)} ${son.yil}`;
+  // Aralik yazimi `bicim.ts > tarihAraligi`da: ayni yazim randevu akisinin
+  // gun seridinde de gerekiyor (Faz P) ve iki kopya ayrisirdi.
+  return tarihAraligi(gunler[0], gunler[gunler.length - 1]);
 }
 
 export function Takvim({
