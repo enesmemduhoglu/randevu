@@ -3352,3 +3352,24 @@ Veri: `isil-guzellik-salonu` (4 hizmet, 2 personel, Pzt–? 09:00–12:00 /
       `sm:` kırılma noktalarının okunmasıyla varsayıldı — **ölçülmedi**.
       Telefonda bir kez açılmalı.
 
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1769,53 KiB** (bütçe 3 MiB).
+Faz P sonundaki 1634 KiB'den **+135 KiB** — yeni sayfa, form bileşeni ve
+ikonlar. Bütçenin yarısında duruyoruz ama artış tek bir ekran için küçük
+değil; sonraki panel ekranlarında ölçüm sürmeli.
+
+### Yayın hattında yeni bir uyarı: "Workers Builds"
+
+PR #33'te Cloudflare'ın **Workers Builds** entegrasyonu bir commit status'u
+düşürüyor ve **fail** veriyor. Bu kontrol `main`'in son commit'inde YOK, yani
+entegrasyon yeni bağlanmış.
+
+Kodla ilgisi görünmüyor: aynı build yerelde geçiyor (`npm run cf:kur` →
+`Worker saved in .open-next\worker.js`) ve CI'daki `tip - lint - test - build`
+işi de geçti. Depodaki yayın hattı zaten **GitHub Actions**'taki "Cloudflare
+Workers yayini" işi (`docs/yayin.md`), yani şu an **iki ayrı yayın hattı**
+aynı Worker'a bakıyor olabilir. Dashboard'daki build log'u okunup entegrasyon
+ya düzeltilmeli ya da kaldırılmalı — merge'i bloklamıyor ama her PR'da kırmızı
+bir kontrol bırakıyor.
+
