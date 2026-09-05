@@ -1287,6 +1287,13 @@ export async function getHalkaAcikDb(slug: string) {
           hizmetFiyatKurus: hizmet.fiyatKurus,
           personelAd: personel.ad,
           musteriAd: musteri.ad,
+          /// Randevu bir hesaba BAGLI MI (Faz P). Sayfa bunu yalnizca
+          /// KARSILASTIRIYOR - oturumdaki kullaniciyla ayni mi diye - ve
+          /// hicbir zaman ciziyor. Deger olmadan sayfa "Hesabıma ekle"
+          /// dugmesini zaten eklenmis bir randevuda da gostermek zorunda
+          /// kalirdi; uc zararsiz (ikinci ekleme "zaten-benim" donuyor) ama
+          /// kullaniciya yapacak is varmis gibi gorunurdu.
+          kullaniciId: randevu.kullaniciId,
         })
         .from(randevu)
         .innerJoin(hizmet, eq(hizmet.id, randevu.hizmetId))

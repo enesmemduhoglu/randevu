@@ -26,11 +26,13 @@ export default async function UyeOlSayfasi() {
       // alamayacagini sanip geri doner. Randevu almak icin uye olmak hicbir
       // zaman gerekmeyecek - hesabin verdigi tek sey liste ve tek tikla iptal.
       aciklama="Randevularınızı tek yerde görün. Randevu almak için üyelik gerekmiyor."
-      alt={{
-        metin: "Hesabınız var mı?",
-        baglantiMetni: "Giriş yapın",
-        yol: "/giris",
-      }}
+      alt={[
+        {
+          metin: "Hesabınız var mı?",
+          baglantiMetni: "Giriş yapın",
+          yol: "/giris",
+        },
+      ]}
     >
       <UyeOlFormu />
     </KimlikKabugu>
