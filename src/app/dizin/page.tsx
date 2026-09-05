@@ -12,6 +12,7 @@ import {
   isletmeleriAra,
   SAYFA_BOYUTU,
 } from "@/lib/dizin";
+import { etkinFiltreler } from "@/lib/dizin-secenek";
 import {
   ILLER,
   KATEGORILER,
@@ -129,6 +130,7 @@ export default async function DizinSayfasi(props: PageProps<"/dizin">) {
     Math.max(1, Math.ceil(toplam / SAYFA_BOYUTU)),
   );
   const filtreliMi = Boolean(arama || il || kategori);
+  const etkin = etkinFiltreler({ arama, kategori, il });
 
   // Sayfa baglantilari mevcut filtreyi TASIYOR: 2. sayfaya gecince aramanin
   // sifirlanmasi, kullanicinin listeyi bastan taramasi demek olurdu.
@@ -186,6 +188,16 @@ export default async function DizinSayfasi(props: PageProps<"/dizin">) {
                   />
                   <div className="space-y-1">
                     <p className="font-medium">Aramanıza uygun işletme yok</p>
+                    {/* NEYIN suzuldugu YAZILIYOR. Onceden yalnizca "filtreleri
+                        gevsetin" deniyordu ve bos bir kategoriye dusen
+                        kullanici icin bu bir cikmazdi: secili kategori filtre
+                        kutusunda gorunmuyordu (o liste yalnizca dolu
+                        kategorilerden geliyor), yani gevsetilecek gorunur bir
+                        sey yoktu. Kutu tarafi `secenekleriBirlestir` ile
+                        cozuldu; bu satir ayni seyi bos durumda soyluyor. */}
+                    {etkin ? (
+                      <p className="text-sm font-medium">{etkin}</p>
+                    ) : null}
                     <p className="text-sm text-muted-foreground">
                       Filtreleri gevşetip yeniden deneyebilirsiniz.
                     </p>
