@@ -131,6 +131,57 @@ describe("Faz I - bildirim uretimde gercek modda", () => {
   });
 });
 
+describe("Faz P - gelistirici ekranlari uretimde kapali", () => {
+  // NEDEN BIR TEST GEREKIYOR: bu kapinin unutulmasi SESSIZ. Yeni bir
+  // `/panel/gelistirici/*` sayfasi eklendiginde hicbir sey kirilmiyor, hicbir
+  // uyari cikmiyor - sayfa yalnizca uretimde de acik kaliyor ve bunu ancak
+  // panele bakan biri fark ediyor. Vitrin tam olarak boyle aylarca canlida
+  // kaldi: karari `TODOS.md > Teknik borc` maddesinde YAZILIYDI ama kod
+  // tarafinda zorlayan bir sey yoktu.
+  //
+  // Menu tarafi (gezinme.tsx > yalnizcaYerel) ayri bir testte: sayfa kapisi
+  // adresi yazani, menu kapisi ise panele bakani ilgilendiriyor ve biri
+  // digerinin yerini tutmuyor.
+  const GELISTIRICI = join(APP, "panel", "gelistirici");
+
+  function sayfaDosyalari(dizin: string): string[] {
+    const bulunan: string[] = [];
+    for (const ad of readdirSync(dizin)) {
+      const tam = join(dizin, ad);
+      if (statSync(tam).isDirectory()) bulunan.push(...sayfaDosyalari(tam));
+      else if (ad === "page.tsx") bulunan.push(tam);
+    }
+    return bulunan;
+  }
+
+  const sayfalar = sayfaDosyalari(GELISTIRICI);
+
+  test("taranacak gelistirici sayfasi bulundu", () => {
+    // Dizin bir gun tumden silinirse tarama bosalir ve asagidaki test.each
+    // hic kosmadan "gecer". Bu satir o sessiz basarisizligi gurultuye ceviriyor.
+    expect(sayfalar.length).toBeGreaterThan(0);
+  });
+
+  test.each(
+    sayfalar.map((y) => [y.replace(process.cwd(), "").replace(/\\/g, "/"), y]),
+  )("%s uretimde notFound() donuyor", (_ad, yol) => {
+    const icerik = readFileSync(yol, "utf-8");
+    expect(icerik).toContain("uretimMi()");
+    expect(icerik).toContain("notFound()");
+  });
+
+  test("menude yalnizca yerelde cizilen bolum isaretli", () => {
+    // Sayfa kapisi tek basina yetmiyor: isaret dusrulurse menude uretimde
+    // 404'e goturen bir link kalir.
+    const gezinme = readFileSync(
+      join(process.cwd(), "src", "components", "panel", "gezinme.tsx"),
+      "utf-8",
+    );
+    expect(gezinme).toContain("yalnizcaYerel: true");
+    expect(gezinme).toContain("uretimMi()");
+  });
+});
+
 describe("DEGISMEZ 4 - e-posta tek kapidan cikiyor", () => {
   // warden'in PreToolUse kapisi `resend.emails.send` metnini bloklamak icin
   // yazildi; bu depo SDK yerine duz `fetch` kullaniyor, yani o metin hic

@@ -12,6 +12,9 @@ import { siteKoku } from "@/lib/site";
 //                 acik birakmak, tarama butcesini hicbir sey icin harcamak.
 //   /giris, /kayit - islem sayfalari; arama sonucunda gorunmelerinin degeri yok.
 //   /randevularim  - kisiye ozel.
+//   /saglik        - teshis sayfasi. Halka acik kaliyor (deploy sonrasi
+//                 tarayicidan acilabilmesi tam da isi) ama dizine girmesinin
+//                 faydasi yok ve her tarama bir veritabani gidis-donusu.
 //   /r/*/randevu/  - IPTAL TOKEN'I TASIYAN ADRESLER. Sayfanin kendisinde de
 //                 `noindex` var (o dosyada yazili) ama iki kapi ust uste
 //                 duruyor: robots taramayi engelliyor, meta etiketi de yanlislikla
@@ -40,6 +43,7 @@ export default function robots(): MetadataRoute.Robots {
           "/giris",
           "/kayit",
           "/randevularim",
+          "/saglik",
           "/r/*/randevu/",
         ],
       },

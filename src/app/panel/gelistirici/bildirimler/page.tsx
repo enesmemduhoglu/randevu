@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +12,7 @@ import { isletmeOturumu } from "@/lib/auth";
 import { SABLON_ADLARI, sablonGecerliMi } from "@/lib/bildirim-sablon";
 import { saatBicimle, tarihUzun } from "@/lib/bicim";
 import { bildirimModu } from "@/lib/email";
+import { uretimMi } from "@/lib/mod";
 import { getScopedDb } from "@/lib/scoped-db";
 import { yerelParcalar } from "@/lib/zaman";
 
@@ -25,6 +26,13 @@ import { yerelParcalar } from "@/lib/zaman";
 //
 // GELISTIRICI EKRANI: `/panel/gelistirici/*` altinda, vitrinle ayni yerde.
 // Isletmenin gunluk isine ait degil; kuyrugun ne yaptigini gormek icin.
+//
+// URETIMDE KAPALI (Faz P), vitrinle ayni kapidan. Bu ekran vitrinden farkli
+// olarak GERCEK bir ise yariyabilirdi - "mailim neden gitmedi" sorusunun cevabi
+// burada. Yine de kapatildi: bugunku hali kuyrugun ham durum adlarini ve sablon
+// kimliklerini gosteren bir teshis ekrani, isletmeye konusan bir ekran degil.
+// Isletmeye gerekli oldugunda AYRI bir sayfa olarak, kendi diliyle yazilacak -
+// gelistirici araci uretim yuzeyine tasinarak degil.
 //
 // Sunucu bileseni ve okuma scoped-db uzerinden: kuyruk musteri adi ve randevu
 // saati tasiyor, yani kiraciya bagli veri (DEGISMEZ 1).
@@ -52,6 +60,8 @@ function zaman(an: Date, saatDilimi: string): string {
 }
 
 export default async function BildirimlerSayfasi() {
+  if (uretimMi()) notFound();
+
   const oturum = await isletmeOturumu();
   // Duzen bu durumu zaten eliyor; buradaki kontrol tipi daraltmak icin.
   if (!oturum) redirect("/giris");
