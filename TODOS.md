@@ -3223,3 +3223,176 @@ filtresi) ama `ust-bar.tsx`'teki kutu "İşletme adı ara" demeye devam ediyordu
 iç sayfalarda görünen tek arama girişi o. Artık "Hizmet ya da işletme ara".
 Ders: bir yetenek genişlerken onu **anlatan** yerlerin tamamı aranmalı; bu
 turda `grep -rn "İşletme adı"` üç dosya döndürüyordu, ikisi düzeltilmişti.
+
+---
+
+## Faz H2 — elle randevu (PR #33)
+
+**Kapandı:** panelden randevu ekleme. `/panel/randevu/yeni`,
+`POST /api/randevular`, `GET /api/randevular/musaitlik`,
+`scoped-db > randevuElleOlustur`. 660 → 686 test.
+
+Faz H'de ayrılıp yol haritasından düşen işin ilk yarısı. Telefonla gelen
+randevu artık panele giriliyor; **müşteri listesi ve geçmişi** bu fazın ikinci
+PR'ında.
+
+### Müsaitlik motoru iki kapıya birden bağlandı
+
+Motorun ilk hâli `getHalkaAcikDb`nin **dönüş tipine** bağlıydı
+(`type HalkaAcikDb = NonNullable<Awaited<ReturnType<typeof getHalkaAcikDb>>>`),
+yani panel tarafı aynı hesabı yapamıyordu. Bağ iki adımda çözüldü:
+
+- `musaitlik-sorgu.ts` artık dar bir **yapısal arayüz** istiyor
+  (`MusaitlikKapisi`: dört metot) ve işletme ayarlarını `db`den değil ayrı bir
+  `isletme` alanından alıyor. Ayrı olmasının sebebi somut: `getHalkaAcikDb`
+  işletmeyi slug'dan çözerken zaten okuyor, `getScopedDb` ise yalnızca oturumun
+  `isletmeId`sini biliyor — ayarları okumak ek bir sorgu ve panelin ayarla
+  ilgilenmeyen her sayfasına onu ödetmek istemedik.
+- Üç sorgu (`hizmetiVerenPersoneller`, `kapaliAraliklariListele`,
+  `doluRandevulariListele`) `musaitlikKapisi(db, kiraci)` ortak fonksiyonuna
+  taşındı ve **iki kapıya da aynı kod** yayılıyor — `bildirimKapisi` deseninin
+  aynısı. Kopyalamanın bedeli sessiz olurdu: `doluRandevulariListele`nin durum
+  kümesi veritabanındaki `EXCLUDE` kısıtının `WHERE`iyle aynı olmak zorunda
+  (DEĞİŞMEZ 8), ayrışsa motor "boş" dediği bir slotu kısıt reddederdi.
+
+Müşteriyi telefonla tekilleyen yarış çözümü de ortaklaştı (`musteriyiCoz`):
+`onConflictDoNothing` + yarışı kaybedeni okuma mantığı tek yerde.
+
+### Serbest saat — bilinçli bir istisna
+
+**Karar: panel motorun dışına yazabiliyor.** Telefonda "yarım saat sonra
+geliyorum" diyen müşteri min bildirim süresinin, bazen de çalışma saatinin
+dışında kalıyor. Motorun kuralları müşteriye "bu saat alınamaz" demek için;
+işletmenin kendi takvimine istisna yazmasını engellemek için değil.
+
+Serbestliğin **sınırı yine veritabanında**: aynı personelin çakışan iki aktif
+randevusu `EXCLUDE` kısıtıyla imkânsız ve `zorla` bayrağı bunu **aşmıyor**.
+Yani işletme çalışma saati dışına yazabiliyor, dolu bir saatin üstüne
+yazamıyor.
+
+İstisna **iki adımlı**: istemci önce bayraksız gönderiyor, saat motorun
+dışındaysa 409 + `zorlanabilir: true` alıyor ve kullanıcıya "yine de eklensin
+mi" diye soruluyor. Tek adımda yazsaydık yanlış saate dokunan bir tık sessizce
+takvime işlerdi.
+
+### Halka açık yoldan üç fark
+
+1. **`kaynak: "ISLETME"`.** Şema bu ayrımı Faz E'den beri taşıyordu ama yazan
+   bir yol yoktu.
+2. **`durum: "ONAYLI"`, `otomatikOnay` ayarına bakılmadan.** O ayar müşterinin
+   aldığı randevunun onay bekleyip beklemeyeceğini söylüyor; işletme kendi
+   girdiği randevuyu kendi onaylayacak olurdu.
+3. **Gelmedi kısıtı ve açık randevu tavanı uygulanmıyor.** İkisi de oturumsuz
+   yolun kötüye kullanımına karşıydı. Kısıt özellikle önemli: "gelmedi"
+   işaretlenen müşteri telefonla arayıp özür dilediğinde işletme onu kapıda
+   bırakmak zorunda kalmamalı — **affetme yolu bu.**
+
+### IDOR: foreign key'in yakalayamadığı yer
+
+`randevu.personel_id` foreign key'i yalnızca `personel.id`ye bakıyor,
+**işletmeye değil**. Yani başka bir salonun personel id'si veritabanı
+tarafından reddedilmezdi ve randevu bizim işletmemizde o yabancı personelle
+oluşurdu. Kontrol route'ta değil **kapının transaction'ının içinde** duruyor ki
+çağıran taraf onu unutamasın; `scoped-db-elle-randevu.test.ts` bunu kilitliyor.
+
+### Bildirim: işletmeye mesaj yok
+
+`elleRandevuKayitlari` `ISLETME_YENI_RANDEVU` yazmıyor — randevuyu giren zaten
+işletmenin kendisi. Müşteri tarafı değişmiyor: onay mesajı **iptal linkini
+taşıyor** ve o link müşterinin randevuyu kendi iptal edebileceği tek yol.
+Hatırlatmanın "geçmişe yazma" kuralı iki yolda da ortak (`hatirlatmaKaydi`) ve
+elle girilen randevularda o dal daha sık çalışıyor — telefonla alınan
+randevunun çoğu aynı haftanın içinde.
+
+### Bilerek kapsam dışı
+
+- **Müşteri listesi, geçmişi ve düzenlemesi.** Faz H2'nin ikinci PR'ı.
+  Bugünkü sonucu: mevcut müşterinin **adı ve notu güncellenmiyor** — işletme
+  "Ahmet" diye kayıtlı birini "Ahmet Yılmaz" yazarak aradığında kaydın sessizce
+  yeniden adlandırılması sürpriz olurdu; ad düzeltmek ayrı ve açık bir iş.
+- **Geçmişe randevu yazma.** Tarih girdisinin alt sınırı bugün. Geçmişe yazmak
+  bir kayıt tutma işi (dünkü müşteriyi sonradan girmek) ve randevu akışının
+  değil müşteri geçmişinin sorusu.
+- **L3'ün "gelmedi" kısıtını panelden görme ve kaldırma ekranı.** Kısıt elle
+  yazmada zaten uygulanmıyor, yani acil değil; ekran ikinci PR'a.
+- **Panelde "farketmez" personel seçimi.** Serbest saatte motor hiç koşmuyor ve
+  "müsait olan ilk personel" diye bir cevap üretilemez; sessizce ilk personeli
+  seçmek randevuyu yanlış kişinin takvimine yazmak olurdu.
+- **Randevu düzenleme (saat/personel değiştirme).** Bugün yalnızca durum
+  değiştirilebiliyor. Ayrı iş.
+
+### Elle doğrulandı — 5 Eylül 2026, `npm run dev` + gerçek oturum
+
+Veri: `isil-guzellik-salonu` (4 hizmet, 2 personel, Pzt–? 09:00–12:00 /
+13:00–18:00).
+
+- [x] **Uygun saatle ekleme.** 7 Eylül 10:00 Saç kesimi → takvimde
+      `10:00 – 10:45 · Onaylı`; DB'de `durum=ONAYLI`, `kaynak=ISLETME`.
+- [x] **Motorun listesi doğru.** 45 dk hizmette son sabah slotu **11:15**
+      (11:30 seçilseydi öğle arasına taşardı); 75 dk hizmette 09:00–10:30
+      elenmiş, çünkü 10:00'daki randevuyla çakışıyor. Öğle arası boş.
+- [x] **Serbest saat.** "Başka saat" → 20:00 (çalışma saati dışı): önce 409 +
+      *"Bu saat çalışma saatlerinin dışında ya da dolu görünüyor. Yine de
+      eklemek istiyor musunuz?"*, buton **"Yine de ekle"**ye dönüyor, ikinci
+      gönderimde 201 → takvimde `20:00 – 21:15`.
+- [x] **Çakışmayı `zorla` AŞMIYOR.** Dolu 10:15'e serbest yazma → *"Bu
+      personelin o saatte başka bir randevusu var."* DB'de **hiçbir satır
+      yok** — müşteri kaydı bile açılmamış, yani transaction bütün olarak
+      geri alınıyor.
+- [x] **Müşteri tekilleme.** Aynı numarayla ikinci randevu → tek `musteri`
+      satırı, iki randevu. Formda ad "Fatma Ş." yazılmasına rağmen kayıt
+      **"Fatma Şahin"** kaldı: mevcut müşterinin adı bilerek güncellenmiyor.
+- [x] **Bildirim.** Kuyrukta `MUSTERI_RANDEVU_ONAYLANDI` +
+      `MUSTERI_HATIRLATMA` (randevudan 24 saat önce); **`ISLETME_YENI_RANDEVU`
+      yok**. E-posta girilmediği için onay satırı `adres-yok` ile hata
+      alıyor — müşteri akışıyla aynı davranış.
+- [x] **Açık ve koyu tema.** İkisinde de kontrast ve vurgu yerinde.
+- [ ] **Mobil genişlik ÖLÇÜLEMEDİ.** Tarayıcı penceresi yeniden
+      boyutlandırılamadı (viewport 1920'de kaldı), yani düzen yalnızca
+      `sm:` kırılma noktalarının okunmasıyla varsayıldı — **ölçülmedi**.
+      Telefonda bir kez açılmalı.
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1769,53 KiB** (bütçe 3 MiB).
+Faz P sonundaki 1634 KiB'den **+135 KiB** — yeni sayfa, form bileşeni ve
+ikonlar. Bütçenin yarısında duruyoruz ama artış tek bir ekran için küçük
+değil; sonraki panel ekranlarında ölçüm sürmeli.
+
+### İKİNCİ BİR YAYIN HATTI BAĞLANMIŞ: Cloudflare "Workers Builds"
+
+PR #33'te Cloudflare'ın **Workers Builds** entegrasyonu bir commit status'u
+düşürüyor ve **fail** veriyor. Bu kontrol `main`'in son commit'inde YOK, yani
+entegrasyon yeni bağlanmış ve ilk kez burada göründü.
+
+**Kodla ilgisi yok.** Build log'u sebebi tek başına söylüyor: `next build`in
+prerender adımında `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+tanımsız olduğu için `src/lib/supabase/sunucu.ts` fırlatıyor. İki koşumda iki
+farklı sayfada patlamış (`/isletmeler-icin` ve `/giris`) — prerender sırası
+rastgele, sebep aynı. `ci.yml` bu değişkenleri veriyor (`dogrula` işine sahte
+değerler, `yayinla` işine gerçek `vars`), Cloudflare'ın build ortamına ise
+kimse vermemiş.
+
+**Ama asıl mesele başarısızlık değil, entegrasyonun kendisi.** Üç ayrı sorun
+üst üste duruyor:
+
+1. **Yanlış komut.** Cloudflare `npm run build` koşuyor, `npm run cf:kur`
+   değil — başarılı olsa bile OpenNext bundle'ı üretmiyor.
+2. **İki yayın hattı.** Depodaki sözleşme "merge anı yayın anı" ve yayını
+   `ci.yml`deki *Cloudflare Workers yayini* işi yapıyor (`docs/yayin.md`).
+   İkinci bir hat aynı Worker'a bakıyor.
+3. **En tehlikelisi:** Workers Builds **dal başına** koşuyor. Yapılandırması
+   düzeltilip yeşile dönseydi, merge edilmemiş bir PR dalını üretime
+   yayınlayabilirdi. Bugün onu engelleyen tek şey, eksik bir env değişkeni.
+
+**Öneri: entegrasyon kaldırılsın.** Cloudflare panelinde Workers → randevu →
+Settings → Builds bağlantısı sökülür; yayın `ci.yml`de kalır. İkinci seçenek
+(env'leri ekleyip komutu `cf:kur` yapmak) 3. maddeyi çözmüyor, dal koruması da
+ayrıca kurulmalı.
+
+> Yan bulgu, ayrı bir iş: **build zamanı bu iki değişkene bağımlı.** `/giris`
+> ve `/isletmeler-icin` `ƒ (Dynamic)` olarak işaretli olmasına rağmen
+> prerender denemesi `auth()` üzerinden Supabase istemcisini kuruyor ve env
+> yoksa build tümden düşüyor. CI bunu sahte değerlerle örtüyor. Sırların
+> yokluğunda build'in ayakta kalması Faz P2'ye yazılmalı.
+

@@ -120,6 +120,7 @@ async function slotlariAl(k: Kurulum, personelId?: string) {
 
   return gununSlotlari({
     db,
+    isletme: db.isletme,
     hizmetId: k.hizmetId,
     hizmetSuresiDk: 60,
     tarih: SALI,

@@ -120,6 +120,7 @@ export async function POST(istek: Request) {
   // geri bildirim - kesin cevabi asagidaki kisit veriyor (DEGISMEZ 8).
   const slot = await slotSec({
     db,
+    isletme: db.isletme,
     hizmetId: hizmet.id,
     hizmetSuresiDk: hizmet.sureDk,
     baslangic: alanlar.deger.baslangic,

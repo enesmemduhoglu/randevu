@@ -57,6 +57,9 @@ export async function GET(istek: Request) {
 
   const slotlar = await gununSlotlari({
     db,
+    // Motor artik ayarlari `db`den okumuyor (Faz H2): panel kapisinin boyle
+    // bir alani yok ve motor iki kapiyi da beslemek zorunda.
+    isletme: db.isletme,
     hizmetId,
     hizmetSuresiDk: hizmet.sureDk,
     tarih,

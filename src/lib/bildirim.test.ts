@@ -4,6 +4,7 @@ import { tablolariBosalt } from "@/db/test-temizlik";
 import {
   HATIRLATMA_ONCE_SAAT,
   bildirimleriBosalt,
+  elleRandevuKayitlari,
   iptalBildirimleriniPlanla,
   randevuIptalKayitlari,
   randevuOlustuKayitlari,
@@ -128,6 +129,34 @@ test("randevu olusunca musteri, isletme ve hatirlatma satirlari planlaniyor", ()
   expect(baslangic.getTime() - hatirlatma).toBe(
     HATIRLATMA_ONCE_SAAT * 60 * 60 * 1000,
   );
+});
+
+test("elle girilen randevuda ISLETMEYE mesaj YOK (Faz H2)", () => {
+  const simdi = new Date("2026-09-01T09:00:00.000Z");
+  const baslangic = new Date("2026-09-05T09:00:00.000Z");
+
+  const kayitlar = elleRandevuKayitlari({ randevuId: "r2", baslangic, simdi });
+
+  // Randevuyu giren zaten isletmenin kendisi; kendi yazdigi kaydi kendine
+  // haber vermek gurultuden ibaret. Musteri tarafi ise degismiyor - onay
+  // mesaji iptal linkini tasiyor ve o link musterinin randevuyu kendi iptal
+  // edebilecegi tek yol.
+  expect(kayitlar.map((k) => k.sablon)).toEqual([
+    "MUSTERI_RANDEVU_ONAYLANDI",
+    "MUSTERI_HATIRLATMA",
+  ]);
+});
+
+test("elle girilen yakin randevuya hatirlatma YAZILMIYOR", () => {
+  const simdi = new Date("2026-09-05T08:00:00.000Z");
+  // Iki saat sonrasi: hatirlatma zamani coktan gecmis olurdu ve satir
+  // yazilsaydi ilk bosaltmada HEMEN gonderilirdi. Elle girilen randevularda
+  // bu dal daha sik calisiyor - telefonla alinan randevunun cogu yakin.
+  const baslangic = new Date("2026-09-05T10:00:00.000Z");
+
+  const kayitlar = elleRandevuKayitlari({ randevuId: "r3", baslangic, simdi });
+
+  expect(kayitlar.map((k) => k.sablon)).toEqual(["MUSTERI_RANDEVU_ONAYLANDI"]);
 });
 
 test("otomatik onay kapaliyken musteriye 'talep alindi' yaziliyor", () => {
