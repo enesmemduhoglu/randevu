@@ -37,12 +37,16 @@ export function DizinFiltresi({
         <div className="space-y-2">
           {/* Etiket her zaman gorunur (docs/tasarim-sistemi.md): yer tutucu
               etiketin yerini almaz. */}
-          <Label htmlFor="arama">İşletme adı</Label>
+          {/* Etiket ve yer tutucu Faz P'de genisledi: sorgu artik isletme adi
+              ve slug'in yanina kategoriyi ve hizmet adini da aliyor. Eski
+              "İşletme adı" etiketi ana sayfanin "Ne arıyorsunuz?" vaadiyle
+              celisiyordu. */}
+          <Label htmlFor="arama">Ne arıyorsunuz?</Label>
           <Input
             id="arama"
             name="arama"
             defaultValue={secili.arama}
-            placeholder="Örneğin: Işıl Güzellik"
+            placeholder="Örneğin: saç kesimi"
             className="h-10"
           />
         </div>

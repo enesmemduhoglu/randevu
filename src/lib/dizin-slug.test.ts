@@ -6,9 +6,11 @@ import {
   KATEGORI_COGUL,
   ilSlugu,
   kategoriSlugu,
+  kategorileriAra,
   slugdanIl,
   slugdanKategori,
 } from "@/lib/dizin-girdi";
+import { slugUret } from "@/lib/slug";
 
 // Inis sayfalarinin adresleri bu eslemeden uretiliyor
 // (`/dizin/istanbul/kuafor`). Yani `slugUret` artik yalnizca bir yardimci
@@ -76,4 +78,38 @@ test("her kategorinin cogul yazimi var ve tekilinden farkli", () => {
     expect(cogul.length).toBeGreaterThan(0);
     expect(cogul).not.toBe(kategori);
   }
+});
+
+// ---- Serbest arama metninden kategori (Faz P) -------------------------------
+//
+// `dizin.ts` aramayi kategoriye de bakacak sekilde genisletti ve eslesmeyi
+// SQL'e degil buraya birakti. Gerekce fonksiyonun basinda yazili; asagidakiler
+// o kararin davranisini sabitliyor. DB gerekmiyor - liste kapali ve saf.
+
+test("kategori aramasi Turkce yazim varyantlarini buluyor", () => {
+  // Ziyaretcinin Turkce karakter yazamamasi ya da yazmamasi bir hata degil.
+  for (const yazim of ["kuafor", "kuaför", "KUAFÖR", "Kuaför"]) {
+    expect(kategorileriAra(slugUret(yazim))).toEqual(["Kuaför"]);
+  }
+});
+
+test("eslesme onek degil ICEREN", () => {
+  // Ziyaretci kategorinin tam adini yazmiyor: "salon" -> "Güzellik Salonu".
+  expect(kategorileriAra(slugUret("salon"))).toEqual(["Güzellik Salonu"]);
+  expect(kategorileriAra(slugUret("klinigi"))).toEqual(["Diş Kliniği"]);
+});
+
+test("bir metin BIRDEN COK kategoriye uyabiliyor", () => {
+  // Tek harflik bir parca cogu kategoride geciyor. Tek eslesme varsayimi
+  // yapilmasin diye birden cok dondurulebildigi burada sabitleniyor - cagiran
+  // taraf bu yuzden `inArray` kullaniyor, `eq` degil.
+  const sonuc = kategorileriAra(slugUret("i"));
+  expect(sonuc.length).toBeGreaterThan(1);
+});
+
+test("bos ve uymayan metin BOS dizi donduruyor", () => {
+  // Cagiran taraf bos dizide kategori kosulunu hic eklemiyor; burasi o
+  // sozlesmenin ilk yarisi.
+  expect(kategorileriAra("")).toEqual([]);
+  expect(kategorileriAra(slugUret("zzzqqq"))).toEqual([]);
 });

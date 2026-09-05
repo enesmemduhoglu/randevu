@@ -34,11 +34,15 @@ export function KahramanArama({ iller }: { iller: string[] }) {
               className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
+            {/* Yer tutucu ARAMANIN GERCEKTEN YAPABILDIGINI soyluyor. Onceden
+                "İşletme adı" yaziyordu ve etiket "Ne arıyorsunuz?" diyordu -
+                ikisi ayni kutu icin iki ayri vaat. Faz P'de sorgu kategori ve
+                hizmet adina da bakar hale geldi, yer tutucu da onu anlatiyor. */}
             <input
               id="kahraman-arama"
               type="search"
               name="arama"
-              placeholder="İşletme adı"
+              placeholder="Saç kesimi, kuaför, işletme adı…"
               className="h-11 w-full rounded-lg border border-input bg-transparent pr-3 pl-9 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:text-sm dark:bg-input/30"
             />
           </div>

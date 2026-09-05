@@ -112,8 +112,10 @@ YOK. Karsiligi, sizabilecek yuzeyin daraltilmasi:
 
 - Yalnizca `isletme` ve `hizmet` okunuyor. `randevu`, `musteri`, `kullanici`,
   `bildirim_kuyrugu` bu dosyada GECMIYOR - kisisel veri buradan cikamaz.
-- `hizmet` yalnizca TOPLAMA olarak (adet, en dusuk fiyat). Tek tek hizmet satiri
-  donmuyor.
+- `hizmet` FILTRELENEBILIR ama DONDURULEMEZ. Arama hizmet adina bakiyor (Faz P),
+  karta ise yalnizca TOPLAMA giriyor (adet, en dusuk fiyat); tek tek hizmet
+  satiri hicbir zaman donmuyor. Ayrim onemli: bir kolona gore suzmek o kolonun
+  icerigini disari vermiyor - ziyaretci zaten elindeki metni soruyor.
 - Donen tip elle yazilmis ve kapali. `$inferSelect` kullanilmadi: semaya yarin
   eklenen bir kolon buradan sessizce sizmasin.
 - Cagiran taraf tablo ya da kolon adi VEREMIYOR; il ve kategori kapali listeye

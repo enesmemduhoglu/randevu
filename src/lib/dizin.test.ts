@@ -45,11 +45,19 @@ async function isletmeKur(ad: string): Promise<Kurulum> {
 /// calisma saati. `yayindaAyarla`nin on kosullarinin tamami.
 async function tamKurulum(
   ad: string,
-  { il = "İstanbul", kategori = "Kuaför", ilce = "Kadıköy", fiyatKurus = 30000 } = {},
+  {
+    il = "İstanbul",
+    kategori = "Kuaför",
+    ilce = "Kadıköy",
+    fiyatKurus = 30000,
+    // Hizmet adi PARAMETRE (Faz P). Sabit "Saç kesimi" kalsaydi hizmet adina
+    // gore arama testleri HER isletmeyi bulur ve yanlis sebeple yesil olurdu.
+    hizmetAdi = "Saç kesimi",
+  } = {},
 ): Promise<Kurulum> {
   const k = await isletmeKur(ad);
   await k.db.ayarlariGuncelle({ il, ilce, kategori });
-  await k.db.hizmetEkle({ ad: "Saç kesimi", sureDk: 45, fiyatKurus });
+  await k.db.hizmetEkle({ ad: hizmetAdi, sureDk: 45, fiyatKurus });
   const [personel] = await k.db.personelleriListele();
   await k.db.calismaSaatleriniYaz(personel.id, [
     { haftaninGunu: 1, baslangicDk: 540, bitisDk: 1080 },
@@ -226,6 +234,142 @@ test("aramadaki joker karakterler ESLESMIYOR", async () => {
   // maliyeti ziyaretcinin denetimine gecerdi.
   expect((await isletmeleriAra({ arama: "%" })).kartlar).toHaveLength(0);
   expect((await isletmeleriAra({ arama: "_" })).kartlar).toHaveLength(0);
+});
+
+// ---- Kategori ve hizmet adina gore arama (Faz P) ---------------------------
+//
+// Bu blogun tamami tek bir riski kilitliyor: hizmet kosulu `exists` ile
+// KOSULUN ICINDE duruyor, JOIN'e tasinmis DEGIL. Tasinsaydi sayim sorgusu
+// (join'siz) ve kart sorgusu (LEFT JOIN + toplama) ayrisirdi ve hata sessiz
+// olurdu - liste dogru gorunur, "N isletme bulundu" sayisi yanlis cikardi.
+
+test("hizmet adiyla arama isletmeyi buluyor", async () => {
+  const a = await tamKurulum("Ada Salonu", { hizmetAdi: "Lazer epilasyon" });
+  const b = await tamKurulum("Bade Salonu", { hizmetAdi: "Manikür" });
+  for (const k of [a, b]) await k.db.yayindaAyarla(true);
+
+  const { kartlar } = await isletmeleriAra({ arama: "lazer" });
+
+  expect(slugLari(kartlar)).toEqual([a.slug]);
+});
+
+test("hizmet adindan eslesen aramada TOPLAM ile kart sayisi ayrismiyor", async () => {
+  const a = await tamKurulum("Ada Salonu", { hizmetAdi: "Lazer epilasyon" });
+  const b = await tamKurulum("Bade Salonu", { hizmetAdi: "Manikür" });
+  for (const k of [a, b]) await k.db.yayindaAyarla(true);
+
+  const { kartlar, toplam } = await isletmeleriAra({ arama: "lazer" });
+
+  // Sayim sorgusu join'siz kosuyor. Hizmet kosulu yalnizca kart sorgusuna
+  // eklenseydi burasi 1 karta karsi 2 toplam gosterirdi.
+  expect(toplam).toBe(1);
+  expect(kartlar).toHaveLength(toplam);
+});
+
+test("hizmet aramasi eslesen isletmenin TOPLAMALARINI bozmuyor", async () => {
+  const k = await tamKurulum("Cok Hizmetli", {
+    hizmetAdi: "Lazer epilasyon",
+    fiyatKurus: 90000,
+  });
+  await k.db.hizmetEkle({ ad: "Fön", sureDk: 30, fiyatKurus: 20000 });
+  await k.db.hizmetEkle({ ad: "Manikür", sureDk: 60, fiyatKurus: 40000 });
+  await k.db.yayindaAyarla(true);
+
+  const [kart] = (await isletmeleriAra({ arama: "lazer" })).kartlar;
+
+  // Arama TEK hizmetle eslesiyor ama kart isletmenin TAMAMINI ozetlemeli.
+  // `exists` JOIN'e tasinsaydi kart "1 hizmet, 900 TL'den baslayan" derdi.
+  expect(kart.hizmetSayisi).toBe(3);
+  expect(kart.enDusukFiyatKurus).toBe(20000);
+});
+
+test("hizmeti olmayan isletme aramasiz listede DUSMUYOR", async () => {
+  const k = await tamKurulum("Hizmetsiz Salon");
+  await k.db.yayindaAyarla(true);
+  const [hizmet] = await k.db.hizmetleriListele();
+  await k.db.hizmetPasifleStir(hizmet.id);
+
+  const [kart] = (await isletmeleriAra({})).kartlar;
+
+  // LEFT JOIN fiilen INNER'a donmus olsaydi kart tumden kaybolurdu.
+  expect(kart?.slug).toBe(k.slug);
+  expect(kart.hizmetSayisi).toBe(0);
+  expect(kart.enDusukFiyatKurus).toBeNull();
+});
+
+test("PASIF hizmetin adiyla arama sonuc dondurmuyor", async () => {
+  const k = await tamKurulum("Ada Salonu", { hizmetAdi: "Lazer epilasyon" });
+  await k.db.yayindaAyarla(true);
+  const [hizmet] = await k.db.hizmetleriListele();
+  await k.db.hizmetPasifleStir(hizmet.id);
+
+  // Aksi halde kart "0 hizmet" ile listeye duser ve musteri neden orada
+  // oldugunu anlamazdi.
+  expect((await isletmeleriAra({ arama: "lazer" })).kartlar).toHaveLength(0);
+});
+
+test("BASKA isletmenin hizmeti eslesme uydurmuyor", async () => {
+  const a = await tamKurulum("Ada Salonu", { hizmetAdi: "Lazer epilasyon" });
+  const b = await tamKurulum("Bade Salonu", { hizmetAdi: "Manikür" });
+  for (const k of [a, b]) await k.db.yayindaAyarla(true);
+
+  const { kartlar } = await isletmeleriAra({ arama: "manikur" });
+
+  // Alt sorgunun korelasyonu (hizmet.isletme_id = isletme.id) duserse `exists`
+  // sabit-dogruya doner ve BUTUN dizin listelenir. Bu testin yakaladigi sey o.
+  expect(slugLari(kartlar)).toEqual([b.slug]);
+});
+
+test("YAYINDA OLMAYAN isletme hizmet adindan da gelmiyor", async () => {
+  const k = await tamKurulum("Gizli Salon", { hizmetAdi: "Lazer epilasyon" });
+  // Yayina alinmadi.
+
+  // `exists` yanlislikla ust seviyeye OR'lansaydi gorunurluk kapisi delinirdi -
+  // DEGISMEZ 12'nin gercek guvenlik sonucu tam olarak bu.
+  expect((await isletmeleriAra({ arama: "lazer" })).kartlar).toHaveLength(0);
+  void k;
+});
+
+test("hizmet adi aramasi Turkce yazim varyantlarini buluyor", async () => {
+  const k = await tamKurulum("Ada Salonu", { hizmetAdi: "Saç kesimi" });
+  await k.db.yayindaAyarla(true);
+
+  // Katlama SQL'de `translate` ile yapiliyor ve tablo `slug.ts`ten geliyor.
+  // Turkce karakter yazamayan ziyaretci de bulabilmeli - `isletme.ad` icin
+  // ayni persona zaten `slug` kolonuyla korunuyordu.
+  for (const yazim of ["saç", "sac", "SAÇ", "Saç", "kesimi", "KESİMİ"]) {
+    const { kartlar } = await isletmeleriAra({ arama: yazim });
+    expect(slugLari(kartlar), `yazim: ${yazim}`).toEqual([k.slug]);
+  }
+});
+
+test("kategori adiyla arama o kategorideki isletmeleri buluyor", async () => {
+  const a = await tamKurulum("Ada Salonu", {
+    kategori: "Kuaför",
+    hizmetAdi: "Manikür",
+  });
+  const b = await tamKurulum("Bade Berber", {
+    kategori: "Berber",
+    hizmetAdi: "Manikür",
+  });
+  for (const k of [a, b]) await k.db.yayindaAyarla(true);
+
+  // Kategori kapali listeden JS'te esleniyor, `ilike` ile degil - yoksa
+  // "kuafor" yazan ziyaretci "Kuaför" kategorisini bulamazdi.
+  for (const yazim of ["kuaför", "kuafor", "KUAFÖR"]) {
+    const { kartlar } = await isletmeleriAra({ arama: yazim });
+    expect(slugLari(kartlar), `yazim: ${yazim}`).toEqual([a.slug]);
+  }
+});
+
+test("hicbir kategoriye uymayan metin kategori kosulunu ACMIYOR", async () => {
+  const k = await tamKurulum("Ada Salonu", { hizmetAdi: "Manikür" });
+  await k.db.yayindaAyarla(true);
+
+  // Bos eslesme listesinde kosul hic eklenmiyor. Eklenip `inArray(kolon, [])`
+  // olarak SQL'e girseydi sonuc yine bos olurdu ama olu bir sart tasinirdi;
+  // asil onemlisi bu metnin butun dizini dondurmemesi.
+  expect((await isletmeleriAra({ arama: "zzzqqq" })).kartlar).toHaveLength(0);
 });
 
 // ---- Toplama ---------------------------------------------------------------

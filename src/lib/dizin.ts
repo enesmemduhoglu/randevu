@@ -11,9 +11,16 @@
 //   1. Yalnizca `isletme` ve `hizmet` okunuyor. `randevu`, `musteri`,
 //      `kullanici`, `bildirim_kuyrugu` bu dosyada GECMIYOR - yani kisisel veri
 //      buradan cikamaz. Bunu `degismezler.test.ts` metin tarayarak zorluyor.
-//   2. `hizmet` yalnizca TOPLAMA olarak okunuyor (adet, en dusuk fiyat). Tek
-//      tek hizmet satiri donmuyor; kart "4 hizmet, 300 TL'den baslayan" diyor,
-//      isletmenin hizmet listesini dizine kopyalamiyor.
+//   2. `hizmet` FILTRELENEBILIR ama DONDURULEMEZ. Aramada hizmet adina
+//      bakiliyor (Faz P: "sac kesimi" arayan ziyaretci sonuc gormeli) ve
+//      karta yalnizca TOPLAMA giriyor (adet, en dusuk fiyat). Tek tek hizmet
+//      satiri hicbir zaman donmuyor; kart "4 hizmet, 300 TL'den baslayan"
+//      diyor, isletmenin hizmet listesini dizine kopyalamiyor.
+//
+//      Ayrim guvenligin durdugu yer: bir kolona GORE SUZMEK o kolonun
+//      icerigini disari vermiyor. Ziyaretci zaten elindeki metni soruyor;
+//      ogrendigi tek sey "bu isletmede boyle bir hizmet var" ve o bilgi
+//      isletmenin halka acik randevu sayfasinda zaten yaziyor.
 //   3. Donen tip `DizinKarti` ELLE yazilmis ve kapali. `isletme.$inferSelect`
 //      kullanilmadi: semaya yarin eklenen bir kolon buradan sessizce disari
 //      sizmasin. Yeni bir alan gorunmek istiyorsa bu tipe elle yazilmali.
@@ -26,12 +33,18 @@
 // SALT OKUNUR. Bu dosyaya asla bir yazma metodu eklenmeyecek - yazma yollari
 // kiracisiz calisamaz.
 
-import { and, asc, eq, ilike, min, or, sql } from "drizzle-orm";
+import { and, asc, eq, exists, ilike, inArray, min, or, sql } from "drizzle-orm";
+// `drizzle-orm/pg-core` bu depoda ilk kez sema disinda bir dosyadan import
+// ediliyor. Ikisi de SORGU KURUCU, sema degil: `alias` takma ad uretiyor,
+// `QueryBuilder` ise calistirilamayan bir alt sorgu kuruyor - `db.select()`
+// kullanilsaydi bu dosyada calistirilabilir bir sorgu nesnesi dururdu ve
+// kapi disi bir dosyada o gereksiz bir yuzey.
+import { alias, QueryBuilder } from "drizzle-orm/pg-core";
 
 import { hizmet, isletme } from "@/db/sema";
 import { getDb } from "@/lib/db";
-import { ILLER, KATEGORILER } from "@/lib/dizin-girdi";
-import { slugUret } from "@/lib/slug";
+import { ILLER, KATEGORILER, kategorileriAra } from "@/lib/dizin-girdi";
+import { asciiKatla, slugUret, TR_HEDEF, TR_KAYNAK } from "@/lib/slug";
 
 /// Dizin kartinin TAM icerigi. Kapali tip; genisletmek bilincli bir karar
 /// olmali (bkz. dosya basligi, madde 3).
@@ -130,12 +143,63 @@ export async function isletmeleriAra(filtre: DizinFiltresi): Promise<{
   // adlarda ham metin eslesmesi hala daha iyi sonuc veriyor.
   const aramaSlug = arama ? slugUret(arama) : "";
 
+  // KATEGORI ESLESMESI (Faz P). Kapali liste JS'te suzuluyor, SQL'de `ilike`
+  // ile degil - gerekcesi `dizin-girdi.ts > kategorileriAra` icinde. Bos dizi
+  // gelirse kosul HIC eklenmiyor: `inArray(kolon, [])` drizzle'da `false`
+  // uretiyor ve OR dalina olu bir sart koymanin anlami yok.
+  const kategoriEslesmeleri = kategorileriAra(aramaSlug);
+
+  // HIZMET ADI ESLESMESI (Faz P) - ve neden JOIN degil `exists`.
+  //
+  // Bu fonksiyon IKI sorgu kosuyor ve ikisi de asagidaki `kosul`u paylasiyor:
+  // kart sorgusu `hizmet`e LEFT JOIN atip topluyor, sayim sorgusu ise
+  // JOIN'SIZ `count(*)`. Kosula dogrudan bir `hizmet` kolonu koymak her
+  // ikisini de bozardi - sayim sorgusunda tablo yok, kart sorgusunda ise LEFT
+  // JOIN fiilen INNER'a doner ve hizmeti olmayan isletme listeden duserdi.
+  // Korelasyonlu `exists` her iki sorguda da kendi basina ayakta duruyor.
+  //
+  // TAKMA AD SART: kart sorgusunun FROM'unda zaten `hizmet` var. Takma ad
+  // olmasa sorgu yine dogru calisirdi (Postgres en icteki girdiyi secer) ama
+  // dogruluk golgelemeye yaslanirdi ve okuyan, ictekinin distaki JOIN'e mi
+  // baktigini sanardi.
+  const hAra = alias(hizmet, "hizmet_ara");
+
+  // `translate` ONCE, `lower` SONRA: Postgres'te `lower('I')` collation'a
+  // bagli ve Turkce collation'da noktasiz `ı` uretebiliyor; `translate` ise
+  // deterministik. Tablo `slug.ts`ten geliyor, yani katlama kurali JS ve SQL
+  // tarafinda TEK kaynaktan okunuyor.
+  //
+  // SINIRI YAZILI DURSUN: yalnizca Turkce harfler katlaniyor. "Café" gibi bir
+  // hizmet adi `cafe` aramasinda bulunmuyor - kapatmak `unaccent` uzantisi,
+  // yani bir goc demek ve bugunku olcekte karsiligi yok.
+  const hizmetKosulu = arama
+    ? exists(
+        new QueryBuilder()
+          .select({ v: sql`1` })
+          .from(hAra)
+          .where(
+            and(
+              eq(hAra.isletmeId, isletme.id),
+              eq(hAra.aktif, true),
+              ilike(
+                sql`lower(translate(${hAra.ad}, ${TR_KAYNAK}, ${TR_HEDEF}))`,
+                `%${jokerKacir(asciiKatla(arama))}%`,
+              ),
+            ),
+          ),
+      )
+    : undefined;
+
   const aramaKosulu = arama
     ? or(
         ilike(isletme.ad, `%${jokerKacir(arama)}%`),
         // `slugUret` ciktisi yalnizca [a-z0-9-] - joker karakter uretemiyor,
         // bu yuzden kacisa gerek yok.
         aramaSlug ? ilike(isletme.slug, `%${aramaSlug}%`) : undefined,
+        kategoriEslesmeleri.length
+          ? inArray(isletme.kategori, kategoriEslesmeleri)
+          : undefined,
+        hizmetKosulu,
       )
     : undefined;
 

@@ -191,6 +191,26 @@ export function slugdanKategori(slug: string): Kategori | null {
   return KATEGORI_SLUGLARI.get(slug) ?? null;
 }
 
+/// Serbest arama metnine uyan kategoriler (Faz P).
+///
+/// NEDEN SQL'DE `ilike` DEGIL: kategori adlari Turkce ("Kuaför", "Diş
+/// Kliniği") ve `ilike` kucultmeyi veritabani collation'iyla yapiyor - yani
+/// "kuafor" yazan ziyaretci "Kuaför" kategorisini BULAMAZDI. Ayni tuzak
+/// `dizin.ts`'te isletme adi icin bir kez yasandi ve orada `slug` kolonuyla
+/// cozulmustu. Kategori kapali bir liste oldugu icin burada daha ucuzu var:
+/// dokuz elemani JS'te slug'a katlayip karsilastirmak. Veritabanina hic
+/// gitmiyor ve collation'a hic bagli degil.
+///
+/// ESLESME ONEK DEGIL ICEREN: "berber" -> "Berber", "salon" -> "Güzellik
+/// Salonu". Ziyaretci kategorinin tam adini yazmiyor.
+///
+/// Bos ya da hicbir kategoriye uymayan metin BOS DIZI donduruyor; cagiran
+/// taraf o durumda kategori kosulunu hic eklemiyor (bkz. dizin.ts).
+export function kategorileriAra(aramaSlug: string): Kategori[] {
+  if (!aramaSlug) return [];
+  return KATEGORILER.filter((k) => kategoriSlugu(k).includes(aramaSlug));
+}
+
 /// Kategorilerin cogul yazimi - ELLE, dokuz satir.
 ///
 /// "İstanbul kuaförleri" demek istiyoruz ama Turkce'de cogul eki unlu uyumuna
