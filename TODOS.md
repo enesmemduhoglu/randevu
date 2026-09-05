@@ -3177,10 +3177,49 @@ Google'a **uydurma salonlar** sunuluyor; ve `page.tsx`'in kendi yorumu
       `SUPABASE_DB_URL` üzerinden, `prod-goc.ts` disipliniyle. Sitemap
       `force-dynamic`, bir sonraki istekte kendiliğinden düşüyor. `auth.users`
       girdisi kalıyor (DEĞİŞMEZ 9: FK yok).
-- [ ] **`/gizlilik` metnini hukukçuya okut ve iki yer tutucuyu doldur:** veri
-      sorumlusunun unvanı/başvuru adresi ve saklama süresi. Sayfada
+- [ ] **`/gizlilik` metnini hukukçuya okut ve yer tutucuları doldur:** üç ayrı
+      bilgi, dört yerde geçiyor — veri sorumlusunun unvanı (1), başvuru adresi
+      (2 yer: "Veri sorumlusu" ve "Haklarınız") ve saklama süresi (1). Sayfada
       `[doldurulacak]` olarak görünüyorlar.
-- [ ] **Oturumlu iki dal canlıda gözle doğrulanmalı:** panelde "Geliştirici"
-      bölümünün olmadığı, ve token sayfasında "Hesabıma ekle" düğmesinin
-      çıktığı. İkisi de yerelde giriş yapmayı gerektirdiği için ölçülemedi;
-      testle ve kod okumasıyla kilitli ama gözle görülmedi.
+- [x] **Oturumlu iki dalın ilki canlıda doğrulandı** (5 Eylül 2026, merge
+      sonrası): `/panel/gelistirici/vitrin` işletme sahibi oturumuyla **404**
+      veriyor ve panel yan menüsünde "Geliştirici" bölümü yok. Plan bunu
+      "ölçülemedi" diye kapatmıştı; tarayıcıda zaten açık bir üretim oturumu
+      olduğu ortaya çıkınca şifre girmeye gerek kalmadan ölçüldü.
+- [ ] **Token sayfasının "Hesabıma ekle" dalı hâlâ ölçülmedi.** Görmek için
+      üretimde gerçek bir randevu oluşturmak gerekiyor (kayıt yazar ve e-posta
+      gönderir), o yüzden tur sırasında yapılmadı. `musteri-db.test.ts`'teki üç
+      testle kilitli.
+
+### Merge ve canlı doğrulama (5 Eylül 2026)
+
+Yedi PR sırayla `main`'e alındı (#25 → #31) ve `main`'in ağacı zincirin son
+ucuyla **birebir aynı** çıktı — `git diff 83d13df d13adf6` boş. CI + Cloudflare
+yayını yeşil.
+
+**Merge sırasında öğrenilen: `--delete-branch` zinciri kırıyor.** #25 merge
+edilip `faz-p/canli-duzeltmeler` silinince GitHub #26'yı `main`'e yeniden
+hedeflemedi — **kapattı**, ve kapalı bir PR'ın tabanı değiştirilemediği için
+`gh pr edit --base` de reddetti. Kurtarma: silinen dalı eski ucuna geri push
+et (`git push origin <sha>:refs/heads/<dal>`), PR'ı reopen et, tabanı `main`
+yap, sonra dalı tekrar sil.
+Doğru sıra bu yüzden şu: **önce çocuğun tabanını `main` yap, sonra ebeveyni
+merge et, en son dalı sil.** Kalan altısı bu sırayla sorunsuz geçti.
+
+**Canlıda ölçülenler.** Dizin araması: `saç kesimi` / `sac kesimi` / `KESİMİ`
+→ 4, `kuaför` / `kuafor` → 1, `manikür` → 2, `zzz` → 0; **her sorguda sayaç =
+kart sayısı**, yani iki sorgunun ayrışmadığı canlıda da doğrulandı. Boş
+kategori (`?arama=zzz&kategori=Veteriner&il=Bursa`) seçimini kutuda gösteriyor
+ve boş durum "zzz · Veteriner · Bursa" yazıyor. Gün şeridi başlığı aralık:
+"5 – 11 Eylül 2026", ay sınırında "26 Eylül – 2 Ekim 2026", son pencere randevu
+ufkunda kesilince "3 – 5 Ekim 2026". "Devam et" saat seçilince **0 piksel**
+kayıyor (ölçüldü: `getBoundingClientRect().y` 728 → 728). Farketmez seçiliyken
+boş gün ipucu çizilmiyor. Form metinleri, `/gizlilik`, `robots.txt`'te
+`/saglik`, sitemap'te `/gizlilik` ve sekiz sayfanın ayrı başlığı yerinde.
+
+**Yayın turunda çıkan yeni bulgu: üçüncü arama kutusu unutulmuştu.** Faz P
+aramanın kapsamını genişletirken iki etiketi düzeltti (kahraman ve dizin
+filtresi) ama `ust-bar.tsx`'teki kutu "İşletme adı ara" demeye devam ediyordu —
+iç sayfalarda görünen tek arama girişi o. Artık "Hizmet ya da işletme ara".
+Ders: bir yetenek genişlerken onu **anlatan** yerlerin tamamı aranmalı; bu
+turda `grep -rn "İşletme adı"` üç dosya döndürüyordu, ikisi düzeltilmişti.

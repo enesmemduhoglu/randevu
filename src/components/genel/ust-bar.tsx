@@ -83,8 +83,8 @@ export async function UstBar({ arama = true }: Props) {
               <input
                 type="search"
                 name="arama"
-                aria-label="İşletme ara"
-                placeholder="İşletme adı ara"
+                aria-label="İşletme veya hizmet ara"
+                placeholder="Hizmet ya da işletme ara"
                 className="h-10 w-full rounded-lg border border-input bg-transparent pr-3 pl-9 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
               />
             </div>
