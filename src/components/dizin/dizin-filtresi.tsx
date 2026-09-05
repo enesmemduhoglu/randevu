@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { secenekleriBirlestir } from "@/lib/dizin-secenek";
 
 // Dizin filtresi. DUZ BIR GET FORMU, istemci bileseni degil.
 //
@@ -26,6 +27,15 @@ export function DizinFiltresi({
   secenekler: { iller: string[]; kategoriler: string[] };
 }) {
   const filtreliMi = Boolean(secili.arama || secili.il || secili.kategori);
+
+  // Secili deger listede yoksa EKLENIYOR (gerekcesi dizin-secenek.ts'te).
+  // Olmasaydi bos bir kategoriye dusen kullanici kendi seciminin kutuda
+  // gorunmedigini gorurdu.
+  const iller = secenekleriBirlestir(secenekler.iller, secili.il);
+  const kategoriler = secenekleriBirlestir(
+    secenekler.kategoriler,
+    secili.kategori,
+  );
 
   return (
     <form
@@ -61,9 +71,9 @@ export function DizinFiltresi({
           >
             {/* Yalnizca DOLU iller listeleniyor (dizin.ts > filtreSecenekleri):
                 81 ilin 78'i bos bir dizinde kullanici tek tek deneyip bos sonuc
-                gorurdu. */}
+                gorurdu. Tek istisna aktif secim - bkz. secenekleriBirlestir. */}
             <option value="">Tüm iller</option>
-            {secenekler.iller.map((il) => (
+            {iller.map((il) => (
               <option key={il} value={il}>
                 {il}
               </option>
@@ -80,7 +90,7 @@ export function DizinFiltresi({
             className={SECIM_SINIFI}
           >
             <option value="">Tüm kategoriler</option>
-            {secenekler.kategoriler.map((kategori) => (
+            {kategoriler.map((kategori) => (
               <option key={kategori} value={kategori}>
                 {kategori}
               </option>
