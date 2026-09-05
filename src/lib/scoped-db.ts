@@ -125,10 +125,102 @@ export type RandevuYazma = {
   otomatikOnay: boolean;
 };
 
+/// PANELDEN elle randevu yazmanin girdisi (Faz H2).
+///
+/// Halka acik girdiden UC alan eksik ve eksiklikleri kararin kendisi:
+///
+/// - `simdi` ve `enCokAcikRandevu` yok. Acik randevu tavani oturumsuz yolun
+///   kotuye kullanimina karsiydi; isletme kendi takvimine kendi yaziyor ve
+///   telefonla arayan bir musterinin dorduncu randevusunu reddetmek anlamsiz.
+/// - `otomatikOnay` yok. Elle girilen randevu her zaman ONAYLI baslıyor:
+///   isletme "bekleyen" bir randevuyu kendi kendine onaylayacak olurdu.
+///
+/// `personelId` ve `bitis` yine cagirandan geliyor ama artik MOTORDAN GELMEK
+/// ZORUNDA DEGIL - panel serbest saat de yazabiliyor (Faz H2 karari, gerekcesi
+/// `randevuElleOlustur`un yaninda).
+export type ElleRandevuYazma = {
+  personelId: string;
+  hizmetId: string;
+  baslangic: Date;
+  bitis: Date;
+  musteriAd: string;
+  telefon: string;
+  eposta: string | null;
+  not: string | null;
+  iptalToken: string;
+};
+
 /// 40P01 = deadlock_detected. Gerekcesi `randevuOlustur`un yaninda.
 const KILITLENME = "40P01";
 
+/// Kilitlenmede kac kez bastan denenecegi. Modul duzeyinde cunku IKI randevu
+/// yazma yolu da ayni sayiyi kullaniyor (Faz H2).
+const EN_COK_DENEME = 3;
+
 type Veritabani = Awaited<ReturnType<typeof getDb>>;
+
+/// Acik bir transaction. Asagidaki ortak yardimcilar `db` degil BUNU aliyor:
+/// musteri satirini yazip randevuyu yazamamak, sahibi olmayan bir musteri
+/// kaydi birakirdi.
+type Islem = Parameters<Parameters<Veritabani["transaction"]>[0]>[0];
+
+/// MUSTERIYI TELEFONLA COZ - iki randevu yazma yolunda da AYNI kod (Faz H2).
+///
+/// Neden ortak: musteri `(isletmeId, telefon)` ile tekilleniyor ve ayni anda
+/// gelen iki istegin yarisi burada cozuluyor. Iki kopya bir gun ayrisirdi -
+/// ornegin biri `onConflictDoNothing`i unuturdu ve ayni numaradan gelen es
+/// zamanli iki randevu benzersizlik ihlaliyle 500 uretirdi.
+///
+/// MEVCUT MUSTERININ ADI VE NOTU GUNCELLENMIYOR, iki yolda da. Halka acik
+/// yolda sebep acik: o yol oturumsuz, numarayi bilen bir yabanci isletmenin
+/// musteri kaydindaki adi degistirebilirdi. Panelde sebep farkli ama sonuc
+/// ayni - isletme "Ahmet" diye kayitli birini "Ahmet Yilmaz" yazarak
+/// aradiginda kaydin sessizce yeniden adlandirilmasi surpriz olurdu; ad
+/// duzeltmek ayri ve acik bir is (musteri duzenleme, Faz H2'nin ikinci PR'i).
+async function musteriyiCoz(
+  tx: Islem,
+  kiraci: string,
+  veri: { ad: string; telefon: string; eposta: string | null },
+): Promise<{ id: string; kisitBitis: Date | null }> {
+  const [mevcut] = await tx
+    .select({ id: musteri.id, kisitBitis: musteri.randevuKisitiBitis })
+    .from(musteri)
+    .where(and(eq(musteri.isletmeId, kiraci), eq(musteri.telefon, veri.telefon)))
+    .limit(1);
+
+  // Yeni musterinin kisiti olamaz; alan yalnizca mevcut kayittan gelir.
+  if (mevcut) return { id: mevcut.id, kisitBitis: mevcut.kisitBitis };
+
+  // `onConflictDoNothing`: ayni numarayla ayni anda gelen ikinci istek
+  // benzersizlik ihlaliyle 500 uretmesin. Ikinci istek bos doner ve asagida
+  // kaydi okuyup devam eder.
+  const [yeni] = await tx
+    .insert(musteri)
+    .values({
+      isletmeId: kiraci,
+      ad: veri.ad,
+      telefon: veri.telefon,
+      eposta: veri.eposta,
+    })
+    .onConflictDoNothing()
+    .returning({ id: musteri.id });
+
+  if (yeni) return { id: yeni.id, kisitBitis: null };
+
+  const [yarisiKaybeden] = await tx
+    .select({ id: musteri.id, kisitBitis: musteri.randevuKisitiBitis })
+    .from(musteri)
+    .where(and(eq(musteri.isletmeId, kiraci), eq(musteri.telefon, veri.telefon)))
+    .limit(1);
+
+  // Buraya dusmek icin satirin insert ile select arasinda SILINMIS olmasi
+  // gerekir. Sessizce "saat dolu" demek yanlis olurdu: cagirana yanlis sebebi
+  // soyleyip gercek sorunu gizlerdik. Beklenmeyen durum beklenmeyen hata
+  // olarak ciksin.
+  if (!yarisiKaybeden) throw new Error("Musteri kaydi olusturulamadi");
+
+  return { id: yarisiKaybeden.id, kisitBitis: yarisiKaybeden.kisitBitis };
+}
 
 /// Kuyruga yazilacak tek bir mesaj. `tur` yok cunku Faz I yalnizca e-posta
 /// yaziyor; SMS satirlarini Faz K ekleyecek ve o zaman burasi genisler.
@@ -353,6 +445,101 @@ function bildirimKapisi(db: Veritabani, kiraci: string) {
   };
 }
 
+/// MUSAITLIK KAPISI - iki kapsamli kapida da AYNI kod (Faz H2).
+///
+/// Neden ortak fonksiyon: musaitlik motoru bu uc sorguyu okuyor ve artik iki
+/// yerden birden kosuyor - halka acik akista musteri saat secerken, panelde
+/// isletme telefonla gelen randevuyu girerken. Iki kopya bir gun ayrisirdi ve
+/// ayrismanin bedeli sessiz: `doluRandevulariListele`nin durum kumesi
+/// veritabanindaki EXCLUDE kisitinin WHERE kosuluyla ayni olmak ZORUNDA
+/// (DEGISMEZ 8), yoksa motor "bos" dedigi bir sloti kisit reddeder ve
+/// kullanici sebebini anlamaz.
+///
+/// DEGISMEZ 1 KORUNUYOR: `kiraci` bu fonksiyona parametre olarak geliyor ama
+/// bu dosyanin ICINDEN, iki cagri yerinin de kendi kapanis degiskeninden.
+/// Disari acilan yuzeyde kiraci yine verilemiyor.
+///
+/// `calismaSaatleriniListele` burada YOK: iki kapida da zaten var ve panelin
+/// surumu haftalik duzen ekranina hizmet ettigi icin daha genis (personel
+/// suzgeci istege bagli, butun kolonlar donuyor). Motorun bekledigi dar tipi
+/// yapisal olarak karsiliyor - `musaitlik-sorgu.ts > MusaitlikKapisi`.
+function musaitlikKapisi(db: Veritabani, kiraci: string) {
+  return {
+    /// Bir hizmeti VEREBILEN aktif personeller.
+    ///
+    /// `personel_hizmet` bos olmasi "hepsi" demek (bkz. sema yorumu), yani
+    /// eslemesi hic olmayan personel her hizmeti veriyor sayiliyor. Bu kural
+    /// burada uygulaniyor ki cagiran taraf onu bilmek zorunda kalmasin.
+    async hizmetiVerenPersoneller(hizmetId: string) {
+      const aktifler = await db
+        .select({ id: personel.id, ad: personel.ad, unvan: personel.unvan })
+        .from(personel)
+        .where(and(eq(personel.isletmeId, kiraci), eq(personel.aktif, true)))
+        .orderBy(personel.sira);
+
+      const eslemeler = await db
+        .select({
+          personelId: personelHizmet.personelId,
+          hizmetId: personelHizmet.hizmetId,
+        })
+        .from(personelHizmet)
+        .where(eq(personelHizmet.isletmeId, kiraci));
+
+      const eslemesiOlan = new Set(eslemeler.map((e) => e.personelId));
+      const buHizmeti = new Set(
+        eslemeler
+          .filter((e) => e.hizmetId === hizmetId)
+          .map((e) => e.personelId),
+      );
+
+      return aktifler.filter(
+        (p) => !eslemesiOlan.has(p.id) || buHizmeti.has(p.id),
+      );
+    },
+
+    /// Verilen aralikla KESISEN kapali araliklar.
+    ///
+    /// Kesisme testi `baslangic < ust AND bitis > alt`: araligi tamamen
+    /// kapsayan bir izin de yakalaniyor. "Baslangici pencerede olanlar" diye
+    /// sorulsaydi dun baslayip yarin biten bir tatil gorunmezdi.
+    async kapaliAraliklariListele(personelId: string, alt: Date, ust: Date) {
+      return db
+        .select({ baslangic: kapali.baslangic, bitis: kapali.bitis })
+        .from(kapali)
+        .where(
+          and(
+            eq(kapali.isletmeId, kiraci),
+            lt(kapali.baslangic, ust),
+            gt(kapali.bitis, alt),
+            // personelId NULL ise butun isletme kapali; o satirlar herkesi
+            // ilgilendiriyor.
+            or(isNull(kapali.personelId), eq(kapali.personelId, personelId)),
+          ),
+        );
+    },
+
+    /// Saati DOLU sayan randevular.
+    ///
+    /// Yalnizca BEKLIYOR ve ONAYLI: iptal ve gelmedi saati bosaltiyor.
+    /// Veritabanindaki EXCLUDE kisitinin WHERE kosuluyla ayni kume - ikisi
+    /// ayrisirsa motor "bos" dedigi bir sloti kisit reddeder.
+    async doluRandevulariListele(personelId: string, alt: Date, ust: Date) {
+      return db
+        .select({ baslangic: randevu.baslangic, bitis: randevu.bitis })
+        .from(randevu)
+        .where(
+          and(
+            eq(randevu.isletmeId, kiraci),
+            eq(randevu.personelId, personelId),
+            inArray(randevu.durum, ["BEKLIYOR", "ONAYLI"]),
+            lt(randevu.baslangic, ust),
+            gt(randevu.bitis, alt),
+          ),
+        );
+    },
+  };
+}
+
 /// Isletme oturumuna bagli, kiraci filtresi enjekte edilmis veri kapisi.
 export async function getScopedDb(oturum: IsletmeOturumu) {
   const db = await getDb();
@@ -388,6 +575,10 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
     // Kuyruga yazma ve bosaltma metotlari (Faz I). Iki kapida da AYNI kod -
     // gerekcesi bildirimKapisi'nin basinda.
     ...bildirimKapisi(db, kiraci),
+
+    // Musaitlik motorunun okudugu sorgular (Faz H2). Yine iki kapida da AYNI
+    // kod: panel elle randevu eklerken musteri akisiyla ayni hesabi kosuyor.
+    ...musaitlikKapisi(db, kiraci),
 
     /// Panelin gelistirici ekrani icin: kuyrugun SON satirlari.
     ///
@@ -925,6 +1116,112 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
         return sonuc.length;
       });
     },
+
+    // ---- Elle randevu (Faz H2) --------------------------------------------
+
+    /// Panelden girilen randevu: telefonla arayan musteriyi isletme kendisi
+    /// yaziyor.
+    ///
+    /// HALKA ACIK YOLDAN UC FARK, ucu de bilincli:
+    ///
+    /// 1. `kaynak: "ISLETME"`. Sema bu ayrimi Faz E'den beri tasiyordu ama
+    ///    yazan bir yol yoktu; takvimde randevunun nereden geldigini gormek
+    ///    isletmenin ilk soracagi sey.
+    /// 2. `durum: "ONAYLI"`, isletmenin `otomatikOnay` ayarina BAKILMADAN.
+    ///    O ayar musterinin aldigi randevunun onay bekleyip beklemeyecegini
+    ///    soyluyor; isletme kendi girdigi randevuyu kendi onaylayacak olurdu.
+    /// 3. GELMEDI KISITI VE ACIK RANDEVU TAVANI UYGULANMIYOR. Ikisi de
+    ///    oturumsuz yolun kotuye kullanimina karsiydi. Kisit ozellikle onemli:
+    ///    "gelmedi" isaretlenen musteri telefonla arayip ozur dilediginde
+    ///    isletme onu kapida birakmak zorunda kalmamali - affetme yolu bu.
+    ///
+    /// SAAT SERBEST. `baslangic` ve `bitis` cagirandan geliyor ve musaitlik
+    /// motorundan GECMEK ZORUNDA DEGIL: telefonda "yarim saat sonra
+    /// geliyorum" diyen musteri, min bildirim suresinin ve bazen calisma
+    /// saatinin disinda kaliyor. Motorun kurallari musteriye "bu saat
+    /// alinamaz" demek icin; isletmenin kendi takvimine istisna yazmasini
+    /// engellemek icin degil.
+    ///
+    /// Serbestligin SINIRI yine veritabaninda: ayni personelin cakisan iki
+    /// aktif randevusu EXCLUDE kisitiyla imkansiz (DEGISMEZ 8) ve ihlal
+    /// burada `durum: "dolu"` olarak cikiyor. Yani isletme calisma saati
+    /// disina yazabiliyor, dolu bir saatin ustune yazamiyor.
+    async randevuElleOlustur(veri: ElleRandevuYazma) {
+      for (let deneme = 1; ; deneme++) {
+        try {
+          return await db.transaction(async (tx) => {
+            // PERSONEL VE HIZMET KIRACIYA AIT MI - burada, route'ta degil.
+            //
+            // `randevu.personel_id` foreign key'i yalnizca `personel.id`ye
+            // bakiyor, isletmeye DEGIL: baska bir salonun personel id'si
+            // veritabani tarafindan reddedilmezdi ve randevu bizim
+            // isletmemizde o yabanci personelle olusurdu. Kontrol kapinin
+            // icinde duruyor ki cagiran taraf onu unutamasin.
+            const [personelSahipligi] = await tx
+              .select({ id: personel.id })
+              .from(personel)
+              .where(
+                and(
+                  eq(personel.id, veri.personelId),
+                  eq(personel.isletmeId, kiraci),
+                  eq(personel.aktif, true),
+                ),
+              )
+              .limit(1);
+            if (!personelSahipligi) return { durum: "yok" as const };
+
+            const [hizmetSahipligi] = await tx
+              .select({ id: hizmet.id })
+              .from(hizmet)
+              .where(
+                and(
+                  eq(hizmet.id, veri.hizmetId),
+                  eq(hizmet.isletmeId, kiraci),
+                  eq(hizmet.aktif, true),
+                ),
+              )
+              .limit(1);
+            if (!hizmetSahipligi) return { durum: "yok" as const };
+
+            const { id: musteriId } = await musteriyiCoz(tx, kiraci, {
+              ad: veri.musteriAd,
+              telefon: veri.telefon,
+              eposta: veri.eposta,
+            });
+
+            const [olusan] = await tx
+              .insert(randevu)
+              .values({
+                isletmeId: kiraci,
+                personelId: veri.personelId,
+                hizmetId: veri.hizmetId,
+                musteriId,
+                baslangic: veri.baslangic,
+                bitis: veri.bitis,
+                durum: "ONAYLI",
+                kaynak: "ISLETME",
+                not: veri.not,
+                iptalToken: veri.iptalToken,
+              })
+              .returning();
+
+            return { durum: "tamam" as const, randevu: olusan };
+          });
+        } catch (hata) {
+          // Kilitlenme yeniden deneniyor; gerekcesi `randevuOlustur`un
+          // yaninda ve burada da birebir gecerli - iki panel sekmesi ayni
+          // sloti ayni anda yazabiliyor.
+          if (pgHata(hata)?.kod === KILITLENME && deneme < EN_COK_DENEME) {
+            continue;
+          }
+          if (pgHata(hata)?.kod === KILITLENME) {
+            return { durum: "dolu" as const };
+          }
+          if (cakismaIhlaliMi(hata)) return { durum: "dolu" as const };
+          throw hata;
+        }
+      }
+    },
   };
 }
 
@@ -973,67 +1270,13 @@ export async function getHalkaAcikDb(slug: string) {
     try {
       return await db.transaction(async (tx) => {
         // Musteri TELEFONLA tekilleniyor (sema: musteri_isletme_telefon_idx).
-        const [mevcut] = await tx
-          .select({ id: musteri.id, kisitBitis: musteri.randevuKisitiBitis })
-          .from(musteri)
-          .where(
-            and(
-              eq(musteri.isletmeId, kiraci),
-              eq(musteri.telefon, veri.telefon),
-            ),
-          )
-          .limit(1);
-
-        let musteriId = mevcut?.id;
-        // Yeni musterinin kisiti olamaz; alan yalnizca mevcut kayittan gelir.
-        let kisitBitis = mevcut?.kisitBitis ?? null;
-
-        if (!musteriId) {
-          // `onConflictDoNothing`: ayni numarayla ayni anda gelen ikinci
-          // istek benzersizlik ihlaliyle 500 uretmesin. Ikinci istek bos
-          // doner ve asagida kaydi okuyup devam eder.
-          const [yeni] = await tx
-            .insert(musteri)
-            .values({
-              isletmeId: kiraci,
-              ad: veri.musteriAd,
-              telefon: veri.telefon,
-              eposta: veri.eposta,
-            })
-            .onConflictDoNothing()
-            .returning({ id: musteri.id });
-
-          if (yeni) {
-            musteriId = yeni.id;
-          } else {
-            const [yarisiKaybeden] = await tx
-              .select({
-                id: musteri.id,
-                kisitBitis: musteri.randevuKisitiBitis,
-              })
-              .from(musteri)
-              .where(
-                and(
-                  eq(musteri.isletmeId, kiraci),
-                  eq(musteri.telefon, veri.telefon),
-                ),
-              )
-              .limit(1);
-            // Buraya dusmek icin satirin insert ile select arasinda
-            // SILINMIS olmasi gerekir. Sessizce "saat dolu" demek yanlis
-            // olurdu: musteriye yanlis sebebi soyleyip gercek sorunu
-            // gizlerdik. Beklenmeyen durum beklenmeyen hata olarak ciksin.
-            if (!yarisiKaybeden) {
-              throw new Error("Musteri kaydi olusturulamadi");
-            }
-            musteriId = yarisiKaybeden.id;
-            kisitBitis = yarisiKaybeden.kisitBitis;
-          }
-        }
-        // MEVCUT MUSTERININ ADI VE NOTU GUNCELLENMIYOR. Bu yol oturumsuz:
-        // numarayi bilen herkes buraya yazabiliyor. Guncelleseydik, bir
-        // yabanci isletmenin musteri kaydindaki adi degistirebilirdi.
-        // Isletme farkli bir ad gormek isterse panelden kendi duzeltir.
+        // Yarisin cozumu ve "mevcut kaydin adi guncellenmiyor" karari ortak
+        // yardimcida (musteriyiCoz).
+        const { id: musteriId, kisitBitis } = await musteriyiCoz(tx, kiraci, {
+          ad: veri.musteriAd,
+          telefon: veri.telefon,
+          eposta: veri.eposta,
+        });
 
         // GELMEDI KISITI (Faz L3). Randevusuna gelmedigi isaretlenen musteri
         // bir sure bu isletmeden randevu alamiyor.
@@ -1116,6 +1359,9 @@ export async function getHalkaAcikDb(slug: string) {
     // kuyrugu OKUYAN `bildirimleriListele` burada bilerek yok.
     ...bildirimKapisi(db, kiraci),
 
+    // Musaitlik motorunun okudugu sorgular (Faz H2). Panel kapisiyla AYNI kod.
+    ...musaitlikKapisi(db, kiraci),
+
     async personelleriListele() {
       return db
         .select({ id: personel.id, ad: personel.ad, unvan: personel.unvan })
@@ -1154,36 +1400,6 @@ export async function getHalkaAcikDb(slug: string) {
       return kayit ?? null;
     },
 
-    /// Bir hizmeti VEREBILEN aktif personeller.
-    ///
-    /// `personel_hizmet` bos olmasi "hepsi" demek (bkz. sema yorumu), yani
-    /// eslemesi hic olmayan personel her hizmeti veriyor sayiliyor. Bu kural
-    /// burada uygulaniyor ki cagiran taraf onu bilmek zorunda kalmasin.
-    async hizmetiVerenPersoneller(hizmetId: string) {
-      const aktifler = await db
-        .select({ id: personel.id, ad: personel.ad, unvan: personel.unvan })
-        .from(personel)
-        .where(and(eq(personel.isletmeId, kiraci), eq(personel.aktif, true)))
-        .orderBy(personel.sira);
-
-      const eslemeler = await db
-        .select({
-          personelId: personelHizmet.personelId,
-          hizmetId: personelHizmet.hizmetId,
-        })
-        .from(personelHizmet)
-        .where(eq(personelHizmet.isletmeId, kiraci));
-
-      const eslemesiOlan = new Set(eslemeler.map((e) => e.personelId));
-      const buHizmeti = new Set(
-        eslemeler.filter((e) => e.hizmetId === hizmetId).map((e) => e.personelId),
-      );
-
-      return aktifler.filter(
-        (p) => !eslemesiOlan.has(p.id) || buHizmeti.has(p.id),
-      );
-    },
-
     async calismaSaatleriniListele(personelId: string) {
       return db
         .select({
@@ -1196,27 +1412,6 @@ export async function getHalkaAcikDb(slug: string) {
           and(
             eq(calismaSaati.isletmeId, kiraci),
             eq(calismaSaati.personelId, personelId),
-          ),
-        );
-    },
-
-    /// Verilen aralikla KESISEN kapali araliklar.
-    ///
-    /// Kesisme testi `baslangic < ust AND bitis > alt`: araligi tamamen
-    /// kapsayan bir izin de yakalaniyor. "Baslangici pencerede olanlar" diye
-    /// sorulsaydi dun baslayip yarin biten bir tatil gorunmezdi.
-    async kapaliAraliklariListele(personelId: string, alt: Date, ust: Date) {
-      return db
-        .select({ baslangic: kapali.baslangic, bitis: kapali.bitis })
-        .from(kapali)
-        .where(
-          and(
-            eq(kapali.isletmeId, kiraci),
-            lt(kapali.baslangic, ust),
-            gt(kapali.bitis, alt),
-            // personelId NULL ise butun isletme kapali; o satirlar herkesi
-            // ilgilendiriyor.
-            or(isNull(kapali.personelId), eq(kapali.personelId, personelId)),
           ),
         );
     },
@@ -1250,8 +1445,6 @@ export async function getHalkaAcikDb(slug: string) {
       // "dolu", degilse (ornegin cakisma musteri satirindaydi) randevu
       // yaziliyor. Dogrudan 409 demek, yazilabilecek bir randevuyu
       // reddetmek olurdu.
-      const EN_COK_DENEME = 3;
-
       for (let deneme = 1; ; deneme++) {
         try {
           return await randevuYaz(veri);
@@ -1332,26 +1525,6 @@ export async function getHalkaAcikDb(slug: string) {
         .returning({ id: randevu.id });
 
       return sonuc[0]?.id ?? null;
-    },
-
-    /// Saati DOLU sayan randevular.
-    ///
-    /// Yalnizca BEKLIYOR ve ONAYLI: iptal ve gelmedi saati bosaltiyor.
-    /// Veritabanindaki EXCLUDE kisitinin WHERE kosuluyla ayni kume - ikisi
-    /// ayrisirsa motor "bos" dedigi bir sloti kisit reddeder.
-    async doluRandevulariListele(personelId: string, alt: Date, ust: Date) {
-      return db
-        .select({ baslangic: randevu.baslangic, bitis: randevu.bitis })
-        .from(randevu)
-        .where(
-          and(
-            eq(randevu.isletmeId, kiraci),
-            eq(randevu.personelId, personelId),
-            inArray(randevu.durum, ["BEKLIYOR", "ONAYLI"]),
-            lt(randevu.baslangic, ust),
-            gt(randevu.bitis, alt),
-          ),
-        );
     },
   };
 }
