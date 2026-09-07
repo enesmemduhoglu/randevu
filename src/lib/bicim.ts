@@ -161,6 +161,16 @@ export function gunVeAy(tarih: YerelTarih): string {
   return `${tarih.gun} ${ayAdi(tarih.ay)}`;
 }
 
+/// "1 Eylül 2026" — gun adi OLMADAN tam tarih (Faz H2).
+///
+/// `tarihUzun`dan farki gun adinin yoklugu ve sebebi musteri gecmisi: liste
+/// yillar oncesine uzaniyor ve "Salı" bilgisi gecmis bir randevuda hicbir sey
+/// soylemiyor - yil ise soyluyor. `gunVeAy` da yetmiyor, cunku yilsiz bir
+/// tarih gecmiste hangi yila ait oldugunu kaybediyor.
+export function gunAyYil(tarih: YerelTarih): string {
+  return `${tarih.gun} ${ayAdi(tarih.ay)} ${tarih.yil}`;
+}
+
 /// "5 – 11 Eylül 2026" — bir gun araliginin basligi.
 ///
 /// TEKRAR ETMEYEN parcalar atiliyor: iki tarih ayni aydaysa ay bir kez, ayni
