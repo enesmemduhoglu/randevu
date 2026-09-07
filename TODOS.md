@@ -3791,3 +3791,119 @@ varlığı); davranışsal kanıt `src/lib/saglik.test.ts`'te.
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1859,17 KiB** (bütçe 3 MiB).
 P2a sonundaki 1792,40 KiB'den **+66,77 KiB** — `getTableConfig`/`PgTable`
 içe aktarımı ve gömülü `_journal.json`.
+
+---
+
+## Faz P2 — şifre sıfırlama (PR #37)
+
+**Kapandı:** Bugüne kadar hiç olmayan akış geldi. Şifresini unutan kullanıcı
+artık `kullanici_auth_user_id`'nin tekilliği yüzünden kalıcı kilitlenmiyor.
+Planın "bugünkü en pahalı boşluk" dediği madde.
+
+### `token_hash` + `verifyOtp`, PKCE `?code=` DEĞİL
+
+`@supabase/ssr` PKCE akışını zorluyor ve `resetPasswordForEmail` bir
+`code_verifier`'ı **cookie'ye** yazıyor. Mail telefonda Gmail uygulamasının
+**kendi iç tarayıcısında** açıldığında o cookie orada yok ve akış sessizce
+ölüyor — hedef kitle telefondan geliyor (`docs/plan.md`), yani bu marjinal
+değil baskın durum. `token_hash` cihazdan bağımsız; `/sifre-yenile` sayfası
+GET'te **hiçbir doğrulama yapmıyor, oturum açmıyor** — iki ayrı gerekçeyle:
+kurumsal mail tarayıcıları (Outlook SafeLinks) bağlantıyı kullanıcı
+tıklamadan kendileri açıyor, ve doğrulamak linki açan **herkese** oturum
+verirdi. Asıl doğrulama yalnızca `POST /api/sifre/yenile`'de, "Şifreyi
+güncelle"ye basıldığında.
+
+### `signOut({ scope: "others" })` — `/api/cikis`'in BİLEREK TERSİ
+
+`/api/cikis` `scope: "local"` kullanıyor çünkü kullanıcı yalnızca o
+tarayıcıdan çıkmak istiyor. Sıfırlama "hesabımın kontrolünü kaybettim" yolu;
+diğer cihazlardaki yenileme token'larını ayakta bırakmak akışın amacını boşa
+çıkarırdı. İki kararın yan yana okunduğunda çelişki gibi görünmesin diye
+buraya yazılıyor.
+
+### `girisYonu` ortak yardımcıya çıkarıldı
+
+`/api/giris` ve `/api/sifre/yenile` **aynı üçlü kararı** veriyor (kayıtsız →
+`/kayit/tamamla`, MÜŞTERİ → `/randevularim`, diğeri → `devam` ya da `/panel`).
+`src/lib/auth.ts > girisYonu` — tek yerde tutulmazsa bir gün ayrışıp
+müşteriyi panele düşürürlerdi. Bugüne kadar `/api/giris`'in içine gömülü
+olduğu için hiç test edilemeyen bu dal artık saf fonksiyon, `src/lib/auth.test.ts`.
+
+**Yan bulgu — gerçek bir tip boşluğu:** `girisYonu`'nun parametre tipini
+`Awaited<ReturnType<typeof kullaniciyiYukle>>` olarak yazınca `null` geçmek
+tip hatası verdi. Sebep: `noUncheckedIndexedAccess` kapalı, yani
+`const [kayit] = await db.select()...` tek başına `kayit`i HER ZAMAN dolu
+sayıyor ve `kayit ?? null` sessizce `T | null`den `T`ye daralıyor.
+`kullaniciyiYukle`'nin dönüş tipi artık açıkça `Promise<KullaniciKaydi | null>`
+yazılı. Bu boşluk depodaki her `const [x] = await db.select()...` deseninde
+var olabilir — bilerek geniş taranmadı, yalnızca burada düzeltildi.
+
+### Kullanıcı numaralandırma (enumeration) yok
+
+`/api/sifre/sifirla` her durumda **tek yanıt**: kayıtlı adres, kayıtsız
+adres, kayıtlı ama `kullanici` satırı olmayan hesap — üçü de aynı ekrana
+gidiyor. `resetPasswordForEmail` **koşulsuz** çağrılıyor; kendi tablomuzda ön
+kontrol yapılmıyor çünkü (a) yanıt süresini hesabın varlığına göre ayırıp
+zamanlama kanalı açardı, (b) kaydı yarım kalmış biri sıfırlama hakkını
+kaybederdi. `/api/sifre/yenile` de tek mesaj: geçersiz, süresi dolmuş,
+kullanılmış token — üçü de "geçersiz ya da süresi dolmuş" diyor.
+
+### DEĞİŞMEZ 4 ihlal edilmiyor, ama farklı bir yoldan
+
+Bu tek mail **Resend/`email.ts`'ten geçmiyor** — Supabase'in kendi
+mailer'ından çıkıyor. `degismezler.test.ts`'in `api.resend.com` taraması bu
+yüzden etkilenmiyor. Reddedilen alternatif: `admin.generateLink` ile
+bağlantıyı üretip markalı maili `email.ts`'ten göndermek — bedeli
+`service_role` anahtarını Worker'a sokmak, kazanç yalnızca marka tutarlılığı.
+
+### `/giris`'e üçüncü bağlantı DEĞİL, şifre kutusunun yanına
+
+"Şifremi unuttum" `KimlikKabugu`'nun `alt` dizisine eklenmedi: `/giris` orada
+zaten iki çıkış taşıyor (Faz P kararı, müşteri/işletme ayrımı) ve üçüncüsü o
+çatalı bulanıklaştırırdı. Bağlantı şifre etiketinin yanında.
+
+### Elle yapılan (kod dışı)
+
+- [x] Supabase custom SMTP kuruldu (Resend, `bildirim@randevu.enesmemduhoglu.tech`).
+- [ ] **Mail şablonu henüz değiştirilmedi.** `Authentication → Emails →
+      Templates → Reset Password`'de `{{ .ConfirmationURL }}` yerine
+      `{{ .SiteURL }}/sifre-yenile?token_hash={{ .TokenHash }}&type=recovery`
+      yazılmalı. Bu depo dışında yaşayan bir ayar — hiçbir test bunu
+      göremiyor. Değiştirilmeden linkler `/sifre-yenile`'e değil Supabase'in
+      kendi `/verify` ucuna düşer ve `token_hash` hiç gelmez. **Kod bu
+      şablona bağımlı, PR merge olsa bile şablon değişmeden akış uçtan uca
+      çalışmaz.**
+- [ ] E-posta OTP/recovery süresi 24 saatten 1 saate düşürülmedi (öneri
+      duruyor, elle yapılmadı).
+- [ ] Auth hız sınırları (`Authentication → Rate Limits`) gözden geçirilip
+      seçilen değer buraya yazılmadı.
+
+### Elle doğrulandı — 7 Eylül 2026
+
+- [x] `POST /api/sifre/sifirla`, kayıtsız adresle → 200, aynı sabit yanıt
+- [x] `POST /api/sifre/sifirla`, üretim demo hesabıyla → 200 (gerçek Supabase
+      Auth'a gidiyor — yerel `.env` de aynı bulut projesine bağlı, yalnızca
+      DB ayrı). **Mail teslimi doğrulanamadı** — şablon henüz `token_hash`
+      biçimine geçmedi (yukarıdaki elle iş).
+- [x] `/sifremi-unuttum`, `/sifremi-unuttum/gonderildi`, `/sifre-yenile`,
+      `/sifre-yenile?token_hash=...` → hepsi 200
+- [x] `/giris`'te "Şifremi unuttum" bağlantısı görünüyor
+- [x] `npm run tip && npm run lint && npm test && npm run build` temiz —
+      750 test geçti
+
+### Bilerek kapsam dışı
+
+- **Oturum içi şifre değiştirme** (`/panel/ayarlar`). Ayrı akış: mevcut
+  şifreyi sormak ve yeniden kimlik doğrulama gerektiriyor.
+- **Markalı sıfırlama maili** (`email.ts` üzerinden). `service_role`
+  anahtarını Worker'a sokmayı gerektiriyor.
+- **`/api/sifre/yenile`'ye ek yerel hız sınırı.** Bilerek yok: yeni şifresini
+  birkaç kez zayıf giren meşru kullanıcı, bir saatlik tek token'ıyla
+  kilitlenmesin.
+- **`/api/sifre/sifirla`'ya Turnstile eklendi** (kapsam dışı değil, bu PR'a
+  girdi) — `/api/randevu` ile aynı gerekçe, mail gönderim kotasını korumak.
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1869,43 KiB** (bütçe 3 MiB).
+P2b sonundaki 1859,17 KiB'den **+10,26 KiB**.
