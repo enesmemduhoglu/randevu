@@ -7,6 +7,7 @@ import { cache } from "react";
 
 import { kullanici } from "@/db/sema";
 import { getDb } from "@/lib/db";
+import { guvenliYol } from "@/lib/girdi";
 import type { IsletmeOturumu, Rol } from "@/lib/scoped-db";
 import { supabaseSunucu } from "@/lib/supabase/sunucu";
 
@@ -56,10 +57,26 @@ export const authKimligi = cache(async function authKimligi(): Promise<AuthKimli
   };
 });
 
+export type KullaniciKaydi = {
+  id: string;
+  eposta: string;
+  ad: string;
+  rol: Rol;
+  isletmeId: string | null;
+};
+
 /// Auth kullanicisinin BIZDEKI kaydi. Kayit akisinin yarida kalip kalmadigini
 /// anlamak icin de kullaniliyor: Supabase'de hesap var ama burada satir yoksa
 /// kiracisiz bir kimlik var demektir.
-export async function kullaniciyiYukle(authUserId: string) {
+///
+/// DONUS TIPI ACIKCA YAZILI: `noUncheckedIndexedAccess` kapali oldugu icin
+/// `const [kayit] = await db.select()...` tek basina `kayit`i HER ZAMAN dolu
+/// sayiyor - `kayit ?? null` o zaman `T | null`e degil sessizce `T`ye
+/// daraliyor. girisYonu'nun parametre tipini yazarken bu olculdu: `null`
+/// gecmek tip hatasi veriyordu, oysa dizi bos donebiliyor.
+export async function kullaniciyiYukle(
+  authUserId: string,
+): Promise<KullaniciKaydi | null> {
   const db = await getDb();
   const [kayit] = await db
     .select({
@@ -74,6 +91,29 @@ export async function kullaniciyiYukle(authUserId: string) {
     .limit(1);
 
   return kayit ?? null;
+}
+
+/// Basarili giristen (ya da sifre yenilemeden) sonra kullanicinin nereye
+/// gidecegi. `/api/giris` ve `/api/sifre/yenile` AYNI uc karari veriyor -
+/// tek yerde tutulmazsa bir gun ayrisip musteriyi panele dusururlerdi.
+export function girisYonu(
+  kayit: Awaited<ReturnType<typeof kullaniciyiYukle>>,
+  devam: unknown,
+): string {
+  if (!kayit) {
+    // Supabase'de hesap var ama bizde `kullanici` satiri yok: kayit akisi
+    // yarida kalmis. Panele gondermek sonsuz donguye girerdi.
+    return "/kayit/tamamla";
+  }
+
+  if (kayit.rol === "MUSTERI") {
+    // Musteri hesabinin paneli yok; kendi randevu listesine gidiyor (Faz J).
+    return "/randevularim";
+  }
+
+  // `devam` cagiran tarafin URL'inden geliyor; guvenliYol acik yonlendirme
+  // kapisi. Suphede birakilan deger null donuyor ve panele dusuyoruz.
+  return guvenliYol(devam) ?? "/panel";
 }
 
 /// Istegi yapan kisiyi cozer. Oturum yoksa null.

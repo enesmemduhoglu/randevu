@@ -1,5 +1,5 @@
-import { kullaniciyiYukle } from "@/lib/auth";
-import { epostaDogrula, guvenliYol } from "@/lib/girdi";
+import { girisYonu, kullaniciyiYukle } from "@/lib/auth";
+import { epostaDogrula } from "@/lib/girdi";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
 import { checkOrigin } from "@/lib/origin";
 import { hizSiniriMi, hizSiniriYaniti } from "@/lib/supabase/hata";
@@ -72,25 +72,9 @@ export async function POST(istek: Request) {
 
   const kayit = await kullaniciyiYukle(data.user.id);
 
-  if (!kayit) {
-    // Supabase'de hesap var ama bizde `kullanici` satiri yok: kayit akisi
-    // yarida kalmis. Panele gondermek sonsuz donguye girerdi - auth() bu kisi
-    // icin null donuyor, proxy onu /giris'e atiyor, giris yine panele...
-    // Tamamlama ekrani donguyu kiran tek hedef.
-    return Response.json({ yon: "/kayit/tamamla" });
-  }
-
-  if (kayit.rol === "MUSTERI") {
-    // Musteri hesabinin paneli yok; kendi randevu listesine gidiyor (Faz J).
-    //
-    // `devam` degeri kasitli olarak YOK SAYILIYOR: o parametre korunan bir
-    // sayfaya oturumsuz girildiginde ekleniyor ve korunan sayfalarin hepsi
-    // panel yollari. Musteriyi oraya gondermek, onu erisemeyecegi bir sayfaya
-    // birakip geri attirirdi.
-    return Response.json({ yon: "/randevularim" });
-  }
-
-  // `devam` kullanicinin URL'inden geliyor; guvenliYol acik yonlendirme
-  // kapisi. Suphede birakilan deger null donuyor ve panele dusuyoruz.
-  return Response.json({ yon: guvenliYol(govde.devam) ?? "/panel" });
+  // Ucu karar `girisYonu`da (src/lib/auth.ts): kayitsiz -> /kayit/tamamla,
+  // MUSTERI -> /randevularim, digeri -> devam ya da /panel. /api/sifre/yenile
+  // AYNI karari veriyor; tek yerde tutulmazsa bir gun ayrisip musteriyi
+  // panele dusururlerdi.
+  return Response.json({ yon: girisYonu(kayit, govde.devam) });
 }
