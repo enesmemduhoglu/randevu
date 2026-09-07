@@ -85,6 +85,16 @@ dayanıyor. Secret olarak saklamak yanlış bir güvenlik hissi verirdi.
 durur. Kontrol var, çünkü eksik bir `NEXT_PUBLIC_*` build'i **düşürmüyor**:
 `undefined` gömülüyor ve hata canlıda, giriş ekranında ortaya çıkıyor.
 
+**Faz P2'den sonra bu kontrol daha da kritik.** Eskiden Supabase değişkenleri
+bir istisnaydı: eksik olduklarında build *düşüyordu*, yani kaza eseri bir
+koruma sağlıyorlardı. Faz P2 o düşmeyi bilerek kaldırdı (gerekçe:
+`src/lib/supabase/sunucu.ts`), yani artık **dört değişkenin dördü de** sessizce
+`undefined` gömülebilir. Geriye kalan tek koruma bu adım — silinmemeli.
+
+İkinci uyarı `next.config.ts`'te: Supabase değişkenleri olmadan koşan bir
+üretim build'i konsola "bu çıktıyı yayınlamayın" yazıyor. Yerel bir
+`npm run cf:yayinla` bu hattın dışında kaldığı için o uyarı orada tek uyarıdır.
+
 ### Environment
 
 **Hiçbir iş artık bir ortama bağlı değil.** `uretim` ortamı GitHub'da hâlâ

@@ -3544,3 +3544,143 @@ Veri: `isil-guzellik-salonu`, üç müşteri.
 H2a sonundaki 1769,53 KiB'den **+22,73 KiB**. İki ekran ve bir istemci
 bileşeni için küçük — listenin sunucuda kalması işe yaradı (H2a tek ekran için
 +135 KiB getirmişti).
+
+---
+
+## Faz P2 — sırların yokluğunda build (PR #35)
+
+**Kapandı:** `npm run build` ve `npm run cf:kur` artık Supabase değişkenleri
+olmadan da geçiyor. Faz H2'nin sonunda "P2'ye yazılmalı" diye bırakılan yan
+bulgu.
+
+### Kök neden tek satırın sırasıydı
+
+`supabaseSunucu()` şu sırayla koşuyordu: önce `ayarlar()` (env okuyor ve yoksa
+fırlatıyor), sonra `await cookies()`. Next, `dynamic` işareti olmayan bir
+sayfayı build'de **önce prerender etmeyi deniyor** ve sayfa ancak bir istek-anı
+API'sine *gerçekten ulaştığında* dinamiğe düşüyor. `ayarlar()` bir satır önce
+patladığı için o düşüş hiç gerçekleşmiyordu.
+
+**`ƒ (Dynamic)` işareti bir girdi değil, çıktı.** Bu sayfaların hiçbirinde
+`export const dynamic` yok. Env varken prerender denemesi `cookies()`e ulaşıp
+bailout ediyor ve Next sayfayı `ƒ` diye *etiketliyor* — yani etiket, "prerender
+denenmedi"nin değil, **"prerender denendi ve bailout etti"nin** kanıtı. Faz
+H2'nin notu bu ilişkiyi ters okumuştu.
+
+**Etki iki değil altı sayfa:** `/giris`, `/kayit`, `/uye-ol`,
+`/kayit/tamamla`, `/isletmeler-icin` ve `/gizlilik` (son ikisi `UstBar` →
+`auth()` üzerinden). Build ilk hatada durduğu için her koşumda yalnızca biri
+görünüyordu.
+
+### `connection()` denendi ve ÖLÇÜLDÜ, sonra geri alındı
+
+İlk düzeltme `supabaseSunucu()`'nun ilk satırına `await connection()` koydu —
+niyeti açıkça yazan, `src/app/saglik/page.tsx`'te emsali olan araç. Çalıştı,
+ama `next/server` import'u bu modül üzerinden worker paketine **+45,4 KiB gzip**
+ekledi (1792,40 → 1837,77). Bütçe 3 MiB ve her fazda izleniyor; bir satırın
+sırası için ödenecek bedel değil.
+
+Bugünkü hâli: `cookies()` çağrısı `ayarlar()`'ın **üstüne** alındı. Aynı kesmeyi
+zaten orada duran bir çağrı yapıyor, paket `main` ile birebir aynı kaldı
+(1792,40 KiB).
+
+**"İki satırın sırası" kırılgan bir garanti** — o yüzden kaza olmaktan
+çıkarıldı: `degismezler.test.ts` gövdenin **ilk ifadesinin** o satır olduğunu
+zorluyor. Kapının kırmızıya döndüğü, satırlar bilerek takas edilerek
+doğrulandı.
+
+### CI'daki sahte değerler kaldırıldı
+
+`dogrula` işindeki `cf:kur` adımı iki sahte Supabase değeri taşıyordu ve yorumu
+"öyle kalmalı" diyordu. O gerekçenin dayanağı (env yoksa `ayarlar()` fırlatır)
+artık doğru değil.
+
+**Kaldırmak, bu regresyonu yakalayan tek koruma.** Sebep ergonomik değil
+teknik: `next build` `.env`'i kendiliğinden yüklüyor ve `.env` gitignore'da —
+yani `.env`'i olan bir geliştirici hatayı **hiçbir zaman göremez**. Depodaki
+tek sırsız ortam o adım. İkinci bir kapı `degismezler.test.ts`'te: adımın içine
+Supabase değişkeni geri konulursa test kırmızıya dönüyor (Faz L'de
+`TURNSTILE_MODU`'nun sessizce kaybolmasıyla aynı hata sınıfı).
+
+### Gürültülü hata sessiz hataya dönüşmesin diye
+
+Bu düzeltmenin bilinen bedeli var: **eksik env build'i düşürerek kazara koruma
+sağlıyordu.** Artık sağlamıyor, yani sırsız bir `cf:yayinla` başarıyla **kırık
+bir Worker** yayınlayabilir — `NEXT_PUBLIC_*` derleme anında gömüldüğü için
+`wrangler vars` bunu çalışma anında düzeltemiyor.
+
+Karşılığı iki yerde: `next.config.ts` üretim build'inde eksik değişkeni görürse
+"bu çıktıyı yayınlamayın" uyarısı basıyor (`throw` değil — fazın işi tam olarak
+düşmemek), ve `ci.yml`'deki mevcut "derleme değişkenleri var mı" kapısı artık
+**tek** koruma olarak `docs/yayin.md`'ye yazıldı.
+
+Uyarı üç kez basıyordu; modül seviyesindeki bir bayrak aynı süreçteki tekrarı
+kesti. **İkiye indi, bire değil**: `next build` ayrı bir süreç daha açıyor ve
+oradaki çağrı bayrağı görmüyor. Ölçüldü, kabul edildi.
+
+### Bilerek kapsam dışı
+
+- **`NEXT_PUBLIC_` önekinden kurtulmak.** Bu iki değer tarayıcıda hiç
+  kullanılmıyor (tek okuma noktası `supabase/sunucu.ts`; formlar `/api/*`'ye
+  POST atıyor), yani önek gereksiz ve kaldırılması "sırsız üretilen paket
+  kırıktır" tuzağını tümden ortadan kaldırırdı. Ama `wrangler.jsonc`,
+  `docs/yayin.md` ve `ci.yml`'nin iki işini birden değiştirir — **ayrı iş**.
+- **`NEXT_PUBLIC_SITE_URL` ve `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.** İkisi de
+  build'i zaten düşürmüyordu (`site.ts`'te yedek değer, `turnstile-alani.tsx`
+  sessizce kapanıyor). Ayrı davranışlar, ayrı karar.
+- **`/isletmeler-icin` ve `/gizlilik`'i gerçekten statik yapmak** (`UstBar`'ı
+  oturumsuz bir varyanta ayırarak). Performans kararı, bu fazın konusu değil.
+
+### Faz P2'den DÜŞÜRÜLEN madde: `scoped-db.ts` bölünmesi
+
+Dosya bugün **1809 satır** (teknik borç maddesindeki "1065" notu 3 Eylül'den
+kalma, dosya o gün bugün %70 büyümüş). Bölünme yine de **yapılmıyor**, çünkü
+ölçülen faydası yok:
+
+- **Bundle: 0.** Dış yüzey (`getScopedDb`) değişmediği için her sayfa yine
+  bütün parçaları yüklüyor; istemci tarafına bugün de hiçbir şey inmiyor
+  (`import type` kullanılıyor).
+- **Test süresi: 0.** Maliyet gerçek Postgres gidiş-dönüşü, modül boyutu değil;
+  test dosyaları zaten bölünmüş.
+- **`npm run tip`: muhtemelen hafif kötüleşir** (spread edilen fabrika dönüş
+  tiplerinin çıkarımı).
+
+Kalan fayda tamamen insani: 1809 satırda eksik bir `eq(x.isletmeId, kiraci)`'yi
+incelemede kaçırmak kolay. Ama bedeli ağır: `bildirimKapisi(db, kiraci)` bugün
+*dosya içi* bir fonksiyon; `export` edildiği an `kiraci` **gerçek bir
+parametre** oluyor ve `randevuKapisi(db, "başka-işletme-id")` derlenen,
+lint'ten geçen, hiçbir testin görmediği bir satır hâline geliyor. Yani bölünme
+DEĞİŞMEZ 1'in bugünkü en güçlü argümanını ("filtre tek dosyada bir kapanış
+değişkeni") zayıflatıyor.
+
+Yeniden bakılacak eşik: dosya büyümeye devam ederse ya da kapanış değişkenini
+koruyan kapılar (kiracı bağlama tek dosyada, parçalar dışarıdan import
+edilemez, imza taraması) ayrı bir iş olarak yazılmak istenirse.
+
+### Elle doğrulandı — 7 Eylül 2026
+
+- [x] **Hata önce üretildi.** `.env` geçici kaldırıldı → `npm run build`
+      `Error occurred prerendering page "/giris"` ile düştü. Teşhis
+      varsayılmadı.
+- [x] **Düzeltmeden sonra sırsız `npm run build` geçiyor**, uyarı basıyor.
+- [x] **Sırsız `npm run cf:kur` geçiyor** — CI'ın artık koşacağı adımın aynısı.
+- [x] **Statik/dinamik sınıflandırması değişmedi.** `main`'de ve dalda statik
+      kalan üç yol aynı: `/_not-found`, `/icon.svg`, `/robots.txt`.
+- [x] **Gerçek istek.** `npm run dev` → `/giris`, `/kayit`, `/uye-ol`,
+      `/isletmeler-icin`, `/gizlilik`, `/` **200**; `POST /api/oturum` **200**.
+- [x] **Kapı kırmızıya dönüyor.** Satırlar bilerek takas edildi, test düştü,
+      geri alındı.
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1792,40 KiB** (bütçe 3 MiB).
+`main` ile **birebir aynı** — `connection()` yolu +45,4 KiB getirdiği için
+geri alındı.
+
+### Elle yapılması gerekenler
+
+- [ ] **Cloudflare panelinde Workers Builds bağlantısı sökülmeli** (Workers →
+      randevu → Settings → Builds). `TODOS.md > Faz H2`'de zaten önerilmişti;
+      bu faz **aciliyetini artırıyor**: o hat dal başına koşuyor ve bugün onu
+      üretime yayınlamaktan alıkoyan tek şey eksik env değişkeniydi. Bu faz o
+      kazayı ortadan kaldırdı.

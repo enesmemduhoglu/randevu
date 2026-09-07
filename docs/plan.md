@@ -326,15 +326,30 @@ karar kaydı `TODOS.md`'de.
 | **P** — tur sonrası düzeltmeler | Geliştirici ekranları üretimde kapandı, hatırlatma vaadi düzeltildi, arama kategori + hizmet adına da bakıyor, kaybolan filtre, misafir→üye köprüsü, `/giris`'te iki çıkış, eksik sayfa başlıkları, `/gizlilik` |
 | **H2a** — elle randevu | `/panel/randevu/yeni`, `POST /api/randevular`, müsaitlik motoru iki kapıya bağlandı (`MusaitlikKapisi`), serbest saat istisnası, `kaynak: ISLETME` |
 | **H2b** — müşteri listesi | `/panel/musteriler` + detay, müşteri geçmişi, kayıt düzenleme (`PATCH /api/musteriler/[id]`), L3 kısıtının tek müşteri için kaldırılması |
+| **P2a** — sırsız build | `supabaseSunucu()` env'i `cookies()`ten sonra okuyor, CI'ın `cf:kur` adımından sahte değerler kalktı, iki statik kapı |
 
 ### Sıradakiler
 
 **Faz P2 — sağlamlaştırma (kalanlar)**
 Faz P teknik borcun iki maddesini kapattı (vitrin üretimde kapalı, `/saglik` arama
-motorundan çekildi). Kalanlar: `scoped-db.ts` bölünmesi, uyarı/hata takibi ve
-`/saglik`'in şemayı gerçekten kontrol etmesi. **Şifre sıfırlama da burada** — bugün
-hiç yok ve `kullanici_auth_user_id` tekil olduğu için şifresini unutan kullanıcı
-kalıcı olarak kilitleniyor, aynı e-postayla yeniden kayıt da olamıyor.
+motorundan çekildi). P2'nin ilk PR'ı sırların yokluğunda build'i ayağa kaldırdı
+(PR #35). Kalanlar, öncelik sırasıyla:
+
+1. **Şifre sıfırlama** — bugün hiç yok ve `kullanici_auth_user_id` tekil olduğu için
+   şifresini unutan kullanıcı kalıcı olarak kilitleniyor, aynı e-postayla yeniden
+   kayıt da olamıyor. **Supabase custom SMTP kurulmadan merge edilemez** (yerleşik
+   mailer saatte 2 mail). Akış `token_hash` + `verifyOtp` üzerine kurulacak, PKCE
+   `?code=` üzerine değil: mail telefonda uygulama içi tarayıcıda açılıyor ve
+   `code_verifier` cookie'si orada yok.
+2. **`/saglik`'in şemayı gerçekten kontrol etmesi** — kolon kümesini `sema.ts`'ten
+   türetip DB ile karşılaştırmak, göç sayısı ve `EXCLUDE` kısıtının varlığı. Yanında
+   deploy sonrası duman testi (bugün yok) ve zamanlanmış nabız.
+3. **Uyarı/hata takibi** — tek hata kapısı + `onRequestError`. Üçüncü parti değil:
+   depo public olduğu için zamanlanmış GitHub Actions ücretsiz ve başarısız koşum
+   zaten bildirim gönderiyor.
+
+**`scoped-db.ts` bölünmesi P2'den düşürüldü** — ölçülen faydası yok (bundle 0, test
+süresi 0) ve kapanış değişkeni disiplinini zayıflatıyor. Gerekçe `TODOS.md > Faz P2`.
 
 **Faz Q — kalkan 2**
 Misafir randevusu kalıyor (gerekçe `TODOS.md > Faz J üstüne gelen düzeltmeler`);
