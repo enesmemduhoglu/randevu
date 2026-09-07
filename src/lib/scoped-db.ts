@@ -13,8 +13,11 @@ import {
   eq,
   gt,
   gte,
+  ilike,
   inArray,
+  isNotNull,
   isNull,
+  like,
   lt,
   lte,
   or,
@@ -102,6 +105,33 @@ export type TakvimRandevusu = {
   musteriEposta: string | null;
 };
 
+/// Musteri listesinin bir satiri (Faz H2, ikinci yari).
+///
+/// `not` BURADA YOK, bilerek. Isletmenin musteri hakkindaki ic notu ("pesin
+/// odemiyor", "gec geliyor") liste ekranindaki ozet satirinda degil, ancak
+/// tek bir musterinin detayinda gorunmeli - liste ekrani panelde acik
+/// birakilan sayfa ve omuz ustunden okunabiliyor.
+export type MusteriOzeti = {
+  id: string;
+  ad: string;
+  telefon: string;
+  eposta: string | null;
+  /// NULL = kisit yok. Kisitin GECERLI olup olmadigi burada karara
+  /// baglanmiyor: tarihin gecmiste kalmasi da, isletmenin ayari 0 yapmasi da
+  /// kisiti etkisiz kiliyor ve ikisini de gosterim katmani biliyor.
+  randevuKisitiBitis: Date | null;
+  randevuSayisi: number;
+  /// EN SON randevunun baslangici - gecmis ya da gelecek. Siralamanin anahtari
+  /// bu: isletmenin "kim vardi, kim geliyor" sorusuna en yakin cevap.
+  sonRandevu: Date | null;
+};
+
+/// Tek musterinin detayi. Ozetin ustune ic notu ve kayit tarihini ekliyor.
+export type MusteriDetayi = MusteriOzeti & {
+  not: string | null;
+  olusturmaTarihi: Date;
+};
+
 /// Halka acik randevu yazmanin girdisi.
 ///
 /// `personelId` ve `bitis` istemciden DEGIL musaitlik motorundan geliyor
@@ -156,6 +186,32 @@ const KILITLENME = "40P01";
 /// Kilitlenmede kac kez bastan denenecegi. Modul duzeyinde cunku IKI randevu
 /// yazma yolu da ayni sayiyi kullaniyor (Faz H2).
 const EN_COK_DENEME = 3;
+
+/// Musteri listesinin bir seferde donduruvebilecegi en cok satir.
+///
+/// SAYFALAMA YOK, bilerek: bir salonun musteri sayisi binlerle degil yuzlerle
+/// olculuyor ve sayfa numaralari, arama kutusunun cozdugu bir sorunu ikinci
+/// kez cozerdi. Sinir asildiginda liste SESSIZCE KESILMIYOR - kapi bir satir
+/// fazla okuyup `dahaVar` bayragini doldurmus oluyor ve ekran kullaniciya
+/// aramayi daraltmasini soyluyor.
+const MUSTERI_SAYFA_BOYU = 100;
+
+/// Musteri detayinda gosterilen randevu gecmisinin siniri. Gecmis kronolojik
+/// ve tersten (en yeni ustte); bu sinira dayanan bir musteri zaten yillardir
+/// gelen bir musteri ve eski randevularini takvimden ariyor.
+const MUSTERI_GECMIS_SINIRI = 100;
+
+/// `LIKE` jokerlerini kacirir: kullanicinin yazdigi `%` kendi anlamini
+/// kaybedip duz karakter oluyor. Kacirilmasaydi tek bir `%` butun musterileri
+/// dondururdu - kiraci filtresi yerinde oldugu icin sizinti degil ama arama
+/// kutusu sessizce "hepsini listele" dugmesine donusurdu.
+///
+/// `dizin.ts`'te ayni isimde bir ikizi var ve BILEREK ayri duruyor: DEGISMEZ
+/// 12 o dosyanin import yuzeyini kilitliyor, yani ortak bir yardimciya
+/// baglamak dizin testinin izinli listesini genisletmek demekti.
+function jokerKacir(ham: string): string {
+  return ham.replace(/[\\%_]/g, (k) => `\\${k}`);
+}
 
 type Veritabani = Awaited<ReturnType<typeof getDb>>;
 
@@ -1221,6 +1277,229 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
           throw hata;
         }
       }
+    },
+
+    // ---- Musteriler (Faz H2, ikinci yari) ---------------------------------
+
+    /// Musteri listesi. Satir basina randevu sayisi ve son randevu tarihi
+    /// AYNI SORGUDA hesaplaniyor - liste basina bir sorgu, musteri basina bir
+    /// tane degil. Yuz musterilik bir salonda N+1, panelin ilk aciliste en
+    /// yavas ekrani olurdu.
+    ///
+    /// LEFT JOIN, inner degil: randevusu silinmis ya da hic randevu almamis
+    /// bir musteri de listede gorunuyor. Musteri kaydi bugun yalnizca randevu
+    /// ile oluşuyor ama `randevu.musteriId` `ON DELETE RESTRICT` degil diye
+    /// bir gun degisebilir; liste o gun sessizce kayit gizlemesin.
+    ///
+    /// Join kosuluna kiraci filtresi de yazildi. Musteri zaten kiracıya bagli
+    /// oldugu icin teknik olarak gereksiz, ama bu dosyanin sozlesmesi "her
+    /// sorguda kiraci" ve istisnasi olan bir kural okunurken sorgulanir.
+    async musterileriListele(
+      secenekler?: { arama?: string },
+    ): Promise<{ satirlar: MusteriOzeti[]; dahaVar: boolean }> {
+      const arama = secenekler?.arama?.trim() ?? "";
+
+      // Telefon veritabaninda YALNIZCA RAKAM olarak duruyor (telefonDogrula),
+      // yani "0532 111" diye aratan kullanicinin bosluklari eslesmeyi
+      // bozardi. Rakamlar suzuluyor; hic rakam yoksa telefon kosulu sorguya
+      // HIC eklenmiyor - bos bir desen butun numaralari eslerdi.
+      //
+      // BASTAKI 0 VE 90 DA ATILIYOR, cunku `telefonDogrula` numarayi onlarsiz
+      // sakliyor (10 hane) ama panel onlari EKLEYEREK gosteriyor
+      // (`telefonBicimle` -> "0555 123 45 67"). Kirpilmasaydi isletmenin
+      // ekrandan kopyalayip aradigi numara hicbir zaman bulunamazdi - bu tam
+      // olarak elle dogrulamada yakalandi. Once 0, sonra 90: "0905551234567"
+      // gibi ikisini birden tasiyan bir yazim da cozuluyor.
+      let rakamlar = arama.replace(/\D/g, "");
+      if (rakamlar.startsWith("0")) rakamlar = rakamlar.slice(1);
+      if (rakamlar.startsWith("90")) rakamlar = rakamlar.slice(2);
+
+      const suzgec = arama
+        ? or(
+            ilike(musteri.ad, `%${jokerKacir(arama)}%`),
+            rakamlar ? like(musteri.telefon, `%${rakamlar}%`) : undefined,
+          )
+        : undefined;
+
+      const satirlar = await db
+        .select({
+          id: musteri.id,
+          ad: musteri.ad,
+          telefon: musteri.telefon,
+          eposta: musteri.eposta,
+          randevuKisitiBitis: musteri.randevuKisitiBitis,
+          // `::int` sart: postgres surucusu `count`un bigint'ini METIN olarak
+          // donduruyor ve tip `number` derken degeri "3" olurdu.
+          randevuSayisi: sql<number>`count(${randevu.id})::int`,
+          // `mapWith` OLMADAN bu alan `Date` DEGIL metin donuyor - tip
+          // dogruydu, deger degildi. Ham `sql` ifadesi kolon tipini
+          // kaybediyor, yani Drizzle'in timestamptz cozucusu devreye girmiyor
+          // ve `sonRandevu.getTime()` "is not a function" ile patliyordu.
+          // Kolonu gostererek onun cozucusunu odunc aliyoruz; `null` degerler
+          // cozucuye hic ugramiyor (bkz. randevusu olmayan musteri testi).
+          sonRandevu: sql<Date | null>`max(${randevu.baslangic})`.mapWith(
+            randevu.baslangic,
+          ),
+        })
+        .from(musteri)
+        .leftJoin(
+          randevu,
+          and(
+            eq(randevu.musteriId, musteri.id),
+            eq(randevu.isletmeId, kiraci),
+          ),
+        )
+        .where(and(eq(musteri.isletmeId, kiraci), suzgec))
+        .groupBy(musteri.id)
+        // GELECEK randevusu olan en uste cikiyor cunku `max` gelecege de
+        // bakiyor. Isletmenin listeye bakma sebebi cogunlukla "birazdan
+        // gelecek olan kim" ya da "en son kim geldi" - ikisi de bu ucta.
+        // Hic randevusu olmayan (null) en sona, sonra ada gore.
+        .orderBy(sql`max(${randevu.baslangic}) desc nulls last`, asc(musteri.ad))
+        // Bir fazla: listenin kesilip kesilmedigini SORMADAN bilmek icin.
+        // Ikinci bir `count(*)` sorgusu, cevabi kullanilmayan bir tam tarama
+        // olurdu.
+        .limit(MUSTERI_SAYFA_BOYU + 1);
+
+      return {
+        satirlar: satirlar.slice(0, MUSTERI_SAYFA_BOYU),
+        dahaVar: satirlar.length > MUSTERI_SAYFA_BOYU,
+      };
+    },
+
+    /// Tek musterinin detayi. Ozetin ustune `not` ve kayit tarihi geliyor.
+    async musteriGetir(id: string): Promise<MusteriDetayi | null> {
+      const [kayit] = await db
+        .select({
+          id: musteri.id,
+          ad: musteri.ad,
+          telefon: musteri.telefon,
+          eposta: musteri.eposta,
+          not: musteri.not,
+          olusturmaTarihi: musteri.olusturmaTarihi,
+          randevuKisitiBitis: musteri.randevuKisitiBitis,
+          randevuSayisi: sql<number>`count(${randevu.id})::int`,
+          // `mapWith` gerekcesi `musterileriListele`nin yaninda.
+          sonRandevu: sql<Date | null>`max(${randevu.baslangic})`.mapWith(
+            randevu.baslangic,
+          ),
+        })
+        .from(musteri)
+        .leftJoin(
+          randevu,
+          and(
+            eq(randevu.musteriId, musteri.id),
+            eq(randevu.isletmeId, kiraci),
+          ),
+        )
+        // Iki kosul birlikte: id tek basina yeterli DEGIL. Baska isletmenin
+        // musteri id'si buraya gelirse bos donuyor, 404'e ceviriliyor.
+        .where(and(eq(musteri.id, id), eq(musteri.isletmeId, kiraci)))
+        .groupBy(musteri.id)
+        .limit(1);
+
+      return kayit ?? null;
+    },
+
+    /// Musterinin randevu gecmisi, en yeni ustte.
+    ///
+    /// `TakvimRandevusu` donduruyor: takvimin kullandigi tipin AYNISI, cunku
+    /// gecmis satiri da ayni seyi gosteriyor (hizmet, personel, durum) ve iki
+    /// ayri tip bir gun ayrisip ayni randevuyu iki ekranda farkli anlatirdi.
+    ///
+    /// TUM DURUMLAR donuyor, IPTAL ve GELMEDI dahil. Musteri gecmisinin asil
+    /// sorusu zaten bu: "bu musteri kac kez gelmedi".
+    async musteriRandevulariniListele(
+      musteriId: string,
+    ): Promise<TakvimRandevusu[]> {
+      return db
+        .select(takvimAlanlari)
+        .from(randevu)
+        .innerJoin(hizmet, eq(hizmet.id, randevu.hizmetId))
+        .innerJoin(personel, eq(personel.id, randevu.personelId))
+        .innerJoin(musteri, eq(musteri.id, randevu.musteriId))
+        // Yabanci bir musteri id'si bos liste donduruyor, hata degil -
+        // varligini da sizdirmiyor.
+        .where(
+          and(eq(randevu.musteriId, musteriId), eq(randevu.isletmeId, kiraci)),
+        )
+        .orderBy(desc(randevu.baslangic))
+        .limit(MUSTERI_GECMIS_SINIRI);
+    },
+
+    /// Musteri kaydinin duzeltilmesi: ad, e-posta ve isletmenin ic notu.
+    ///
+    /// TELEFON DEGISTIRILEMIYOR ve bu bir eksiklik degil karar. Musteri
+    /// `(isletmeId, telefon)` ile tekilleniyor, yani numara KIMLIGIN kendisi:
+    /// degistirmek ya baska bir musterinin numarasiyla carpisip benzersizlik
+    /// ihlali uretirdi ya da o numaradan gelen sonraki randevunun ikinci bir
+    /// musteri kaydi acmasina yol acardi. Numarasi degisen musteri, yeni
+    /// numarayla gelen ilk randevuda zaten yeni bir kayit olarak aciliyor.
+    ///
+    /// DEGISMEZ 3'un kosullu UPDATE'i: once-oku-sonra-yaz yok, kiraci kosulu
+    /// `where`'de ve etkilenen satir sayisi karari veriyor. 0 donuyorsa kayit
+    /// yok YA DA baska kiraciya ait - ikisi de cagirana ayni gorunmeli.
+    async musteriGuncelle(
+      id: string,
+      veri: { ad: string; eposta: string | null; not: string | null },
+    ): Promise<number> {
+      const sonuc = await db
+        .update(musteri)
+        .set(veri)
+        .where(and(eq(musteri.id, id), eq(musteri.isletmeId, kiraci)))
+        .returning({ id: musteri.id });
+
+      return sonuc.length;
+    },
+
+    /// GELMEDI kisitini kaldirir (Faz L3'un affetme yolu, Faz H2'de panele
+    /// baglandi).
+    ///
+    /// Bugune kadar tek kaldirma yolu isletme ayarini gecici olarak 0 yapmakti
+    /// - yani BUTUN musterilerin kisitini birden dusurmek. Burasi tek bir
+    /// musteriyi affediyor ve ayara dokunmuyor.
+    ///
+    /// Kisit SIFIRLANIYOR, kisaltilmiyor: "affetme" yarim olmaz. Yazma tarafi
+    /// (randevuDurumunuDegistir) sureyi `greatest` ile hic kisaltmiyordu;
+    /// buradaki `null` o kapinin bilincli karsi yonu.
+    ///
+    /// Uc ayri sonuc donuyor cunku cagiran taraf 404 ile 409'u ayirmak
+    /// zorunda: `isNotNull` kosulu yuzunden 0 satirin iki sebebi var ve
+    /// "musteri yok" ile "zaten kisitli degil" kullaniciya ayni cumleyle
+    /// anlatilamaz.
+    async musteriKisitiniKaldir(
+      id: string,
+    ): Promise<{ durum: "yok" | "kisit-yok" | "tamam" }> {
+      return db.transaction(async (tx) => {
+        const sonuc = await tx
+          .update(musteri)
+          .set({ randevuKisitiBitis: null })
+          .where(
+            and(
+              eq(musteri.id, id),
+              eq(musteri.isletmeId, kiraci),
+              // Beklenen durum `where`'de: ayni anda iki sekmeden kaldirilirsa
+              // ikincisi 0 satir etkiliyor ve "zaten kaldirilmis" cevabini
+              // aliyor.
+              isNotNull(musteri.randevuKisitiBitis),
+            ),
+          )
+          .returning({ id: musteri.id });
+
+        if (sonuc.length > 0) return { durum: "tamam" as const };
+
+        // YAZDIKTAN SONRA okuma, 0 satirin iki nedenini ayirmak icin - ayni
+        // sira `randevular/[id]/durum` route'unda da var.
+        const [mevcut] = await tx
+          .select({ id: musteri.id })
+          .from(musteri)
+          .where(and(eq(musteri.id, id), eq(musteri.isletmeId, kiraci)))
+          .limit(1);
+
+        return mevcut
+          ? { durum: "kisit-yok" as const }
+          : { durum: "yok" as const };
+      });
     },
   };
 }

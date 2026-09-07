@@ -3396,3 +3396,151 @@ ayrıca kurulmalı.
 > yoksa build tümden düşüyor. CI bunu sahte değerlerle örtüyor. Sırların
 > yokluğunda build'in ayakta kalması Faz P2'ye yazılmalı.
 
+
+---
+
+## Faz H2 — müşteri listesi ve geçmişi *(ikinci yarı, PR #34)*
+
+**Kapandı:** `/panel/musteriler` + müşteri detayı, randevu geçmişi, kayıt
+düzenleme (`PATCH /api/musteriler/[id]`) ve L3'ün "gelmedi" kısıtının tek bir
+müşteri için kaldırılması (`DELETE /api/musteriler/[id]/kisit`). `scoped-db`'ye
+beş metot; **700 test** (fazdan önce 660).
+
+Fazın ilk yarısı PR #33'te kapanmıştı; bu PR onun bilerek dışarıda bıraktığı
+dört maddeyi alıyor.
+
+### Panelde müşteri diye bir yüzey yoktu
+
+`musteri` tablosu Faz E'den beri duruyor ama panelin ona bakan **tek bir
+metodu** yoktu: müşteri kaydı yalnızca randevu yazılırken `musteriyiCoz` ile
+açılıyor, takvimde ise adı ve telefonu randevu satırının join'inden
+görünüyordu. Yani "bu müşteri kaç kez geldi" sorusunun cevabı veritabanında
+vardı, panelde yoktu.
+
+Eklenen beş metot: `musterileriListele`, `musteriGetir`,
+`musteriRandevulariniListele`, `musteriGuncelle`, `musteriKisitiniKaldir`.
+
+### Telefon düzenlenemiyor — eksiklik değil, karar
+
+Müşteri `(isletmeId, telefon)` ile tekilleniyor, yani **numara kaydın
+kimliği**. Düzenlenebilir bir alan olsaydı ya başka bir müşterinin numarasıyla
+çarpışıp benzersizlik ihlali üretirdi ya da o numaradan gelen sonraki randevu
+ikinci bir müşteri kaydı açardı. Numarası değişen müşteri, yeni numarayla
+gelen ilk randevuda zaten ayrı bir kayıt olarak açılıyor.
+
+Alan doğrulayıcıda (`musteri-girdi.ts`) da yok: gövdeye telefon yazılsa bile
+**okunmuyor**, yani kapıya hiç ulaşmıyor. Test bunu ayrıca kilitliyor.
+
+### Ad güncelleme: iki yolun bilinçli farkı
+
+Elle randevu yazan yol mevcut müşterinin adını **bilerek** güncellemiyordu
+(PR #33 kararı: "Ahmet" diye kayıtlı biri "Ahmet Yılmaz" yazılarak arandığında
+kaydın sessizce yeniden adlandırılması sürpriz olurdu). Bu PR o sürprizin
+**açık** karşılığını getiriyor: ad düzeltmek ayrı bir ekran ve ayrı bir uç.
+İki yol artık birbirini tamamlıyor — biri sessizce değiştirmiyor, öteki
+isteyerek değiştiriyor.
+
+### Kısıtın affetme yolu artık tek müşteri için
+
+Faz L3 kısıtı yazıyordu ama kaldıran bir yol yoktu; günlükteki kayıt bunu
+açıkça söylüyordu: *"Bugünkü kaldırma yolu ayarı geçici olarak 0 yapmak — kaba
+ama var."* Yani tek bir müşteriyi affetmek için **bütün müşterilerin** kısıtını
+düşürüp geri açmak gerekiyordu.
+
+`DELETE /api/musteriler/[id]/kisit` tek satırı sıfırlıyor, ayara dokunmuyor.
+Kısıt **sıfırlanıyor, kısaltılmıyor** — affetme yarım olmaz; yazma tarafı da
+süreyi `greatest` ile hiç kısaltmıyordu, buradaki `null` o kapının bilinçli
+karşı yönü.
+
+Üç sonuç dönüyor (`tamam` / `kisit-yok` / `yok`) çünkü `isNotNull` koşulu
+yüzünden 0 satırın iki sebebi var: "müşteri yok" 404, "zaten kısıtlı değil"
+409. İkisi kullanıcıya aynı cümleyle anlatılamaz.
+
+**Kısıtın GEÇERLİ olup olmadığına sunucu karar veriyor**, istemci değil:
+tarihin gelecekte olması tek başına yetmiyor, işletme ayarı 0'a çekildiyse
+kayıtlı tarih de yok sayılıyor — randevu yazan yol (`randevuYaz`) tam olarak
+böyle bakıyor. İki yer ayrışsaydı ekran "kısıtlı" derken müşteri randevu
+alabiliyor olurdu.
+
+### Liste tamamen sunucu bileşeni
+
+Arama düz bir **GET formu**, satırlar birer link — tutulacak durum yok. Üç
+sonucu var: arama JavaScript kapalıyken de çalışıyor, sonuç URL'e yazıldığı
+için yer imine konabiliyor, ve liste istemci paketine hiç inmiyor. Fazın ilk
+yarısı tek ekran için +135 KiB getirmişti; bu PR **+22,7 KiB** getiriyor.
+
+Sayfalama yok, bilerek: bir salonun müşteri sayısı binlerle değil yüzlerle
+ölçülüyor ve sayfa numaraları, arama kutusunun çözdüğü sorunu ikinci kez
+çözerdi. Sınır aşıldığında liste **sessizce kesilmiyor** — kapı bir satır
+fazla okuyup `dahaVar` bayrağını dolduruyor ve ekran aramayı daraltmayı
+söylüyor.
+
+### Elle doğrulamada bulunan iki hata
+
+**1. `sonRandevu` `Date` değil metin dönüyordu.** Ham `sql` ifadesi
+(`max(baslangic)`) kolon tipini kaybediyor, yani Drizzle'ın timestamptz
+çözücüsü hiç devreye girmiyor — tip `Date` diyordu, değer `string`di ve
+`getTime()` "is not a function" ile patlıyordu. `.mapWith(randevu.baslangic)`
+kolonun çözücüsünü ödünç alıyor. **Testte yakalandı, tarayıcıda değil** —
+`sql<T>` bir söz, kanıt değil.
+
+**2. Ekrandan kopyalanan telefon numarası bulunamıyordu.** `telefonDogrula`
+numarayı baştaki `0`/`90` olmadan saklıyor (10 hane) ama panel onları
+**ekleyerek** gösteriyor (`telefonBicimle` → "0555 123 45 67"). Yani işletmenin
+listede gördüğü numarayı arama kutusuna yapıştırması hiçbir zaman sonuç
+vermiyordu. Arama terimindeki baştaki `0` ve `90` artık kırpılıyor.
+**Bu hata yalnızca elle doğrulamada çıktı** — testler kendi yazdıkları ham
+numarayı arıyordu, yani ekranın gösterdiği biçimi hiç sormamışlardı.
+
+### Bilerek kapsam dışı
+
+- **Randevu düzenleme (saat/personel değiştirme).** Bugün bir randevunun
+  yalnızca durumu değişebiliyor. Ayrı iş ve `docs/plan.md`'de artık açıkça
+  "kalan eksik" olarak yazılı.
+- **Müşteri silme.** `randevu.musteriId` `ON DELETE RESTRICT`, yani geçmiş
+  randevusu olan müşteri zaten silinemiyor. Anlamlı olan tek şey "arşivle"
+  olurdu ve onu isteyen kimse yok.
+- **Geçmişten randevu detayına gitme.** Geçmiş satırı bugün bir link değil;
+  randevunun detayı takvimde duruyor ve iki ekranı birbirine bağlamak, hangi
+  güne dönüleceği sorusunu açardı.
+- **Müşteri birleştirme.** İki farklı numarayla açılmış iki kaydın aynı kişi
+  olduğunu yalnızca işletme bilebilir; birleştirme randevuları taşımak demek
+  ve kendi başına bir faz.
+- **Notun randevu ekranında görünmesi.** `musteri.not` işletmenin iç kaydı;
+  bugün yalnızca müşteri detayında görünüyor. Takvimde de göstermek istenirse
+  ayrı bir karar (ekran omuz üstünden okunuyor).
+- **Sayfalama ve sıralama seçenekleri.** Gerekçesi yukarıda.
+
+### Elle doğrulandı — 7 Eylül 2026, `npm run dev` + gerçek oturum
+
+Veri: `isil-guzellik-salonu`, üç müşteri.
+
+- [x] **Liste.** Randevu sayıları ve son randevu tarihleri doğru; son
+      randevusu en yeni olan üstte, hiç randevusu olmayan en sonda.
+- [x] **Ad ile arama.** "yılmaz" → tek satır.
+- [x] **Telefon ile arama.** "0555 123" → önce **BULAMADI** (yukarıdaki 2.
+      hata), düzeltildikten sonra tek satır. "+90 555 123" de çalışıyor.
+- [x] **Detay ve geçmiş.** İki randevu, en yeni üstte, "Panelden eklendi"
+      işareti ve durum rozetleri yerinde.
+- [x] **Düzenleme.** Ad, e-posta ve not kaydedildi; **telefon alanı formda
+      yok**. Değişen ad takvimde de göründü.
+- [x] **Kısıt zinciri uçtan uca.** Takvimde randevu → "Gelmedi" → listede
+      **Kısıtlı** rozeti → detayda kart (*"7 Ekim 2026 tarihine kadar"*, ayar
+      30 gün) → "Kısıtı kaldır" → kart kayboldu.
+- [x] **Affetme geçmişi bozmuyor.** Kısıt kalktıktan sonra randevu hâlâ
+      **Gelmedi** durumunda duruyor.
+- [x] **Olmayan müşteri id'si → 404.**
+- [x] **Açık ve koyu tema.** İkisinde de kontrast ve vurgu yerinde.
+- [ ] **Mobil genişlik YİNE ÖLÇÜLEMEDİ.** `resize_window` "başarılı" dönüyor
+      ama viewport değişmiyor (ekran görüntüsü 1568 px'te kalıyor ve masaüstü
+      kenar çubuğu duruyor). **İkinci fazdır ölçülemiyor**; düzen yine yalnızca
+      `sm:` kırılma noktalarının okunmasıyla varsayıldı. Telefonda bir kez
+      açılmalı — artık iki ekran birikti (`/panel/randevu/yeni` ve
+      `/panel/musteriler`).
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1792,26 KiB** (bütçe 3 MiB).
+H2a sonundaki 1769,53 KiB'den **+22,73 KiB**. İki ekran ve bir istemci
+bileşeni için küçük — listenin sunucuda kalması işe yaradı (H2a tek ekran için
++135 KiB getirmişti).
