@@ -16,8 +16,10 @@ Aynı zamanda işletme için bir randevu yazılımıdır: hizmetler, personel, �
 saatleri, takvim. **Pazaryeri hiç olmasa bile tek başına değerlidir** — bu
 cümle bir slogan değil, ürünün kurucu kısıtı (bkz. İlke 2).
 
-> Bu cümle bugün **tam** değil ve öyle yazılmıyor: elle randevu ekleme ve müşteri
-> geçmişi henüz yok (Faz H2). Telefonla gelen randevuyu salon panele giremiyor.
+> Faz H2 bu cümlenin iki eksiğini kapattı: telefonla gelen randevu panele
+> giriliyor (H2a) ve müşteri listesi, geçmişi, kayıt düzenlemesi var (H2b).
+> Kalan eksik **randevu düzenleme**: bugün bir randevunun yalnızca durumu
+> değişebiliyor, saati ya da personeli değişemiyor.
 
 Dağıtım Cloudflare Workers üzerinde, `randevu.enesmemduhoglu.tech` adresinde.
 
@@ -323,15 +325,9 @@ karar kaydı `TODOS.md`'de.
 | **J** — müşteri hesabı | `/uye-ol`, gerçek `/randevularim`, `getMusteriDb` (DEĞİŞMEZ 1'in ikinci ekseni), sahipliğe bağlı iptal, bağlantıyla ekleme |
 | **P** — tur sonrası düzeltmeler | Geliştirici ekranları üretimde kapandı, hatırlatma vaadi düzeltildi, arama kategori + hizmet adına da bakıyor, kaybolan filtre, misafir→üye köprüsü, `/giris`'te iki çıkış, eksik sayfa başlıkları, `/gizlilik` |
 | **H2a** — elle randevu | `/panel/randevu/yeni`, `POST /api/randevular`, müsaitlik motoru iki kapıya bağlandı (`MusaitlikKapisi`), serbest saat istisnası, `kaynak: ISLETME` |
+| **H2b** — müşteri listesi | `/panel/musteriler` + detay, müşteri geçmişi, kayıt düzenleme (`PATCH /api/musteriler/[id]`), L3 kısıtının tek müşteri için kaldırılması |
 
 ### Sıradakiler
-
-**Faz H2 — müşteri listesi ve geçmişi** *(ikinci yarı)*
-Fazın ilk yarısı — **elle randevu ekleme** — kapandı: müsaitlik motoru iki kapıya
-birden bağlandı, panel serbest saat de yazabiliyor, kaynak `ISLETME` ayrımı artık
-gerçek (`TODOS.md > Faz H2`). Kalanı: `/panel/musteriler`, müşteri geçmişi, müşteri
-kaydını düzenleme (bugün elle randevu mevcut müşterinin adını **bilerek**
-güncellemiyor) ve L3'ün "gelmedi" kısıtını panelden görme/kaldırma ekranı.
 
 **Faz P2 — sağlamlaştırma (kalanlar)**
 Faz P teknik borcun iki maddesini kapattı (vitrin üretimde kapalı, `/saglik` arama
