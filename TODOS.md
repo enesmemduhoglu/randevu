@@ -3679,8 +3679,21 @@ geri alındı.
 
 ### Elle yapılması gerekenler
 
-- [ ] **Cloudflare panelinde Workers Builds bağlantısı sökülmeli** (Workers →
-      randevu → Settings → Builds). `TODOS.md > Faz H2`'de zaten önerilmişti;
-      bu faz **aciliyetini artırıyor**: o hat dal başına koşuyor ve bugün onu
-      üretime yayınlamaktan alıkoyan tek şey eksik env değişkeniydi. Bu faz o
-      kazayı ortadan kaldırdı.
+- [x] **Cloudflare panelinde Workers Builds bağlantısı söküldü** (Workers →
+      randevu → Settings → Builds), 7 Eylül 2026. `TODOS.md > Faz H2`'de zaten
+      önerilmişti; bu faz **aciliyetini artırmıştı**: o hat dal başına koşuyor
+      ve üretime yayınlamaktan alıkoyan tek şey eksik env değişkeniydi — bu faz
+      o kazayı ortadan kaldırdı, yani söküm koddan önce gelmek zorundaydı.
+
+      **Nasıl doğrulandı (ampirik, çünkü CLI'dan okunamıyor):** `wrangler` bu
+      yapılandırmayı göstermiyor ve GitHub App kurulum listesi kullanıcı
+      token'ına kapalı. Bu dalın push'undan sonra Cloudflare'de **ne yeni
+      sürüm ne yeni yayın** belirdi (son ikisi de 7 Eylül 12:41Z, PR #34
+      merge'ünden), commit'te Cloudflare'e ait **check run yok**.
+
+      **Yanıltıcı görünen şey:** commit'te `cloudflare-workers-and-pages`
+      adında `queued` bir check *suite* duruyor. Bu bir build DEĞİL — GitHub,
+      kurulu her App için boş bir suite açıyor; aynı listede `render`, `vercel`
+      ve `claude` de var. GitHub App hesap genelinde kurulu kalmaya devam
+      ediyor (başka projelere hizmet ediyor olabilir); sökülen şey o App değil,
+      bu Worker'a bakan **Builds bağlantısı**.
