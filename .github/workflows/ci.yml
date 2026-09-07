@@ -93,24 +93,22 @@ jobs:
       #
       # Bu ciktinin kendisi ATILIYOR. Yayin isi kendi build'ini kosuyor, cunku
       # NEXT_PUBLIC_* degiskenleri derleme aninda gomuluyor.
+      #
+      # BURAYA SUPABASE DEGISKENI KONULMAZ - ne sahte ne gercek. Bu adimin isi
+      # tam olarak "build sirlara bagimli degil" onermesini KANITLAMAK.
+      #
+      # Tarihce: bu blok bir zamanlar iki sahte deger tasiyordu, cunku
+      # `supabaseSunucu()` env'i `cookies()`ten ONCE okuyordu ve /giris'in
+      # prerender denemesi degiskenler yokken build'i tumden dusuruyordu. Faz
+      # P2'de kok neden duzeltildi (`connection()` ilk satirda), sahte degerler
+      # de o gun kalkti.
+      #
+      # NEDEN GERI KONULMAMALI: bu regresyon YERELDE GORUNMUYOR. `next build`
+      # .env'i kendiliginden yukluyor ve .env gitignore'da; yani .env'i olan bir
+      # gelistirici hatayi hicbir zaman goremez. Depodaki tek sirsiz ortam bu
+      # adim - buraya bir deger konuldugu an koruma kalmiyor.
       - name: worker paketi
         run: npm run cf:kur
-        env:
-          # Degerler SAHTE ve oyle kalmali. Gerekcesi: /giris sayfasi build
-          # aninda prerender ediliyor ve supabaseSunucu() cagiriyor; degiskenler
-          # yoksa ayarlar() firlatiyor ve build dusuyor (hattin ilk kosumunda
-          # olculdu, varsayilmadi).
-          #
-          # Sahte deger guvenli, cunku hicbir ag cagrisi yapilmiyor: oturum
-          # cookie'si olmadan getClaims() token bulamayip hemen donuyor, ustelik
-          # `cookies()` cagrisi sayfayi zaten dinamige dusuruyor. Istemci
-          # yalnizca KURULUYOR, kullanilmiyor.
-          #
-          # Bedeli bilinsin: bu adim "degiskenler dogru mu" sorusunu YANITLAMAZ,
-          # yalnizca "kod derleniyor ve paketleniyor mu" sorusunu yanitlar.
-          # Gercek degerlerin varligini yayin isi kendi adiminda kontrol ediyor.
-          NEXT_PUBLIC_SUPABASE_URL: https://ci-sahte.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-sahte-anon-anahtari
 
   yayinla:
     name: Cloudflare Workers yayini
