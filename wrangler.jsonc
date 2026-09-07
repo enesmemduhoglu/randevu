@@ -65,6 +65,16 @@
       "name": "MUSAITLIK_SINIRI",
       "namespace_id": "1002",
       "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      // Sifre sifirlama TALEBI. Supabase'in kendi hiz siniri zaten var ama bu
+      // kova o cagriya hic ulasmadan yavaslatiyor - ayni adrese defalarca
+      // sifirlama maili istemek Resend/Supabase gonderim kotasini bosa
+      // harcardi. Mesru kullanici bir saat icinde bir kez ister; 3/dk cok
+      // fazlasiyla gevsek, yalnizca betigi yakaliyor.
+      "name": "SIFRE_SINIRI",
+      "namespace_id": "1003",
+      "simple": { "limit": 3, "period": 60 }
     }
   ],
   // Wrangler'in kendi esbuild adimi varsayilan olarak keep_names: true

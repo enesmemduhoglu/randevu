@@ -30,7 +30,7 @@
 /// Binding adlari wrangler.jsonc'deki `ratelimits[].name` ile birebir ayni
 /// olmak zorunda. Union tipi olmasi, cagiranin var olmayan bir sinirlayici
 /// adi yazmasini derleme aninda durduruyor.
-export type SinirAdi = "RANDEVU_SINIRI" | "MUSAITLIK_SINIRI";
+export type SinirAdi = "RANDEVU_SINIRI" | "MUSAITLIK_SINIRI" | "SIFRE_SINIRI";
 
 type Sinirlayici = { limit(secenekler: { key: string }): Promise<{ success: boolean }> };
 

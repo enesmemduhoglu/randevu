@@ -106,7 +106,7 @@ describe("Faz L - kalkanin uretimde acik oldugu", () => {
       "utf-8",
     );
 
-    for (const ad of ["RANDEVU_SINIRI", "MUSAITLIK_SINIRI"]) {
+    for (const ad of ["RANDEVU_SINIRI", "MUSAITLIK_SINIRI", "SIFRE_SINIRI"]) {
       expect(wrangler).toContain(`"name": "${ad}"`);
       // Iki dosya AYRISMASIN: wrangler'daki binding adiyla koddaki union
       // uyesi ayni olmak zorunda, yoksa `env[ad]` undefined doner ve sinir
