@@ -3697,3 +3697,97 @@ geri alındı.
       ve `claude` de var. GitHub App hesap genelinde kurulu kalmaya devam
       ediyor (başka projelere hizmet ediyor olabilir); sökülen şey o App değil,
       bu Worker'a bakan **Builds bağlantısı**.
+
+---
+
+## Faz P2 — `/saglik` şema kontrolü (PR #36)
+
+**Kapandı:** `/saglik` artık "Postgres ayakta" demiyor, "şema uygulamanın
+beklediğiyle uyumlu" diyor. Faz L3'ün gösterdiği boşluğu kapatıyor: 200 dönmesi
+şema kanıtı değildi, `hizmet` tablosuna `hizmet_id` FK'sinden farklı bir kolon
+eklenip drift yaşanabiliyordu.
+
+### Dört kontrol, tek gidiş-dönüş
+
+- **Kolon kümesi** — `src/db/sema.ts`'ten `getTableConfig`/`PgTable` ile
+  RUNTIME'da türetiliyor, elle yazılmış bir tablo/kolon listesi YOK. Yeni bir
+  kolon eklendiğinde kimsenin ikinci bir yeri güncellemesi gerekmiyor.
+- **Göç sayısı ve son göç zamanı** — `drizzle.__drizzle_migrations`, **DEĞİL**
+  Supabase CLI'ın `supabase_migrations` tablosu (TODOS.md > Faz L3'te bu ayrım
+  zaten yazılıydı, burada tekrar doğrulandı: test DB'de yalnızca `drizzle`
+  şeması var). Beklenen sayı `drizzle/meta/_journal.json`'dan **derleme
+  anında** gömülüyor (`resolveJsonModule`); `drizzle-kit generate` her
+  koştuğunda kendiliğinden senkron kalıyor.
+- **Çakışma kısıtı** (DEĞİŞMEZ 8) — `randevu_cakisma_yok`, `contype = 'x'`
+  şartıyla. Bu şart olmadan aynı adla bir CHECK kısıtı de "kısıt var" diye
+  geçerdi; test bunu ayrıca kilitliyor.
+
+**Yön önemli, ters çevrilirse yanlış:** eksik kolon = **bozuk**, fazla kolon =
+**sağlıklı**. İkincisi doğru göç sırasının (`docs/yayin.md`: önce göç, sonra
+deploy) normal ara durumu — hata sayılsaydı doğru davranış cezalandırılırdı.
+
+### Halka açık gövde daraltılmış
+
+`/saglik` ve yeni `/api/saglik` (makine yolu, 200/503) **aynı süzgeçten**
+geçiyor: `kamuyaAcilanYoklama()`. Kamuya yalnızca `durum`, `surum`, `sureMs`,
+`goc` gidiyor. **Eksik kolon adları ve kısıt durumu GİTMİYOR** — DEĞİŞMEZ 8'in
+kendi ifadesiyle "uygulama katmanı garanti değil"; "kısıt yok" cümlesi
+saldırgana tam olarak neyin savunmasız olduğunu söylerdi. Sebep yalnızca
+`uretimMi()` false iken (yerel, `wrangler dev`, CI, vitest) sayfada gösteriliyor
+— geliştirme teşhisi zayıflamıyor.
+
+**"Tablo adları zaten sır değil" argümanı burada geçerli değildi, bilerek
+kullanılmadı:** depo public, `drizzle/*.sql` GitHub'da tam metin duruyor. Ama
+gerçek risk isim değil **drift bilgisi** — "kısıt düştü" cümlesi TOCTOU
+penceresinin açık olduğunu doğrudan söyler.
+
+### `/api/saglik` neden ayrı, `/saglik` sayfası neden yetmiyordu
+
+HTML sayfa durum kodu taşımıyor; deploy sonrası bir `curl -f` bunu tek satırda
+okuyamaz. Yeni route GET (mutasyon yok, DEĞİŞMEZ 2 kapsamı dışında),
+`Cache-Control: no-store`, `robots.ts`'in `/api/` kuralı zaten kapsıyor.
+
+### Test dosyası DEĞİŞMEZ 1'e nasıl uyuyor
+
+`src/app/api/saglik/saglik.test.ts` `@/lib/db`'yi **import edemiyor** —
+`iptal.test.ts` ve `randevu.test.ts`'teki emsalin aynısı: havuz kapatılmıyor
+(`baglantiyiKapat` `@/lib/db`'de), `globalThis` üzerinde yaşıyor,
+`fileParallelism: false` olduğu için `src/lib` altındaki testler kendi
+`afterAll`'larında kapatması yetiyor. "Bozuk → 503" dalı bu dosyada DB'yi elle
+bozamadığı için **metin** olarak doğrulanıyor (`route.ts`'teki ternary'nin
+varlığı); davranışsal kanıt `src/lib/saglik.test.ts`'te.
+
+### Bilerek kapsam dışı
+
+- **Deploy sonrası duman testi ve zamanlanmış nabız.** `/api/saglik` artık var,
+  ikisi de ona bağlanabilir — ayrı PR, çünkü bu PR merge olup canlıda
+  görünmeden `ci.yml`'e bir duman adımı eklemek ilk günü kırmızıya düşürür
+  (endpoint canlıda yok).
+- **Uyarı/hata takibi** (tek hata kapısı + `onRequestError`) — Faz P2'nin
+  ayrı maddesi, bu PR'ın konusu değil.
+- **`bildirim_kuyrugu` başarısız mail sayacı.** Gerçek bir boşluk
+  (`/panel/gelistirici/bildirimler` üretimde 404) ama bu bir *iş* sinyali,
+  *sağlık* sinyali değil.
+- **Göç `hash` doğrulaması** (`drizzle.__drizzle_migrations.hash` ile
+  `.sql` dosyalarının karşılaştırılması). Drizzle'ın kendi karşılaştırması
+  yalnızca `created_at` sırasına bakıyor, yani uygulanmış bir göç dosyası
+  sonradan düzenlense kimse görmez — gerçek risk ama `.sql` metinlerini pakete
+  gömmek ya da codegen adımı gerektiriyor, ayrı iş.
+- **Deploy öncesi şema kapısı** (`_journal.json` ↔ prod karşılaştırıp deploy'u
+  durduran adım). Bu PR'ın **sonrası**: `SUPABASE_DB_URL`'i yayın işine sokmak
+  demek ve o sır bugün bilerek yalnızca `goc` işinde.
+
+### Elle doğrulandı — 7 Eylül 2026
+
+- [x] `npm run dev`, kısıt yerindeyken `/saglik` → "saglikli", `/api/saglik` →
+      200
+- [x] Dev DB'de `randevu_cakisma_yok` elle düşürüldü → `/api/saglik` **503**,
+      `/saglik` sayfasında "bozuk" + eksik kolon/kısıt teşhisi (yalnızca
+      geliştirmede), kısıt geri eklendi ve `/api/saglik` **200**'e döndü
+- [x] `npm test` — 716 test geçti (main'e göre +14)
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1859,17 KiB** (bütçe 3 MiB).
+P2a sonundaki 1792,40 KiB'den **+66,77 KiB** — `getTableConfig`/`PgTable`
+içe aktarımı ve gömülü `_journal.json`.

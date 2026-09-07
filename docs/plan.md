@@ -327,6 +327,7 @@ karar kaydı `TODOS.md`'de.
 | **H2a** — elle randevu | `/panel/randevu/yeni`, `POST /api/randevular`, müsaitlik motoru iki kapıya bağlandı (`MusaitlikKapisi`), serbest saat istisnası, `kaynak: ISLETME` |
 | **H2b** — müşteri listesi | `/panel/musteriler` + detay, müşteri geçmişi, kayıt düzenleme (`PATCH /api/musteriler/[id]`), L3 kısıtının tek müşteri için kaldırılması |
 | **P2a** — sırsız build | `supabaseSunucu()` env'i `cookies()`ten sonra okuyor, CI'ın `cf:kur` adımından sahte değerler kalktı, iki statik kapı |
+| **P2b** — `/saglik` şema kontrolü | Kolon kümesi `sema.ts`'ten türetiliyor, göç sayısı ve `EXCLUDE` kısıtının varlığı; `/api/saglik` makine yolu (200/503), halka açık gövde daraltılmış |
 
 ### Sıradakiler
 
@@ -342,8 +343,9 @@ motorundan çekildi). P2'nin ilk PR'ı sırların yokluğunda build'i ayağa kal
    `?code=` üzerine değil: mail telefonda uygulama içi tarayıcıda açılıyor ve
    `code_verifier` cookie'si orada yok.
 2. **`/saglik`'in şemayı gerçekten kontrol etmesi** — kolon kümesini `sema.ts`'ten
-   türetip DB ile karşılaştırmak, göç sayısı ve `EXCLUDE` kısıtının varlığı. Yanında
-   deploy sonrası duman testi (bugün yok) ve zamanlanmış nabız.
+   türetip DB ile karşılaştırmak, göç sayısı ve `EXCLUDE` kısıtının varlığı. **Kapandı**
+   (PR #36). Kalan: deploy sonrası duman testi ve zamanlanmış nabız — `/api/saglik`
+   endpoint'i şimdi var, bu ikisi ona bağlanabilir.
 3. **Uyarı/hata takibi** — tek hata kapısı + `onRequestError`. Üçüncü parti değil:
    depo public olduğu için zamanlanmış GitHub Actions ücretsiz ve başarısız koşum
    zaten bildirim gönderiyor.
