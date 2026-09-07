@@ -5,6 +5,7 @@ import {
   CalendarDaysIcon,
   CalendarPlusIcon,
   ClockIcon,
+  ContactIcon,
   MailIcon,
   PaletteIcon,
   ScissorsIcon,
@@ -61,6 +62,10 @@ const BOLUMLER: Bolum[] = [
       { ad: "Randevu ekle", ikon: CalendarPlusIcon, yol: "/panel/randevu/yeni" },
       { ad: "Hizmetler", ikon: ScissorsIcon, yol: "/panel/hizmetler" },
       { ad: "Personel", ikon: UsersIcon, yol: "/panel/personel" },
+      // "Personel" ile ayni ikon ailesinden AYRI bir sekil (ContactIcon):
+      // menude ust uste duran iki oge ayni ikonla cizilseydi goz onlari
+      // okumadan ayirt edemezdi.
+      { ad: "Müşteriler", ikon: ContactIcon, yol: "/panel/musteriler" },
       { ad: "Çalışma saatleri", ikon: ClockIcon, yol: "/panel/calisma-saatleri" },
       { ad: "Ayarlar", ikon: SettingsIcon, yol: "/panel/ayarlar" },
     ],
