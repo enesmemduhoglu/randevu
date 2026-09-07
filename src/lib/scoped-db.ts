@@ -1303,7 +1303,16 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
       // yani "0532 111" diye aratan kullanicinin bosluklari eslesmeyi
       // bozardi. Rakamlar suzuluyor; hic rakam yoksa telefon kosulu sorguya
       // HIC eklenmiyor - bos bir desen butun numaralari eslerdi.
-      const rakamlar = arama.replace(/\D/g, "");
+      //
+      // BASTAKI 0 VE 90 DA ATILIYOR, cunku `telefonDogrula` numarayi onlarsiz
+      // sakliyor (10 hane) ama panel onlari EKLEYEREK gosteriyor
+      // (`telefonBicimle` -> "0555 123 45 67"). Kirpilmasaydi isletmenin
+      // ekrandan kopyalayip aradigi numara hicbir zaman bulunamazdi - bu tam
+      // olarak elle dogrulamada yakalandi. Once 0, sonra 90: "0905551234567"
+      // gibi ikisini birden tasiyan bir yazim da cozuluyor.
+      let rakamlar = arama.replace(/\D/g, "");
+      if (rakamlar.startsWith("0")) rakamlar = rakamlar.slice(1);
+      if (rakamlar.startsWith("90")) rakamlar = rakamlar.slice(2);
 
       const suzgec = arama
         ? or(

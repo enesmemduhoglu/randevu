@@ -197,6 +197,27 @@ describe("musterileriListele", () => {
     expect(satirlar.map((m) => m.ad)).toEqual(["Mehmet Kaya"]);
   });
 
+  // BU TESTIN SEBEBI GERCEK BIR HATA: panel numarayi bastaki 0 ile
+  // gosteriyor (`telefonBicimle`), veritabani ise 0'siz sakliyor. Kirpma
+  // olmadan, isletmenin EKRANDAN KOPYALADIGI numara hicbir zaman bulunamiyor.
+  test("bastaki 0 ve 90 arama teriminden atiliyor", async () => {
+    const db = await getScopedDb(a.oturum);
+    await musteriKur(a, { ad: "Ayşe Yılmaz", telefon: "5551234567" });
+
+    // Panelde gorunen bicim.
+    expect(
+      (await db.musterileriListele({ arama: "0555 123 45 67" })).satirlar,
+    ).toHaveLength(1);
+    // Ulke kodlu yazim.
+    expect(
+      (await db.musterileriListele({ arama: "+90 555 123" })).satirlar,
+    ).toHaveLength(1);
+    // Ham hali de calismaya devam ediyor.
+    expect(
+      (await db.musterileriListele({ arama: "5551234" })).satirlar,
+    ).toHaveLength(1);
+  });
+
   test("tek bir % butun musterileri getirmiyor", async () => {
     const db = await getScopedDb(a.oturum);
     await musteriKur(a, { ad: "Ayşe Yılmaz", telefon: "5321112233" });
