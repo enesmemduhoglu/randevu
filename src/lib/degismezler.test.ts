@@ -517,3 +517,51 @@ describe("Faz P2 - build sirlara bagimli degil", () => {
     expect(adim).not.toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   });
 });
+
+describe("Faz P2 - /saglik gercek zemine bakiyor", () => {
+  // NEDEN BIR TEST GEREKIYOR: "200 donuyor" sema kaniti degil (TODOS.md > Faz
+  // L3). Bu kapi, yoklamanin GERCEKTEN sema/goc/kisit kontrolu yaptigini ve
+  // halka acik govdenin drift bilgisi sizdirmadigini zorluyor.
+  function kod(yol: string): string {
+    return readFileSync(yol, "utf-8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+  }
+
+  test("saglik.ts sema.ts'ten kolon turetiyor, elle liste yazmiyor", () => {
+    const metin = kod(join(process.cwd(), "src", "lib", "saglik.ts"));
+    expect(metin).toContain("getTableConfig");
+    expect(metin).toContain("_journal.json");
+    // Elle yazilmis bir tablo adi listesi varsa (TODOS.md > Faz P2 "D: GURULTU
+    // - yazma" karari) bu kapi degil, ayri bir gerceklik kaynagi olusur.
+    expect(metin).not.toMatch(/const\s+BEKLENEN_TABLOLAR/);
+  });
+
+  test("kamuyaAcilanYoklama disinda kamu govdesine drift alani girmiyor", () => {
+    const metin = kod(join(process.cwd(), "src", "lib", "saglik.ts"));
+    const bas = metin.indexOf("export function kamuyaAcilanYoklama");
+    expect(bas).toBeGreaterThan(-1);
+    const govde = metin.slice(bas);
+
+    // DEGISMEZ 5/8: "kisit yok" ya da "eksik kolon X" cumlesi saldirgana
+    // uygulama katmaninin tek koruma oldugunu soyler. Kamu govdesi yalnizca
+    // dort alan tasir.
+    expect(govde).not.toContain("eksikKolonlar");
+    expect(govde).not.toContain("cakismaKisitiVar");
+  });
+
+  test("/api/saglik yalnizca kamuyaAcilanYoklama'dan gecen govdeyi doner", () => {
+    const metin = kod(
+      join(process.cwd(), "src", "app", "api", "saglik", "route.ts"),
+    );
+    expect(metin).toContain("kamuyaAcilanYoklama(");
+  });
+
+  test("/saglik robots.txt'te disallow", () => {
+    const robots = readFileSync(
+      join(process.cwd(), "src", "app", "robots.ts"),
+      "utf-8",
+    );
+    expect(robots).toContain('"/saglik"');
+  });
+});
