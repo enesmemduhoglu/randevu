@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -75,7 +76,19 @@ export function GirisFormu({ devam }: { devam?: string }) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="sifre">Şifre</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="sifre">Şifre</Label>
+          {/* KimlikKabugu'nun `alt` dizisine DEGIL: /giris orada zaten iki
+              cikis tasiyor (musteri/isletme ayrimi, Faz P) ve ucuncusu o
+              catali bulaniklastirirdi. Kullanici bu baglantiyi sifre
+              kutusunun yaninda ariyor. */}
+          <Link
+            href="/sifremi-unuttum"
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Şifremi unuttum
+          </Link>
+        </div>
         <Input
           id="sifre"
           name="sifre"

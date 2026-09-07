@@ -74,6 +74,47 @@ export function kayitHatasi(hata: unknown): HataYaniti {
   };
 }
 
+const BAGLANTI_GECERSIZ: HataYaniti = {
+  hata: "Bağlantı geçersiz ya da süresi dolmuş. Yeni bir sıfırlama bağlantısı isteyin.",
+  durum: 400,
+};
+
+/// verifyOtp / updateUser hatasi -> yanit. `/api/sifre/yenile` icin.
+///
+/// otp_expired, flow_state_expired, flow_state_not_found UCU DE ayni cumleye
+/// dusuyor: kullanidiya token'in HANGI acidan gecersiz oldugunu ayirmak
+/// (kullanilmis mi, suresi mi dolmus, hic var olmamis mi) token uzayi
+/// hakkinda bilgi verir - kullaniciya faydasi yok, saldirgana faydasi var.
+export function sifreYenilemeHatasi(hata: unknown): HataYaniti {
+  const kod = hataKodu(hata);
+
+  if (
+    kod === "otp_expired" ||
+    kod === "flow_state_expired" ||
+    kod === "flow_state_not_found"
+  ) {
+    return BAGLANTI_GECERSIZ;
+  }
+
+  if (kod === "same_password") {
+    return {
+      hata: "Yeni şifre eskisiyle aynı olamaz.",
+      durum: 400,
+    };
+  }
+
+  if (kod === "weak_password") {
+    return {
+      hata: "Şifre çok kolay tahmin ediliyor. Daha uzun bir şifre seçin.",
+      durum: 400,
+    };
+  }
+
+  if (hizSiniriMi(hata)) return COK_DENEME;
+
+  return GENEL;
+}
+
 /// Supabase "bu e-posta zaten kayitli" diyor mu?
 ///
 /// Iki yol var: `code` alani (yeni SDK surumleri) ve mesaj metni (eskiler).

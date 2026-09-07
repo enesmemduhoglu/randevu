@@ -328,6 +328,7 @@ karar kaydı `TODOS.md`'de.
 | **H2b** — müşteri listesi | `/panel/musteriler` + detay, müşteri geçmişi, kayıt düzenleme (`PATCH /api/musteriler/[id]`), L3 kısıtının tek müşteri için kaldırılması |
 | **P2a** — sırsız build | `supabaseSunucu()` env'i `cookies()`ten sonra okuyor, CI'ın `cf:kur` adımından sahte değerler kalktı, iki statik kapı |
 | **P2b** — `/saglik` şema kontrolü | Kolon kümesi `sema.ts`'ten türetiliyor, göç sayısı ve `EXCLUDE` kısıtının varlığı; `/api/saglik` makine yolu (200/503), halka açık gövde daraltılmış |
+| **P2c** — şifre sıfırlama | `token_hash` + `verifyOtp`, `/sifremi-unuttum` + `/sifre-yenile`, `girisYonu` `/api/giris` ile ortak, kullanıcı numaralandırması yok. Mail şablonu elle iş olarak açık |
 
 ### Sıradakiler
 
@@ -336,12 +337,10 @@ Faz P teknik borcun iki maddesini kapattı (vitrin üretimde kapalı, `/saglik` 
 motorundan çekildi). P2'nin ilk PR'ı sırların yokluğunda build'i ayağa kaldırdı
 (PR #35). Kalanlar, öncelik sırasıyla:
 
-1. **Şifre sıfırlama** — bugün hiç yok ve `kullanici_auth_user_id` tekil olduğu için
-   şifresini unutan kullanıcı kalıcı olarak kilitleniyor, aynı e-postayla yeniden
-   kayıt da olamıyor. **Supabase custom SMTP kurulmadan merge edilemez** (yerleşik
-   mailer saatte 2 mail). Akış `token_hash` + `verifyOtp` üzerine kurulacak, PKCE
-   `?code=` üzerine değil: mail telefonda uygulama içi tarayıcıda açılıyor ve
-   `code_verifier` cookie'si orada yok.
+1. **Şifre sıfırlama.** **Kapandı** (PR #37): `token_hash` + `verifyOtp`, `girisYonu`
+   `/api/giris` ile ortak. **Mail şablonu henüz değiştirilmedi** — bu depo dışında
+   yaşayan bir ayar, `TODOS.md > Faz P2` içinde elle iş olarak duruyor; değişmeden
+   akış uçtan uca çalışmıyor.
 2. **`/saglik`'in şemayı gerçekten kontrol etmesi** — kolon kümesini `sema.ts`'ten
    türetip DB ile karşılaştırmak, göç sayısı ve `EXCLUDE` kısıtının varlığı. **Kapandı**
    (PR #36). Kalan: deploy sonrası duman testi ve zamanlanmış nabız — `/api/saglik`

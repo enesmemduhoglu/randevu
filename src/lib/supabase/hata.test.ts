@@ -4,6 +4,7 @@ import {
   hataKodu,
   hizSiniriMi,
   kayitHatasi,
+  sifreYenilemeHatasi,
   zatenKayitliMi,
 } from "@/lib/supabase/hata";
 
@@ -90,5 +91,50 @@ describe("zatenKayitliMi", () => {
   test("baska hata degil", () => {
     expect(zatenKayitliMi({ code: "weak_password" })).toBe(false);
     expect(zatenKayitliMi({ message: "invalid credentials" })).toBe(false);
+  });
+});
+
+describe("sifreYenilemeHatasi", () => {
+  test("otp_expired, flow_state_expired, flow_state_not_found AYNI cumleye dusuyor", () => {
+    // Kullaniciya token'in HANGI acidan gecersiz oldugunu (kullanilmis mi,
+    // suresi mi dolmus, hic var olmamis mi) ayirmak token uzayi hakkinda
+    // bilgi verir - saldirgana faydasi var, kullaniciya yok.
+    const beklenen = sifreYenilemeHatasi({ code: "otp_expired" });
+    expect(beklenen.durum).toBe(400);
+    expect(beklenen.hata).toContain("geçersiz ya da süresi dolmuş");
+
+    for (const kod of ["flow_state_expired", "flow_state_not_found"]) {
+      const cevap = sifreYenilemeHatasi({ code: kod });
+      expect(cevap).toEqual(beklenen);
+    }
+  });
+
+  test("same_password kendi cumlesini kullaniyor", () => {
+    const cevap = sifreYenilemeHatasi({ code: "same_password" });
+    expect(cevap.durum).toBe(400);
+    expect(cevap.hata).toContain("aynı olamaz");
+  });
+
+  test("weak_password 400", () => {
+    expect(sifreYenilemeHatasi({ code: "weak_password" }).durum).toBe(400);
+  });
+
+  test("hiz siniri 429", () => {
+    expect(
+      sifreYenilemeHatasi({ code: "over_request_rate_limit" }).durum,
+    ).toBe(429);
+  });
+
+  test("tanimadigimiz kod genel mesaja dusuyor", () => {
+    expect(sifreYenilemeHatasi({ code: "hic_bilinmeyen_kod" }).durum).toBe(502);
+  });
+
+  test("saglayicinin metni hicbir cevaba sizmiyor", () => {
+    const gizli = "smtp relay host 10.0.0.4 rejected sender";
+    for (const kod of ["otp_expired", "same_password", "weak_password", "bilinmeyen"]) {
+      const cevap = sifreYenilemeHatasi({ code: kod, message: gizli });
+      expect(cevap.hata).not.toContain(gizli);
+      expect(cevap.hata).not.toContain("10.0.0.4");
+    }
   });
 });
