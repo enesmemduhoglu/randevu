@@ -19,8 +19,25 @@ function ayarlar() {
 
 /// Sunucu bilesenleri ve route handler'lar icin istemci.
 export async function supabaseSunucu() {
-  const { url, anon } = ayarlar();
+  // PRERENDER'I ILK SATIRDA KES - SIRA BURADA SOZLESMENIN KENDISI.
+  //
+  // `cookies()` bir istek-ani API'si ve Next dinamik sayfayi ancak boyle bir
+  // cagriya GERCEKTEN ulasinca dinamige dusuruyor. Onceki sira `ayarlar()`
+  // once, `cookies()` sonraydi; sirlar yokken build `cookies()`e hic varamadan
+  // `ayarlar()` uzerinden dusuyordu - `/giris`, `/kayit`, `/uye-ol`,
+  // `/kayit/tamamla` ve UstBar tasiyan her sayfa. Olculdu (Faz P2),
+  // varsayilmadi.
+  //
+  // NEDEN `connection()` DEGIL: o cagri anlami acikca yaziyor ama `next/server`
+  // import'u bu modul uzerinden worker paketine +45 KiB gzip ekliyordu
+  // (1792 -> 1838, olculdu). Butce 3 MiB ve her fazda izleniyor; ayni kesmeyi
+  // zaten burada duran bir cagri bedelsiz yapiyor.
+  //
+  // "Iki satirin sirasi" kirilgan bir garanti gibi gorunur - o yuzden kaza
+  // olmaktan cikarildi: `degismezler.test.ts` govdenin ILK ifadesinin bu satir
+  // oldugunu zorluyor. Satirlar takas edilirse test kirmiziya doner.
   const cookieDeposu = await cookies();
+  const { url, anon } = ayarlar();
 
   return createServerClient(url, anon, {
     cookies: {
@@ -37,8 +54,9 @@ export async function supabaseSunucu() {
           }
         } catch {
           // Sunucu bileseninden cagrildiginda Next cookie yazmaya izin
-          // vermiyor. Token yenilemesini proxy (middleware) yapiyor, bu
-          // yuzden burada sessizce gecmek dogru - hata firlatmak her sayfayi
+          // vermiyor. Token yenilemesini `POST /api/oturum` yapiyor (Faz D'de
+          // bu isi `src/proxy.ts` yapiyordu, Faz E'de kaldirildi), bu yuzden
+          // burada sessizce gecmek dogru - hata firlatmak her sayfayi
           // dusururdu.
         }
       },
