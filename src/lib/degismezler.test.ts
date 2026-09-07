@@ -445,3 +445,75 @@ describe("Faz P - her sayfanin kendi basligi var", () => {
     expect(var_).toBe(true);
   });
 });
+
+describe("Faz P2 - build sirlara bagimli degil", () => {
+  // NEDEN BIR TEST GEREKIYOR: bu kapinin bozulmasi YERELDE GORUNMUYOR.
+  // `next build` .env'i kendiliginden yukluyor ve .env gitignore'da; yani
+  // .env'i olan bir gelistirici regresyonu hicbir zaman goremez. Bozulmanin
+  // tek gorunur oldugu yer CI'in sirsiz `cf:kur` adimi - ve o adim dakikalar
+  // suruyor. Asagidaki iki test ayni bozulmayi saniyeler icinde yakaliyor.
+
+  /// YORUMLAR SOYULUYOR - email.ts ve dizin.ts taramalarindaki gerekcenin
+  /// aynisi. Asagidaki dosyalar aradigimiz metinleri kurali ANLATMAK icin
+  /// aniyor; ham metin taransaydi test kendi gerekcesinin yazilmasini
+  /// cezalandirirdi.
+  function kod(yol: string): string {
+    return readFileSync(yol, "utf-8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+  }
+
+  test("supabaseSunucu() ilk isi prerender'i kesmek", () => {
+    const metin = kod(
+      join(process.cwd(), "src", "lib", "supabase", "sunucu.ts"),
+    );
+
+    const imza = "export async function supabaseSunucu() {";
+    const bas = metin.indexOf(imza);
+    expect(bas).toBeGreaterThan(-1);
+
+    const govde = metin.slice(bas + imza.length).trim();
+
+    // NEDEN "ILK IFADE", "SIRALAMA" DEGIL: metindeki konum calisma sirasini
+    // gostermiyor - `ayarlar()` bu dosyada YUKARIDA tanimli, yani env okumasi
+    // metinde her zaman once geciyor. Onemli olan govdede once NE CAGRILDIGI.
+    //
+    // Kesme ilk satirda olmak zorunda: `ayarlar()` bir satir once kosarsa
+    // Next istek-ani API'sine hic varamadan firlatiyor ve sirsiz build tumden
+    // dusuyor. Duzeltmeden onceki davranis buydu ve olculdu (Faz P2).
+    //
+    // BU TEST OLMADAN duzeltme kirilgan olurdu: iki satirin sirasi, yorumsuz
+    // bir refactor'da sessizce geri donebilecek bir kaza. Test onu sozlesme
+    // yapiyor. `connection()` daha acik bir niyet ifadesi olurdu ama
+    // `next/server` import'u pakete +45 KiB gzip ekliyor - gerekce sunucu.ts'te.
+    expect(govde.startsWith("const cookieDeposu = await cookies();")).toBe(
+      true,
+    );
+  });
+
+  test("CI'in sirsiz build adiminda Supabase degiskeni yok", () => {
+    // Bu satirlarin geri konulmasi, yukaridaki regresyonu yakalayan TEK
+    // korumayi kaldirir ve hicbir sey kirmizi olmaz. Faz L'de TURNSTILE_MODU
+    // ile yasanan sey birebir buydu: eksik olan bir satir degil, bir satirin
+    // YOKLUGU - ve yokluk ancak arayan bir test tarafindan goruluyor.
+    const ci = readFileSync(
+      join(process.cwd(), ".github", "workflows", "ci.yml"),
+      "utf-8",
+    );
+
+    // `yayinla` isi bu degiskenleri MECBUREN tasiyor (derleme aninda
+    // gomuluyorlar), yani dosyanin tamami taranamaz. Yalnizca `dogrula`
+    // isindeki `cf:kur` adimi ile onu izleyen `yayinla` basligi arasi.
+    const bas = ci.indexOf("- name: worker paketi");
+    const son = ci.indexOf("\n  yayinla:");
+    expect(bas).toBeGreaterThan(-1);
+    expect(son).toBeGreaterThan(bas);
+
+    const adim = ci
+      .slice(bas, son)
+      .replace(/^\s*#.*$/gm, "");
+
+    expect(adim).not.toContain("NEXT_PUBLIC_SUPABASE_URL");
+    expect(adim).not.toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  });
+});
