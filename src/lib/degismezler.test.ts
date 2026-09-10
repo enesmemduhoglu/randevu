@@ -565,3 +565,81 @@ describe("Faz P2 - /saglik gercek zemine bakiyor", () => {
     expect(robots).toContain('"/saglik"');
   });
 });
+
+describe("DEGISMEZ 5 - hatalar tek kapidan cikiyor", () => {
+  // `email.ts > gonder()` kapisinin hata yolundaki karsiligi. Kapinin kendisi
+  // (`hata.ts`) mesaji hic almiyor; ama bir `catch` blogunda yazilan tek bir
+  // `console.error(hata)` bu suzgeci atlar ve Drizzle'in mesajindaki sorgu
+  // parametrelerini - e-posta, telefon - log'a doker. Inceleme bunu her seferinde
+  // yakalamaz, bu test yakalar.
+  //
+  // `console.warn` BILEREK kapsam disi: `turnstile.ts`'teki uyari bir bot
+  // denemesinin izi, uygulama hatasi degil. Nabzi onunla kirmiziya dusurmek
+  // her kaziyicida bildirim demek olurdu.
+  const SRC = join(process.cwd(), "src");
+  const KAPI = join(SRC, "lib", "hata.ts");
+
+  function kod(yol: string): string {
+    return readFileSync(yol, "utf-8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+  }
+
+  function uretimDosyalari(dizin: string): string[] {
+    const bulunan: string[] = [];
+    for (const ad of readdirSync(dizin)) {
+      const tam = join(dizin, ad);
+      if (statSync(tam).isDirectory()) bulunan.push(...uretimDosyalari(tam));
+      else if (/\.tsx?$/.test(ad) && !/\.test\.tsx?$/.test(ad)) bulunan.push(tam);
+    }
+    return bulunan;
+  }
+
+  const taranan = uretimDosyalari(SRC);
+
+  test("taranacak dosya bulundu", () => {
+    expect(taranan.length).toBeGreaterThan(0);
+    expect(taranan).toContain(KAPI);
+  });
+
+  test("console.error yalnizca hata.ts'te", () => {
+    const ihlaller = taranan.filter(
+      (yol) => yol !== KAPI && kod(yol).includes("console.error"),
+    );
+    expect(ihlaller.map((y) => y.replace(process.cwd(), ""))).toEqual([]);
+  });
+
+  test("Analytics Engine'e yalnizca hata.ts yaziyor", () => {
+    const ihlaller = taranan.filter(
+      (yol) => yol !== KAPI && kod(yol).includes("writeDataPoint"),
+    );
+    expect(ihlaller.map((y) => y.replace(process.cwd(), ""))).toEqual([]);
+  });
+
+  test("onRequestError kapiya bagli", () => {
+    // Bu dosya silinirse yakalanmamis hatalar yine Workers Logs'a duser ama
+    // SAYILMAZ - nabiz yesil kalir ve ariza sessizlesir. Faz L'deki
+    // TURNSTILE_MODU dersinin aynisi: eksik olan bir satirin YOKLUGU.
+    const metin = kod(join(SRC, "instrumentation.ts"));
+    expect(metin).toContain("export const onRequestError");
+    expect(metin).toContain("hataBildir(");
+  });
+
+  test("HATA binding'i wrangler.jsonc'de, adi hata.ts ile ayni", () => {
+    // Binding yokken `hataBildir` sessizce yalnizca log'a yaziyor - bilerek,
+    // cunku yerelde binding yok. Uretimde de oyle kalmasi nabzi kor yapar.
+    const wrangler = readFileSync(join(process.cwd(), "wrangler.jsonc"), "utf-8");
+    expect(wrangler).toMatch(/"analytics_engine_datasets"/);
+    expect(wrangler).toMatch(/"binding"\s*:\s*"HATA"/);
+    expect(kod(KAPI)).toContain('const BINDING = "HATA"');
+  });
+
+  test("nabiz hata sayimini kosuyor", () => {
+    // Sayac yazilip okunmazsa kapi vardir ama kimse duymaz.
+    const nabiz = readFileSync(
+      join(process.cwd(), ".github", "workflows", "nabiz.yml"),
+      "utf-8",
+    ).replace(/^\s*#.*$/gm, "");
+    expect(nabiz).toContain("node scripts/hata-say.ts");
+  });
+});
