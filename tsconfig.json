@@ -11,6 +11,12 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Import'u olmayan dosyalar da (scripts/duman.ts, scripts/hata-say.ts) ayri
+    // kapsam sayilsin. Yoksa TypeScript ikisini tek kuresel kapsamda gorup ayni
+    // adli sabitlerde hata veriyor. Dosyaya `export {}` eklemek care degil: Node
+    // o zaman dosyayi ESM olarak yeniden ayristiriyor, her kosumda uyari basiyor
+    // ve Windows'ta ust seviye `process.exit` libuv assertion'ina dusuyor (olculdu).
+    "moduleDetection": "force",
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
