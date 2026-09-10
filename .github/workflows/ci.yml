@@ -215,3 +215,31 @@ jobs:
       # gorunur.
       - name: derle ve yayinla
         run: npm run cf:yayinla
+
+      # Yayinin YESIL olmasi Worker'in yuklendigini soyler, calistigini degil.
+      # Kirik bir surum (eksik env, sema uyumsuzlugu, calisma aninda patlayan
+      # import) buraya kadar sessizce gelir; ilk belirtisi bir musterinin
+      # hatasi olurdu.
+      #
+      # Surum kimligi `wrangler deployments status`'tan okunuyor ve betik
+      # `/api/saglik`in basliginda AYNI kimligi gorene kadar bekliyor - eski
+      # surumden gelen bir 200 yeni yayinin kaniti degil (src/lib/surum.ts).
+      #
+      # JSON'un TAMAMI BASILMIYOR: icinde yayini yapanin e-postasi var ve bu
+      # depo public, Actions log'u da oyle. Yalnizca kimlik cikariliyor.
+      #
+      # Kirmizi yanarsa geri alma: `npx wrangler rollback` (docs/yayin.md).
+      # Otomatik geri alma BILEREK yok - sema bozuksa eski kod da bozuk
+      # calisir ve geri alma yalnizca belirtiyi saklar.
+      - name: duman testi
+        run: |
+          surum=$(npx wrangler deployments status --json | node -e '
+            let v = ""; process.stdin.on("data", (p) => (v += p));
+            process.stdin.on("end", () => {
+              const d = JSON.parse(v);
+              const tam = d.versions.find((s) => s.percentage === 100);
+              if (!tam) { console.error("yuzde 100 trafik tasiyan surum yok"); process.exit(1); }
+              console.log(tam.version_id);
+            });')
+          echo "yayinlanan surum: $surum"
+          node scripts/duman.ts "$NEXT_PUBLIC_SITE_URL" --surum "$surum"
