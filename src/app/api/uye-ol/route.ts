@@ -1,5 +1,6 @@
 import { adDogrula, epostaDogrula, sifreDogrula } from "@/lib/girdi";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
+import { hataBildir } from "@/lib/hata";
 import { musteriKaydiOlustur } from "@/lib/kayit";
 import { checkOrigin } from "@/lib/origin";
 import { kayitHatasi, zatenKayitliMi } from "@/lib/supabase/hata";
@@ -89,10 +90,11 @@ export async function POST(istek: Request) {
       eposta: eposta.deger,
       adSoyad: adSoyad.deger,
     });
-  } catch {
-    // DEGISMEZ 5: ne hata nesnesi ne govde loglaniyor - ikisi de e-posta ve
-    // sifre tasiyor.
-    console.error("uye-ol: musteri kaydi yazilamadi");
+  } catch (hata) {
+    // DEGISMEZ 5: govde hic verilmiyor, hata nesnesi de yalnizca kapidan
+    // geciyor - kapi mesaji (Drizzle'da sorgu parametreleri, yani e-posta)
+    // almiyor.
+    await hataBildir("uye-ol", hata);
     return Response.json(
       {
         hata:

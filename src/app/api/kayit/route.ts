@@ -1,5 +1,6 @@
 import { adDogrula, epostaDogrula, sifreDogrula } from "@/lib/girdi";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
+import { hataBildir } from "@/lib/hata";
 import { isletmeKaydiOlustur } from "@/lib/kayit";
 import { checkOrigin } from "@/lib/origin";
 import { kayitHatasi, zatenKayitliMi } from "@/lib/supabase/hata";
@@ -97,7 +98,7 @@ export async function POST(istek: Request) {
       adSoyad: adSoyad.deger,
       isletmeAdi: isletmeAdi.deger,
     });
-  } catch {
+  } catch (hata) {
     // KRITIK DURUM: Supabase'de hesap acildi ama bizde satir olusmadi, yani
     // ortada kiracisi olmayan bir kimlik kaldi. Hesabi silemiyoruz (anon
     // anahtar buna yetkili degil), o yuzden yapilabilecek en iyi sey oturumu
@@ -110,10 +111,10 @@ export async function POST(istek: Request) {
       // Cikis da basarisizsa akisi kesmiyoruz; kullaniciya donen cevap ayni.
     }
 
-    // DEGISMEZ 5: ne hata nesnesi ne govde loglaniyor - ikisi de e-posta ve
-    // sifre tasiyor. Sabit metin, kaydin hangi asamada koptugunu soylemeye
-    // yetiyor; ayrintiyi Postgres'in kendi loglari zaten tutuyor.
-    console.error("kayit: isletme kaydi yazilamadi");
+    // DEGISMEZ 5: govde hic verilmiyor, hata nesnesi de yalnizca kapidan
+    // geciyor - kapi mesaji (Drizzle'da sorgu parametreleri, yani e-posta)
+    // almiyor, tur ve Postgres kodunu aliyor.
+    await hataBildir("kayit", hata);
 
     return Response.json(
       {

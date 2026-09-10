@@ -1,6 +1,7 @@
 import { authKimligi } from "@/lib/auth";
 import { adDogrula } from "@/lib/girdi";
 import { govdeOku, govdeOkunamadi } from "@/lib/govde";
+import { hataBildir } from "@/lib/hata";
 import { isletmeKaydiOlustur } from "@/lib/kayit";
 import { checkOrigin } from "@/lib/origin";
 
@@ -59,9 +60,10 @@ export async function POST(istek: Request) {
       adSoyad: adSoyad.deger,
       isletmeAdi: isletmeAdi.deger,
     });
-  } catch {
-    // DEGISMEZ 5: hata nesnesi ve govde loglanmiyor.
-    console.error("kayit/tamamla: isletme kaydi yazilamadi");
+  } catch (hata) {
+    // DEGISMEZ 5: govde verilmiyor; hata nesnesi yalnizca kapidan geciyor ve
+    // kapi mesaji almiyor.
+    await hataBildir("kayit/tamamla", hata);
     return Response.json(
       {
         hata:
