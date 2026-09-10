@@ -329,6 +329,7 @@ karar kaydı `TODOS.md`'de.
 | **P2a** — sırsız build | `supabaseSunucu()` env'i `cookies()`ten sonra okuyor, CI'ın `cf:kur` adımından sahte değerler kalktı, iki statik kapı |
 | **P2b** — `/saglik` şema kontrolü | Kolon kümesi `sema.ts`'ten türetiliyor, göç sayısı ve `EXCLUDE` kısıtının varlığı; `/api/saglik` makine yolu (200/503), halka açık gövde daraltılmış |
 | **P2c** — şifre sıfırlama | `token_hash` + `verifyOtp`, `/sifremi-unuttum` + `/sifre-yenile`, `girisYonu` `/api/giris` ile ortak, kullanıcı numaralandırması yok. Mail şablonu elle iş olarak açık |
+| **P2d** — duman ve nabız | `scripts/duman.ts`; yayından sonra sürüm kimliği eşleşene kadar `/api/saglik` + beş sayfa, `nabiz.yml` 30 dakikada bir. `version_metadata` binding'i → `X-Worker-Surum` |
 
 ### Sıradakiler
 
@@ -343,8 +344,7 @@ motorundan çekildi). P2'nin ilk PR'ı sırların yokluğunda build'i ayağa kal
    akış uçtan uca çalışmıyor.
 2. **`/saglik`'in şemayı gerçekten kontrol etmesi** — kolon kümesini `sema.ts`'ten
    türetip DB ile karşılaştırmak, göç sayısı ve `EXCLUDE` kısıtının varlığı. **Kapandı**
-   (PR #36). Kalan: deploy sonrası duman testi ve zamanlanmış nabız — `/api/saglik`
-   endpoint'i şimdi var, bu ikisi ona bağlanabilir.
+   (PR #36). Deploy sonrası duman testi ve zamanlanmış nabız da **kapandı** (P2d).
 3. **Uyarı/hata takibi** — tek hata kapısı + `onRequestError`. Üçüncü parti değil:
    depo public olduğu için zamanlanmış GitHub Actions ücretsiz ve başarısız koşum
    zaten bildirim gönderiyor.
@@ -393,8 +393,8 @@ oturumuyla iste, sızmadığını gör.
 `/r/<slug>`ten randevu al → panelde gör → iptal linkiyle iptal et → bildirim önizlemesini
 gör. **Aynısı mobil genişlikte ve koyu temada** — hedef kitle telefondan giriyor.
 
-**Deploy doğrulaması:** `cf:kur` çıktısının gzip boyutu (bütçe 3 MiB, bugün 1634 KiB);
-canlıda `/`, `/dizin`, `/r/<slug>`, `/saglik` 200.
+**Deploy doğrulaması:** `cf:kur` çıktısının gzip boyutu (bütçe 3 MiB, bugün 1870 KiB);
+canlı yoklama artık elle değil, `yayinla` işinin son adımı (`scripts/duman.ts`).
 
 ## Riskler ve elle yapılacaklar
 

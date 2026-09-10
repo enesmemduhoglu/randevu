@@ -15,6 +15,7 @@
     "tip": "next typegen && tsc --noEmit",
     "db:uygula:prod": "node scripts/prod-goc.ts",
     "tohum:demo": "tsx scripts/tohum-demo.ts",
+    "duman": "node scripts/duman.ts",
     "cf:kur": "opennextjs-cloudflare build",
     "cf:onizle": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "cf:yayinla": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",

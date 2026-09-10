@@ -145,6 +145,7 @@ npm run cf:kur           # opennextjs-cloudflare build
 npm run cf:onizle        # build + yerel workerd'de calistir
 npm run cf:yayinla       # build + Cloudflare'e deploy
 npm run cf:tip           # wrangler types
+npm run duman -- <adres> [--surum <id>]   # canli site yoklamasi (yayin sonrasi + nabiz)
 ```
 
 Test veritabani Docker konteynerinde: `randevu-test-pg`, port **5455**,

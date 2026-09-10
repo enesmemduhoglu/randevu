@@ -3949,3 +3949,103 @@ tek bir düzeltme için kurmak bu PR'ın kapsamı değil. Elle doğrulandı.
 - [x] "Filtreleri temizle" → URL `/dizin`, arama boş, "Tüm iller",
       "Tüm kategoriler"
 - [x] `npm run tip && npm run lint && npm test` temiz — 750 test geçti
+
+---
+
+## Faz P2 — duman testi ve nabız
+
+**Kapandı:** Yayın hattı artık "Worker yüklendi"de değil "Worker çalışıyor"da
+bitiyor, ve canlı site yayın anı dışında da yoklanıyor. PR #36'nın "bilerek
+kapsam dışı" bıraktığı madde; o gün ayrı tutulmasının sebebi `/api/saglik`'in
+canlıda henüz olmamasıydı.
+
+### Tek betik, iki çağıran
+
+`scripts/duman.ts`: `/api/saglik` 200 dönene kadar 12 × 5 sn dener, ardından
+`/`, `/dizin`, `/giris`, `/isletmeler-icin`, `/saglik`'in **yönlendirmesiz**
+200 döndüğüne bakar. `yayinla` işinin son adımı ve `nabiz.yml` aynı betiği
+çağırıyor. **Bağımlılığı yok** (node'un `fetch`'i): nabız işi `npm ci` koşmuyor,
+sparse checkout ile yalnızca bu dosyayı çekiyor.
+
+Yönlendirme takip edilmiyor, çünkü `/giris`'e ya da bir hata sayfasına atan
+bir yol "200 geldi" diye geçmemeli.
+
+### Sürüm kimliği — eski sürümün 200'ü yeni yayının kanıtı değil
+
+Deploy'dan hemen sonra gelen 200'ü henüz yerini bırakmamış eski sürüm de
+verebilir. Sürüm kimliği olmadan duman testi kırık bir yayını birkaç saniyelik
+pencerede "sağlıklı" geçirebilirdi — ve testin tek işi tam olarak o yayını
+yakalamak.
+
+- `wrangler.jsonc > version_metadata` → `SURUM` binding'i
+- `src/lib/surum.ts > workerSurumu()` — Cloudflare bağlamı yoksa `null`
+- `/api/saglik` kimliği **gövdeye değil** `X-Worker-Surum` başlığına koyuyor:
+  kamu gövdesinin anahtar kümesi `saglik.test.ts`'te kilitli ve bu alan sağlık
+  bilgisi değil. Bağlam yokken başlık **hiç gitmiyor** (boş değer değil) —
+  testte kilitli.
+- CI kimliği `wrangler deployments status --json`'dan okuyor ve yalnızca
+  `%100` trafik taşıyan sürümü kabul ediyor. **JSON'un tamamı basılmıyor:**
+  içinde yayını yapanın e-postası (`author_email`) var ve depo public.
+- Boş bir `--surum` sessizce sürümsüz kontrole düşmüyor, betik 2 ile çıkıyor —
+  yoksa kimlik okunamadığında duman testi eski davranışa dönüp yeşil yanardı.
+
+Kimlik opak bir uuid; sır değil.
+
+### Otomatik geri alma BİLEREK yok
+
+Duman testi kırmızıysa yayın çıkmış demektir. `wrangler rollback` otomatik
+koşmuyor, çünkü en olası kırmızı sebebi şema (`/api/saglik` → 503) ve şema
+bozuksa eski kod da bozuk çalışır — geri alma yalnızca belirtiyi saklardı.
+Karar insana bırakıldı; komut `docs/yayin.md`'de.
+
+### Nabız: 30 dakika, üçüncü parti yok
+
+Planın zaten koyduğu karar: depo public, zamanlanmış Actions ücretsiz, başarısız
+koşum bildirim gönderiyor. 30 dakika seçildi, daha sık değil: site düştüğünde
+saatte dört ayrı bildirim yeterince gürültü.
+
+GitHub'ın iki bilinen davranışı `nabiz.yml` başlığında yazılı: zamanlanmış
+koşumlar gecikebiliyor, ve **public depoda 60 gün hareket olmazsa zamanlanmış
+iş akışları kendiliğinden kapanıyor.** Bildirim cron satırını en son
+değiştirene gidiyor.
+
+### Bilerek kapsam dışı
+
+- **`/r/<slug>` duman listesinde yok.** Plan onu da sayıyordu, ama üretimde
+  sabit, silinmeyeceği garanti bir işletme yok (bugün 2 işletme, 0'ı dizinde).
+  Betiğe gömülü bir slug, o işletme kapandığı gün yayını kırmızıya düşürür.
+- **Uyarı/hata takibi** (tek hata kapısı + `onRequestError`) — P2'nin son
+  maddesi, ayrı PR.
+- **Nabzın Supabase'i uyanık tuttuğu** — `/api/saglik` her koşumda gerçek bir
+  sorgu atıyor, yani ücretsiz katmanın "bir hafta hareketsiz" duraklatmasını
+  muhtemelen engelliyor. **Ölçülmedi**, bu yüzden plandaki risk satırı
+  kapatılmadı.
+- **Deploy öncesi şema kapısı** — PR #36'daki gerekçe aynen geçerli
+  (`SUPABASE_DB_URL` yayın işine girmiyor).
+
+### Elle doğrulandı — 11 Eylül 2026
+
+- [x] Canlıya karşı sürümsüz: `/api/saglik` 200 (`goc 6/6`), beş sayfa 200,
+      çıkış 0
+- [x] Canlıya karşı yanlış `--surum`: 12 denemede kırmızı, çıkış 1; olmayan
+      adres (404) kırmızı; argümansız çağrı çıkış 2
+- [x] `cf:onizle` (workerd): `X-Worker-Surum` geliyor, istekler arasında sabit;
+      betik o kimlikle çıkış 0
+- [x] `cf:onizle`: test konteyneri durdurulunca `/api/saglik` **503**, geri
+      açılınca 200
+- [x] CI adımındaki satır içi JS kabuksuz sınandı: normal çıktıdan yalnızca
+      kimlik çıkıyor, kademeli yayında (%60/%40) ve bozuk JSON'da çıkış 1
+- [x] `npm run tip && npm run lint && npm test` temiz — 750 test, 54 dosya
+
+### Merge sonrası bakılacak
+
+- [ ] İlk `yayinla` koşumunda duman adımı yeşil mi — `wrangler deployments
+      status --json` gerçek hesapta ilk kez koşacak, çıktı biçimi yalnızca
+      kaynaktan okundu
+- [ ] `gh workflow run nabiz.yml` ile ilk nabız — GitHub koşucusundan gelen
+      isteğin Cloudflare'in bot kurallarına takılmadığı buradan görülecek
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1869,57 KiB** (bütçe 3 MiB).
+P2c sonundaki 1869,43 KiB'den **+0,14 KiB**.
