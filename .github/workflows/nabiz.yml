@@ -1,0 +1,55 @@
+# Canli siteyi zamanlanmis olarak yoklar - duman testinin surumsuz hali.
+#
+# Neden ucuncu parti bir izleme servisi degil: depo public, zamanlanmis
+# Actions ucretsiz ve basarisiz kosum zaten bildirim gonderiyor. Bir hesap,
+# bir sir, bir panel daha eklemeden ayni sonuc.
+#
+# DUMAN TESTINDEN FARKI: o yalnizca yayin aninda kosuyor, yani "yayin temizdi
+# ama gece 3'te Supabase duraklatildi / Hyperdrive baglanti kaybetti /
+# sertifika yenilenmedi" durumlarini goremiyor. Bu is onlari goruyor.
+#
+# BILINEN IKI SINIR (GitHub'in kendi davranisi):
+#   - Zamanlanmis kosumlar yogun saatlerde dakikalarca GECIKEBILIR ya da hic
+#     kosmayabilir. Bu bir nabiz, kesin bir SLA olcumu degil.
+#   - Public depoda 60 gun hic hareket olmazsa GitHub zamanlanmis is
+#     akislarini KENDILIGINDEN kapatir. Yani nabiz, en cok ihtiyac duyulacagi
+#     "kimse depoya bakmiyor" doneminde sessizce durabilir.
+#
+# Basarisizlik bildirimi, cron satirini EN SON degistiren kisiye gidiyor.
+
+name: Nabiz
+
+on:
+  schedule:
+    # Otuz dakika: arizayi yarim saat icinde duyurmak yeterli, daha sik kosmak
+    # site dustugunde saatte dort ayri bildirim demek.
+    - cron: "*/30 * * * *"
+  # Elle tetikleme - birlestirmeden sonra ilk kosumu beklemeden gormek icin.
+  workflow_dispatch:
+
+concurrency:
+  group: nabiz
+  cancel-in-progress: false
+
+jobs:
+  yokla:
+    name: canli site yoklamasi
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # Yalnizca betik gerekiyor; `npm ci` YOK. Betik bagimliliksiz (node'un
+      # kendi fetch'i) ve her kosumda bir dakikalik kurulum bosa gitmesin.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/duman.ts
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: yokla
+        run: node scripts/duman.ts "$SITE"
+        env:
+          SITE: ${{ vars.NEXT_PUBLIC_SITE_URL }}
