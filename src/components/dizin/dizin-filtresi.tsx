@@ -39,6 +39,21 @@ export function DizinFiltresi({
 
   return (
     <form
+      // KEY, formu URL'deki filtre degisince YENIDEN KURUYOR.
+      //
+      // Neden: alanlar kontrolsuz (`defaultValue`) ve React `defaultValue`i
+      // yalnizca BAGLANMA aninda uyguluyor. "Filtreleri temizle" ayni sayfaya
+      // yumusak gecis yapiyor, yani React ayni DOM dugumlerini koruyor:
+      // `<input>` tarayici tarafindan kirletilmediyse yeni degeri aliyor ama
+      // `<select>` eski secimde kaliyordu. Ekranda arama kutusu temizlenip il
+      // ve kategori secili gorunuyordu - hem yanlis hem de yaniltici, cunku
+      // "Ara"ya basildiginda o kutular gercekten gonderiliyor.
+      //
+      // Kutulari kontrollu hale getirmek bu formu istemci bilesenine cevirirdi;
+      // ustteki gerekce (JavaScript'siz calisan duz GET formu) bunu istemiyor.
+      // Key ile cozum sunucu bileseninde kaliyor: URL degisti mi form sifirdan
+      // sunucunun soyledigi degerlerle kuruluyor.
+      key={`${secili.arama}|${secili.il}|${secili.kategori}`}
       method="get"
       action="/dizin"
       className="space-y-4 rounded-xl border border-border bg-card p-5"

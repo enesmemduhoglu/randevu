@@ -3907,3 +3907,45 @@ zaten iki çıkış taşıyor (Faz P kararı, müşteri/işletme ayrımı) ve ü
 
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1869,43 KiB** (bütçe 3 MiB).
 P2b sonundaki 1859,17 KiB'den **+10,26 KiB**.
+
+## Düzeltme — dizin filtresi temizlenmiyordu (PR #38)
+
+`/dizin`'de "Filtreleri temizle" bağlantısı yalnızca arama kutusunu
+boşaltıyordu; İl ve Kategori kutuları eski seçimde kalıyordu.
+
+### Sebep: `defaultValue` bir kez uygulanıyor
+
+Filtre formu bilerek kontrolsüz ve JavaScript'siz (gerekçesi
+`dizin-filtresi.tsx` başlığında). React `defaultValue`'yu yalnızca bağlanma
+anında uyguluyor. "Filtreleri temizle" aynı sayfaya **yumuşak geçiş** yaptığı
+için React aynı DOM düğümlerini koruyordu:
+
+- `<input>`, kullanıcı yazmadıysa React'in güncellediği `value` niteliğini
+  alıyor → arama kutusu temizleniyordu
+- `<select>` için `defaultValue` güncellemede hiç yeniden uygulanmıyor →
+  il ve kategori duruyordu
+
+Tutarsızlık yanıltıcıydı: ekranda duran o iki filtre "Ara"ya basıldığında
+gerçekten gönderiliyordu.
+
+### Karar: kontrollü kutu değil, forma `key`
+
+Kutuları kontrollü yapmak formu istemci bileşenine çevirirdi ve dosyanın kendi
+gerekçesini (yavaş bağlantıda çalışan, paylaşılabilir URL üreten düz GET formu)
+bozardı. Bunun yerine forma URL filtrelerinden türetilen bir `key` konuldu:
+filtre değişince React formu baştan kuruyor, bütün alanlar sunucunun söylediği
+değerle geliyor. Çözüm sunucu bileşeninde kalıyor.
+
+### Otomatik test yok — bilerek
+
+Vitest bu depoda `environment: "node"` ve `include` yalnızca `src/**/*.ts`;
+`.tsx` bileşen testi altyapısı hiç yok. Hata React'in DOM uzlaştırmasında
+yaşıyor, yani ancak bir tarayıcı/jsdom render'ıyla yakalanabilirdi — o altyapıyı
+tek bir düzeltme için kurmak bu PR'ın kapsamı değil. Elle doğrulandı.
+
+### Elle doğrulandı — 8 Eylül 2026
+
+- [x] `/dizin?il=Bursa&kategori=Kuaför&arama=saç` → üç kutu da dolu
+- [x] "Filtreleri temizle" → URL `/dizin`, arama boş, "Tüm iller",
+      "Tüm kategoriler"
+- [x] `npm run tip && npm run lint && npm test` temiz — 750 test geçti
