@@ -10,7 +10,7 @@ GitHub Actions dört iş akışı taşıyor. İkisi `.github/workflows/ci.yml` i
 | `dogrula` | Her PR, main'e her push | `npm ci` → tip → lint → test → `cf:kur` |
 | `yayinla` | Yalnızca main'e push, `dogrula` yeşilse | **Beklemeden** Cloudflare'e deploy, ardından duman testi |
 | `goc` | Yalnızca elle (`workflow_dispatch`), **her daldan** | Supabase'e migration uygular |
-| `nabiz` | 30 dakikada bir + elle | Canlı siteyi yoklar |
+| `nabiz` | 30 dakikada bir + elle | Canlı siteyi yoklar, son bir saatin sunucu hatalarını sayar |
 
 ## Yayın nasıl çıkar
 
@@ -58,6 +58,44 @@ değiştiren** kişiye gidiyor (GitHub'ın kuralı). İki bilinen sınırı var:
 zamanlanmış koşumlar yoğun saatlerde gecikebiliyor, ve public depoda 60 gün
 hareket olmazsa GitHub zamanlanmış iş akışlarını kendiliğinden kapatıyor.
 
+## Hata takibi
+
+Sayfalar 200 dönerken bir route arka planda patlıyor olabilir. Duman testi bunu
+görmez, yalnızca beş sayfaya bakıyor. Hata takibinin uyarı kanalı nabızın
+ikinci adımı: **son bir saatte tek bir sunucu hatası bile olduysa nabız
+kırmızı yanar.** Üçüncü parti servis yok.
+
+```
+yakalanmamış hata ──> src/instrumentation.ts > onRequestError ─┐
+catch'li yol (kayit, uye-ol) ─────────────────────────────────┤
+                                                              v
+                                    src/lib/hata.ts > hataBildir()
+                                     │                         │
+                          console.error (JSON)       HATA binding
+                          Workers Logs, özel         Analytics Engine
+                          "ne oldu"                  "kaç tane"
+                                                              │
+                                   nabiz.yml > scripts/hata-say.ts
+```
+
+**Kapı mesaj taşımıyor.** Drizzle'ın hata mesajı sorgunun parametrelerini
+içeriyor (e-posta, telefon, iptal jetonu), yani mesaj hiç alınmıyor. Taşınanlar
+kaynak, tür, Postgres kodu, kısıt adı ve digest. `console.error`'un `src`
+altında başka bir yerde geçmesini `degismezler.test.ts` yasaklıyor.
+
+**Nabız hata sayımıyla kırmızıysa:** Actions log'unda yalnızca toplam sayı var
+(depo public). Ayrıntı için Cloudflare → Workers & Pages → `randevu` → Logs,
+`olay = "hata"` süzgeci. `kaynak` alanı route'u (`route /api/musaitlik`,
+`render /dizin`), `digest` Next'in aynı hataya ait kendi satırını gösteriyor.
+
+**Pencere bir saat, aralık yarım saat.** GitHub zamanlanmış koşumları
+geciktirebiliyor. Pencere aralığa eşit olsaydı, iki koşum arası 30 dakikayı
+aştığında aradaki hatalar hiç sayılmazdı. Bedeli, aynı hatanın iki koşumda
+görünmesi.
+
+**Jeton yoksa nabız kırmızı yanar, sessizce geçmez.** Kurulum için
+aşağıdaki `CLOUDFLARE_ANALIZ_TOKENI` satırına bakın.
+
 ## Şema değişikliği varsa
 
 Sıra **önce göç, sonra merge**. Yeni kolonu okuyan kod, kolon yerinde değilken
@@ -92,8 +130,13 @@ Hepsi **Settings → Secrets and variables → Actions** altında.
 | Ad | Nereden alınır | Hangi iş kullanır |
 |---|---|---|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → *Edit Cloudflare Workers* şablonu | `yayinla` |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare panelinde Workers & Pages sayfasının sağ sütunu | `yayinla` |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare panelinde Workers & Pages sayfasının sağ sütunu | `yayinla`, `nabiz` |
+| `CLOUDFLARE_ANALIZ_TOKENI` | Cloudflare → My Profile → API Tokens → *Create Custom Token*, tek izin **Account → Account Analytics → Read** | `nabiz` |
 | `SUPABASE_DB_URL` | `.env`'deki Supavisor **session mode** (5432) dizesi | `goc` |
+
+`CLOUDFLARE_ANALIZ_TOKENI` bilerek yayın jetonundan ayrı. Otuz dakikada bir
+koşan bir işin Worker yayınlayabilen bir anahtar taşıması gerekmiyor. Bu jeton
+yalnızca Analytics Engine'i okuyabiliyor.
 
 ### Variables (secret değil)
 

@@ -82,6 +82,15 @@ reddedilen gonderimi iz birakmadan yutar. *(warden kapisi bloklar.)*
 **5. Sirlar log'a ve hata metinlerine girmez.** Token, anahtar ve baglanti
 dizesi hicbir `console.*` ya da kullaniciya donen hata govdesinde tasinmaz.
 
+> **Hata yolu tek kapidan: `src/lib/hata.ts > hataBildir()`** (Faz P2).
+> `console.error(hata)` yazma - Drizzle'in hata MESAJI sorgu parametrelerini
+> (e-posta, telefon, iptal jetonu) tasiyor ve kapi mesaji bu yuzden hic almiyor.
+> Yakalanmamis hatalar `src/instrumentation.ts > onRequestError` ile oraya
+> geliyor, kendi `catch`'i olan yol `hataBildir`'i dogrudan cagiriyor. Kapi
+> Analytics Engine'e de yaziyor ve nabiz oradan sayiyor - kapidan gecmeyen hata
+> uyari da uretmez. *(Zorlayan: `degismezler.test.ts`, `console.error` yalnizca
+> `hata.ts`'te.)*
+
 **6. `session.isletmeId` duz string kalir.** Bu sozlesmeyi bozan tip ya da
 erisim deseni getirme.
 
@@ -146,6 +155,7 @@ npm run cf:onizle        # build + yerel workerd'de calistir
 npm run cf:yayinla       # build + Cloudflare'e deploy
 npm run cf:tip           # wrangler types
 npm run duman -- <adres> [--surum <id>]   # canli site yoklamasi (yayin sonrasi + nabiz)
+node scripts/hata-say.ts # son saatin sunucu hatalari (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_ANALIZ_TOKENI)
 ```
 
 Test veritabani Docker konteynerinde: `randevu-test-pg`, port **5455**,

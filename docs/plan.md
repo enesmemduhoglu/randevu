@@ -330,6 +330,7 @@ karar kaydı `TODOS.md`'de.
 | **P2b** — `/saglik` şema kontrolü | Kolon kümesi `sema.ts`'ten türetiliyor, göç sayısı ve `EXCLUDE` kısıtının varlığı; `/api/saglik` makine yolu (200/503), halka açık gövde daraltılmış |
 | **P2c** — şifre sıfırlama | `token_hash` + `verifyOtp`, `/sifremi-unuttum` + `/sifre-yenile`, `girisYonu` `/api/giris` ile ortak, kullanıcı numaralandırması yok. Mail şablonu elle iş olarak açık |
 | **P2d** — duman ve nabız | `scripts/duman.ts`; yayından sonra sürüm kimliği eşleşene kadar `/api/saglik` + beş sayfa, `nabiz.yml` 30 dakikada bir. `version_metadata` binding'i → `X-Worker-Surum` |
+| **P2e** — hata takibi | `src/lib/hata.ts > hataBildir()` tek kapı (mesaj taşımıyor), `onRequestError`, Analytics Engine sayacı, nabızda `scripts/hata-say.ts`. `console.error` yalnızca kapıda |
 
 ### Sıradakiler
 
@@ -347,7 +348,15 @@ motorundan çekildi). P2'nin ilk PR'ı sırların yokluğunda build'i ayağa kal
    (PR #36). Deploy sonrası duman testi ve zamanlanmış nabız da **kapandı** (P2d).
 3. **Uyarı/hata takibi** — tek hata kapısı + `onRequestError`. Üçüncü parti değil:
    depo public olduğu için zamanlanmış GitHub Actions ücretsiz ve başarısız koşum
-   zaten bildirim gönderiyor.
+   zaten bildirim gönderiyor. **Kapandı** (P2e): sayaç Analytics Engine'de, nabız
+   son bir saatte hata varsa kırmızı.
+
+**P2e'nin bulduğu, açık kalan:** Next yakalanmamış hatayı kendi log'una da
+basıyor ve Drizzle'ın mesajını olduğu gibi yazıyor — sorgu parametreleri dahil
+(`cf:onizle`'de `params: yok,true,1` görüldü). İptal jetonu ham olarak sorguya
+girdiği için bu satır jeton taşıyabilir. Log hesaba özel ve üç gün tutuluyor,
+ama DEĞİŞMEZ 5'in lafzına aykırı. Ayrı iş — gerekçe `TODOS.md > Faz P2 — hata
+takibi`.
 
 **`scoped-db.ts` bölünmesi P2'den düşürüldü** — ölçülen faydası yok (bundle 0, test
 süresi 0) ve kapanış değişkeni disiplinini zayıflatıyor. Gerekçe `TODOS.md > Faz P2`.
@@ -393,7 +402,7 @@ oturumuyla iste, sızmadığını gör.
 `/r/<slug>`ten randevu al → panelde gör → iptal linkiyle iptal et → bildirim önizlemesini
 gör. **Aynısı mobil genişlikte ve koyu temada** — hedef kitle telefondan giriyor.
 
-**Deploy doğrulaması:** `cf:kur` çıktısının gzip boyutu (bütçe 3 MiB, bugün 1870 KiB);
+**Deploy doğrulaması:** `cf:kur` çıktısının gzip boyutu (bütçe 3 MiB, bugün 1873 KiB);
 canlı yoklama artık elle değil, `yayinla` işinin son adımı (`scripts/duman.ts`).
 
 ## Riskler ve elle yapılacaklar
