@@ -4037,13 +4037,15 @@ değiştirene gidiyor.
       kimlik çıkıyor, kademeli yayında (%60/%40) ve bozuk JSON'da çıkış 1
 - [x] `npm run tip && npm run lint && npm test` temiz — 750 test, 54 dosya
 
-### Merge sonrası bakılacak
+### Merge sonrası bakıldı — 11 Eylül 2026
 
-- [ ] İlk `yayinla` koşumunda duman adımı yeşil mi — `wrangler deployments
-      status --json` gerçek hesapta ilk kez koşacak, çıktı biçimi yalnızca
-      kaynaktan okundu
-- [ ] `gh workflow run nabiz.yml` ile ilk nabız — GitHub koşucusundan gelen
-      isteğin Cloudflare'in bot kurallarına takılmadığı buradan görülecek
+- [x] İlk `yayinla` koşumunda duman adımı yeşil (koşum 34535080337).
+      **Sürüm karşılaştırmasının gerekli olduğu ilk koşumda görüldü:** deneme 1
+      hâlâ trafik taşıyan ESKİ sürüme denk geldi (başlık yok, `surum=-`), bir
+      sonraki deneme yeni sürümü gördü. Kimlik karşılaştırması olmasaydı ilk
+      200 yeni yayının kanıtı sayılacaktı. Log'da e-posta yok.
+- [x] Elle tetiklenen ilk nabız yeşil (koşum 34535481109) — GitHub
+      koşucusundan gelen istek Cloudflare'in bot kurallarına takılmadı
 
 ### Bundle bütçesi
 
