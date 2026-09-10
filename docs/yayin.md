@@ -1,14 +1,16 @@
 # Yayın hattı
 
-GitHub Actions üç iş akışı taşıyor. İkisi `.github/workflows/ci.yml` içinde
+GitHub Actions dört iş akışı taşıyor. İkisi `.github/workflows/ci.yml` içinde
 (aynı dosyada, çünkü yayının testleri beklemesi `needs:` ile kuruluyor ve
-`needs:` dosya sınırını geçmiyor), biri `.github/workflows/goc.yml`.
+`needs:` dosya sınırını geçmiyor), biri `.github/workflows/goc.yml`, biri
+`.github/workflows/nabiz.yml`.
 
 | İş akışı | Ne zaman koşar | Ne yapar |
 |---|---|---|
 | `dogrula` | Her PR, main'e her push | `npm ci` → tip → lint → test → `cf:kur` |
-| `yayinla` | Yalnızca main'e push, `dogrula` yeşilse | **Beklemeden** Cloudflare'e deploy |
+| `yayinla` | Yalnızca main'e push, `dogrula` yeşilse | **Beklemeden** Cloudflare'e deploy, ardından duman testi |
 | `goc` | Yalnızca elle (`workflow_dispatch`), **her daldan** | Supabase'e migration uygular |
+| `nabiz` | 30 dakikada bir + elle | Canlı siteyi yoklar |
 
 ## Yayın nasıl çıkar
 
@@ -29,6 +31,32 @@ npx wrangler rollback <surum-id>  # önceki sürüme dön
 Kapı dosyadan kaldırıldı, ortamın ayarından değil — böylece `ci.yml`'a bakan
 biri kapının olmadığını görüyor. `environment:` satırı geri konursa kapı geri
 gelir.
+
+## Yayından sonra: duman testi ve nabız
+
+Yayının yeşil olması Worker'ın **yüklendiğini** söyler, **çalıştığını** değil.
+İkisini `scripts/duman.ts` ayırıyor: `/api/saglik` 200 dönmeli, ardından `/`,
+`/dizin`, `/giris`, `/isletmeler-icin`, `/saglik` yönlendirmesiz 200 dönmeli.
+
+| Nereden | Nasıl |
+|---|---|
+| `yayinla` işinin son adımı | `--surum` ile — sürüm kimliği `wrangler deployments status --json`'dan |
+| `nabiz` iş akışı | Sürümsüz, 30 dakikada bir |
+| Elle | `npm run duman -- https://randevu.enesmemduhoglu.tech` |
+
+**Sürüm neden karşılaştırılıyor:** deploy'dan hemen sonra gelen bir 200'ü eski
+sürüm de verebilir. `/api/saglik` yanıtı `X-Worker-Surum` başlığında isteği
+karşılayan sürümün kimliğini taşıyor (`wrangler.jsonc > version_metadata`,
+`src/lib/surum.ts`); betik yayınlanan kimliği görene kadar 12 × 5 sn bekliyor.
+
+**Duman testi kırmızıysa:** yayın ÇIKMIŞ demektir, geri alınmamıştır. Otomatik
+geri alma bilerek yok — şema bozuksa eski kod da bozuk çalışır ve geri alma
+yalnızca belirtiyi saklar. Log'a bakılır, gerekiyorsa `npx wrangler rollback`.
+
+**Nabız kırmızıysa** bildirim, `nabiz.yml`'deki cron satırını **en son
+değiştiren** kişiye gidiyor (GitHub'ın kuralı). İki bilinen sınırı var:
+zamanlanmış koşumlar yoğun saatlerde gecikebiliyor, ve public depoda 60 gün
+hareket olmazsa GitHub zamanlanmış iş akışlarını kendiliğinden kapatıyor.
 
 ## Şema değişikliği varsa
 
