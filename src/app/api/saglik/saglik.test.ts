@@ -26,6 +26,9 @@ test("mutlu yol: 200 ve kamu govdesi", async () => {
   const yanit = await GET();
   expect(yanit.status).toBe(200);
   expect(yanit.headers.get("cache-control")).toBe("no-store");
+  // Cloudflare baglami yok: bos ya da uydurma bir kimlik yerine baslik HIC
+  // gitmiyor, yoksa duman betigi "surum geldi" sanabilirdi.
+  expect(yanit.headers.get("x-worker-surum")).toBeNull();
 
   const govde = (await yanit.json()) as KamuYoklama;
   expect(govde.durum).toBe("saglikli");

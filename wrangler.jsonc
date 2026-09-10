@@ -89,6 +89,12 @@
   // keep_names'i hic ayarlamiyor (esbuild varsayilani false) - sorun yalnizca
   // Wrangler'in worker.js'i tekrar paketledigi son adimda ortaya cikiyor.
   "keep_names": false,
+  // Istegi karsilayan surumun kimligi `/api/saglik` yanitinin basligina
+  // gidiyor (src/lib/surum.ts). Deploy sonrasi duman testi eski surumden gelen
+  // bir 200'u yeni yayinin kaniti sanmasin diye.
+  "version_metadata": {
+    "binding": "SURUM"
+  },
   // workers.dev KAPALI, tek adres custom domain.
   //
   // Iki sebep: (1) bu hesapta workers.dev alt alan adi kayitli degil ve
