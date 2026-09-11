@@ -4037,15 +4037,177 @@ değiştirene gidiyor.
       kimlik çıkıyor, kademeli yayında (%60/%40) ve bozuk JSON'da çıkış 1
 - [x] `npm run tip && npm run lint && npm test` temiz — 750 test, 54 dosya
 
-### Merge sonrası bakılacak
+### Merge sonrası bakıldı — 11 Eylül 2026
 
-- [ ] İlk `yayinla` koşumunda duman adımı yeşil mi — `wrangler deployments
-      status --json` gerçek hesapta ilk kez koşacak, çıktı biçimi yalnızca
-      kaynaktan okundu
-- [ ] `gh workflow run nabiz.yml` ile ilk nabız — GitHub koşucusundan gelen
-      isteğin Cloudflare'in bot kurallarına takılmadığı buradan görülecek
+- [x] İlk `yayinla` koşumunda duman adımı yeşil (koşum 34535080337).
+      **Sürüm karşılaştırmasının gerekli olduğu ilk koşumda görüldü:** deneme 1
+      hâlâ trafik taşıyan ESKİ sürüme denk geldi (başlık yok, `surum=-`), bir
+      sonraki deneme yeni sürümü gördü. Kimlik karşılaştırması olmasaydı ilk
+      200 yeni yayının kanıtı sayılacaktı. Log'da e-posta yok.
+- [x] Elle tetiklenen ilk nabız yeşil (koşum 34535481109) — GitHub
+      koşucusundan gelen istek Cloudflare'in bot kurallarına takılmadı
 
 ### Bundle bütçesi
 
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1869,57 KiB** (bütçe 3 MiB).
 P2c sonundaki 1869,43 KiB'den **+0,14 KiB**.
+
+---
+
+## Faz P2 — hata takibi
+
+**Kapandı:** Üretimde bir istek patladığında artık birisi duyuyor. Teknik borç
+maddesi 3'ün (*"log düşüyor ama uyarı çıkmıyor ve kimse panele bakmıyor"*) son
+yarısı; `/saglik`'in şema kontrolü P2b'de, nabız P2d'de kapanmıştı. P2'nin son
+maddesi.
+
+### Tek kapı: `src/lib/hata.ts > hataBildir(kaynak, hata)`
+
+`email.ts > gonder()` deseninin hata yolundaki karşılığı — TODOS'un kendi
+cümlesi: *"süzgeç tek bir kapıdan geçmeli"*. İki yerden çağrılıyor:
+
+- `src/instrumentation.ts > onRequestError` — `catch` görmeyen her hata
+  (route handler, sunucu bileşeni, server action)
+- Kendi `catch`'i olan dört yol (`kayit`, `kayit/tamamla`, `uye-ol`,
+  `uye-ol/tamamla`). Önceden sabit bir `console.error` metni basıyorlardı ve o
+  satır hiçbir şeye sayılmıyordu.
+
+İki çıkışı var: `console.error` ile tek satır JSON (Workers Logs — "ne oldu")
+ve `HATA` binding'i ile Analytics Engine'e bir veri noktası ("kaç tane").
+`degismezler.test.ts` `console.error`'un ve `writeDataPoint`'in `src` altında
+başka yerde geçmesini yasaklıyor.
+
+### Kapı MESAJ TAŞIMIYOR — neden desenle temizlemek değil
+
+Drizzle'ın `DrizzleQueryError`'u mesaja sorgunun **parametrelerini** ekliyor
+(`params: ali@ornek.com,0555...`). Mesajı bir desen listesiyle temizlemek
+mümkündü ama liste bir gün eksik kalır; mesajın hiç alınmaması eksik kalmaz.
+Taşınanlar: kaynak, tür, Postgres kodu (ağ hatalarında `ECONNREFUSED` gibi Node
+kodu), kısıt adı, React'in `digest`'i. Ayrıntı kaybolmuyor — Next aynı hatayı
+kendi satırına basıyor ve `digest` ikisini eşleştiriyor (ama bkz. aşağıdaki
+bulgu).
+
+Kaynak route'un **dosya yolu** (`route /api/musaitlik`, `render /dizin`),
+isteğin yolu değil: `istek.path` sorgu dizesini taşıyor ve iptal jetonu,
+`token_hash` orada; `istek.headers` oturum cookie'sini taşıyor.
+
+### Neden veritabanı değil, neden log sorgusu değil
+
+- **Veritabanı:** en olası hata veritabanının kendisi (Supabase duraklatıldı,
+  Hyperdrive bağlantıyı kaybetti). Hatayı DB'ye yazan kapı tam o anda düşerdi.
+  Üstelik şema göçü gerektirirdi.
+- **Workers Logs sorgusu:** log satırını metinle aramak, satırın biçimi
+  değiştiği gün sessizce **sıfır** döndürür ve nabız yeşil yanar. Analytics
+  Engine'de sayaç ayrı bir kayıt; SQL API tek satır sorgu ve tek okuma izni.
+  Ücretsiz planda günde 100 bin yazma, 10 bin sorgu — nabız günde 48 sorgu.
+
+### Uyarı kanalı: nabızın ikinci adımı
+
+`scripts/hata-say.ts` son **60 dakikadaki** hataları sayıyor, sıfırdan büyükse
+1 ile çıkıyor; başarısız koşum bildirim gönderiyor. Duman kırmızıyken de koşuyor
+(`!cancelled()`) — iki sinyal birbirinin yerini tutmuyor.
+
+- **Pencere > aralık, bilerek.** GitHub zamanlanmış koşumları geciktiriyor;
+  pencere 30 dakika olsaydı iki koşum arası 30'u aştığında aradaki hatalar
+  hiç sayılmazdı. Bedeli: aynı hata iki koşumda görünür.
+- **Eşik sıfır.** Her sunucu hatası bir bildirim. Gürültü çıkarsa eşik o gün
+  ölçülerek konur — bugün gürültünün ne olacağı bilinmiyor.
+- **Public log'a yalnızca toplam basılıyor.** Hangi route'un patladığı P2b'deki
+  gerekçeyle (drift bilgisi saldırgana harita) basılmıyor; ayrıntı Workers
+  Logs'ta.
+- **Ayrı, yalnızca okuyan jeton** (`CLOUDFLARE_ANALIZ_TOKENI`, Account
+  Analytics Read). Yayın jetonu otuz dakikada bir koşan bir işe girmiyor.
+- **Jeton yoksa 2 ile çıkıyor, sessizce geçmiyor** — Faz L'deki
+  `TURNSTILE_MODU` dersi.
+- `console.warn` sayılmıyor: `turnstile.ts`'teki uyarı bot denemesinin izi,
+  uygulama hatası değil.
+
+### `cf:onizle`'de ölçülenler — iki varsayım yanlış çıktı
+
+Test konteyneri durdurularak `/dizin` (render) ve `/api/musaitlik` (route)
+500'e düşürüldü, yerel workerd'in log'u gözlem API'sinden okundu:
+
+- `onRequestError` workerd'de **tetikleniyor** — OpenNext instrumentation
+  dosyasını statik `require`'a çeviriyor. `routePath` desen olarak geliyor
+  (`/dizin`, `/api/musaitlik`), `render` hatasında `digest` dolu.
+- **`constructor.name` → `"a2"`.** Worker paketinde sınıf adları küçültülüyor.
+- **`instanceof DrizzleQueryError` → tutmadı.** Pakette sınıfın birden fazla
+  kopyası var. Tür artık biçimden tanınıyor (`query` metni + `params` alanı);
+  ölçümde iki yol da `DrizzleQueryError` verdi.
+- `HATA` binding'i yerelde de bağlanıyor (`Analytics Engine Dataset local`).
+
+### `tsconfig > moduleDetection: "force"`
+
+`scripts/hata-say.ts` ile `scripts/duman.ts`'in ikisinde de import yok;
+TypeScript onları tek küresel kapsamda görüp aynı adlı sabitlerde hata verdi.
+`export {}` eklemek çare değildi (ölçüldü): Node dosyayı ESM olarak yeniden
+ayrıştırıyor, her koşumda uyarı basıyor ve Windows'ta üst seviye
+`process.exit` libuv assertion'ına düşüyor. Çalışma zamanı değil derleyici
+ayarı değişti.
+
+### BULGU — Next'in kendi hata satırı sorgu parametrelerini taşıyor
+
+Ölçüm sırasında görüldü: Next yakalanmamış hatayı kendi `console.error`'uyla
+da basıyor ve Drizzle'ın mesajını olduğu gibi yazıyor —
+`Failed query: select ... from "isletme" where "slug" = $1 ... params: yok,true,1`.
+Parametre ziyaretçinin yazdığı slug'dı; aynı satır bir e-posta, telefon ya da
+**ham iptal jetonu** da taşıyabilir (`randevu.iptal_token` sorguya düz
+giriyor, `musteri-db.ts` ve `scoped-db.ts`).
+
+Bu PR'ın kapısı temiz; sızıntı Next'in varsayılan log'unda ve bu faz öncesinden
+beri var. Log hesaba özel ve ücretsiz planda üç gün tutuluyor, yani ciddiyeti
+orta-düşük — ama DEĞİŞMEZ 5'in lafzına aykırı. **Ayrı iş**, çünkü çözümü
+başka bir konu: ya DB katmanında Drizzle hatasını parametresiz bir hataya
+çevirmek, ya da Next'in log'unu susturmak. İkisi de ölçülmeden seçilmemeli.
+
+### Bilerek kapsam dışı
+
+- **Next'in log satırındaki parametreler** — yukarıdaki bulgu, ayrı iş.
+- **Tarayıcı hataları.** `onRequestError` yalnızca sunucu. İstemci bileşeninde
+  patlayan bir şey sayılmıyor; `error.tsx`/`global-error.tsx` bu depoda yok.
+- **`bildirim_kuyrugu` başarısız mail sayacı** — PR #36'daki gerekçe aynen:
+  bu bir iş sinyali, sağlık sinyali değil.
+- **Hangi route'un patladığını bildirimde göstermek.** Public log'a basılmıyor;
+  özel bir kanal (e-posta) üçüncü parti ya da sır demek.
+
+### Elle doğrulandı — 11 Eylül 2026
+
+- [x] `cf:onizle`, DB kapalı: `render /dizin` ve `route /api/musaitlik` kapıdan
+      geçti, tür `DrizzleQueryError`, log satırında sorgu metni ve parametre yok
+- [x] `hata-say.ts` jetonsuz çıkış 2; `duman.ts` argümansız hâlâ çıkış 2 ve
+      uyarısız (moduleDetection değişikliğinden sonra)
+- [x] `npm run tip && npm run lint && npm test` temiz — 767 test, 55 dosya
+      (P2d'ye göre +17)
+
+### Merge öncesi elle iş — yapıldı, 11 Eylül 2026
+
+- [x] Cloudflare'de yalnızca **Account Analytics Read** izinli jeton,
+      GitHub'a `CLOUDFLARE_ANALIZ_TOKENI` secret'ı
+- [x] **Analytics Engine hesapta etkinleştirildi.** Dalda koşulan ilk nabız
+      (34541249091) `API 403 - Authorization error` verdi: jeton doğruydu,
+      özellik hesapta kapalıydı. Topluluk bildirimlerine göre aynı durumda
+      `HATA` binding'li bir deploy da `403 [10089] "You need to enable
+      Analytics Engine"` ile düşüyor — **ölçmeden merge edilseydi merge anı
+      kırık bir yayın anı olurdu** (yayın hattında onay kapısı yok). Bu kısım
+      topluluktan, bizde ölçülmedi.
+- [x] Etkinleştirmeden sonra nabız dalda yeşil (34604357887): SQL API
+      veri seti **henüz yokken hata dönmüyor, boş sonuç dönüyor** ve betik
+      bunu "hata yok" okuyor.
+
+Son maddenin bedeli: adı yanlış yazılmış bir veri seti de hata vermez, sonsuza
+dek sıfır sayar — yani `hata-say.ts > VERI_SETI` ile `wrangler.jsonc >
+dataset` ayrışırsa nabız kör olur. `degismezler.test.ts` iki adın aynı
+olduğunu arıyor.
+
+### Merge sonrası bakılacak
+
+- [ ] İlk `yayinla` koşumu yeşil — `HATA` binding'li ilk gerçek deploy
+- [ ] Uçtan uca yazma üretimde **henüz gözlenmedi**: yerelde binding bağlandı
+      ve kapı çağrıldı, ama Analytics Engine'e düşen ilk veri noktası ilk
+      gerçek hatayla görülecek. O gün nabız kırmızı olmalı ve Workers Logs'ta
+      `olay = "hata"` satırı bulunmalı.
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1872,68 KiB** (bütçe 3 MiB).
+P2d sonundaki 1869,57 KiB'den **+3,11 KiB**.

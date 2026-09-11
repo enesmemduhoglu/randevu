@@ -8,6 +8,9 @@
 # ama gece 3'te Supabase duraklatildi / Hyperdrive baglanti kaybetti /
 # sertifika yenilenmedi" durumlarini goremiyor. Bu is onlari goruyor.
 #
+# Ikinci adim hata takibinin uyari kanali: sayfalar 200 donerken bir route'un
+# arka planda patladigi durumu da kirmiziya ceviriyor (scripts/hata-say.ts).
+#
 # BILINEN IKI SINIR (GitHub'in kendi davranisi):
 #   - Zamanlanmis kosumlar yogun saatlerde dakikalarca GECIKEBILIR ya da hic
 #     kosmayabilir. Bu bir nabiz, kesin bir SLA olcumu degil.
@@ -36,13 +39,17 @@ jobs:
     name: canli site yoklamasi
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
 
     steps:
-      # Yalnizca betik gerekiyor; `npm ci` YOK. Betik bagimliliksiz (node'un
-      # kendi fetch'i) ve her kosumda bir dakikalik kurulum bosa gitmesin.
+      # Yalnizca betikler gerekiyor; `npm ci` YOK. Ikisi de bagimliliksiz
+      # (node'un kendi fetch'i) ve her kosumda bir dakikalik kurulum bosa gitmesin.
       - uses: actions/checkout@v5
         with:
-          sparse-checkout: scripts/duman.ts
+          sparse-checkout: |
+            scripts/duman.ts
+            scripts/hata-say.ts
           sparse-checkout-cone-mode: false
 
       - uses: actions/setup-node@v5
@@ -53,3 +60,16 @@ jobs:
         run: node scripts/duman.ts "$SITE"
         env:
           SITE: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+
+      # Site ayakta olabilir ama istekler patliyor olabilir - duman testi
+      # yalnizca bes sayfaya bakiyor, bu adim BUTUN sunucu hatalarini sayiyor
+      # (src/lib/hata.ts). Duman kirmiziysa da kosuyor: iki sinyal birbirinin
+      # yerini tutmuyor ve ariza aninda ikisini birden gormek teshisi kisaltiyor.
+      - name: hata sayimi
+        if: ${{ !cancelled() }}
+        run: node scripts/hata-say.ts
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Yalnizca okuyan ayri jeton (Account Analytics Read) - yayin jetonu
+          # degil. Kurulumu docs/yayin.md > Hata takibi.
+          CLOUDFLARE_ANALIZ_TOKENI: ${{ secrets.CLOUDFLARE_ANALIZ_TOKENI }}

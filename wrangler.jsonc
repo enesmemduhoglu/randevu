@@ -95,6 +95,18 @@
   "version_metadata": {
     "binding": "SURUM"
   },
+  // Sunucu hatalarinin SAYACI (src/lib/hata.ts). Nabiz isi `scripts/hata-say.ts`
+  // ile buradan okuyor ve sifirdan buyukse kirmizi yaniyor. Veri seti ilk
+  // yazimda kendiliginden olusuyor; ucretsiz planda gunluk 100 bin yazma.
+  //
+  // Binding silinirse hata kapisi sessizce yalnizca log'a yazar ve nabiz hicbir
+  // hatayi gormez - `degismezler.test.ts` bu satiri ariyor.
+  "analytics_engine_datasets": [
+    {
+      "binding": "HATA",
+      "dataset": "randevu_hata"
+    }
+  ],
   // workers.dev KAPALI, tek adres custom domain.
   //
   // Iki sebep: (1) bu hesapta workers.dev alt alan adi kayitli degil ve
