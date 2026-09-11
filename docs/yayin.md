@@ -96,6 +96,11 @@ görünmesi.
 **Jeton yoksa nabız kırmızı yanar, sessizce geçmez.** Kurulum için
 aşağıdaki `CLOUDFLARE_ANALIZ_TOKENI` satırına bakın.
 
+**Analytics Engine hesapta bir kez etkinleştirilmeli** (Cloudflare paneli →
+Analytics Engine). Kapalıyken SQL API doğru izinli jetona da `403
+Authorization error` dönüyor (ölçüldü). Topluluk bildirimlerine göre `HATA`
+binding'li deploy da düşüyor — hesap yeniden kurulursa bu adım yayından önce.
+
 ## Şema değişikliği varsa
 
 Sıra **önce göç, sonra merge**. Yeni kolonu okuyan kod, kolon yerinde değilken

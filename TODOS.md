@@ -4176,17 +4176,36 @@ başka bir konu: ya DB katmanında Drizzle hatasını parametresiz bir hataya
       geçti, tür `DrizzleQueryError`, log satırında sorgu metni ve parametre yok
 - [x] `hata-say.ts` jetonsuz çıkış 2; `duman.ts` argümansız hâlâ çıkış 2 ve
       uyarısız (moduleDetection değişikliğinden sonra)
-- [x] `npm run tip && npm run lint && npm test` temiz — 766 test, 55 dosya
-      (P2d'ye göre +16)
+- [x] `npm run tip && npm run lint && npm test` temiz — 767 test, 55 dosya
+      (P2d'ye göre +17)
 
-### Merge öncesi elle iş
+### Merge öncesi elle iş — yapıldı, 11 Eylül 2026
 
-- [ ] Cloudflare'de yalnızca **Account Analytics Read** izinli jeton,
-      GitHub'a `CLOUDFLARE_ANALIZ_TOKENI` secret'ı. **Merge'den önce**, yoksa
-      ilk nabızdan itibaren kırmızı.
-- [ ] Nabızı dalda elle koşup SQL API'nin gerçek yanıtını görmek — yanıt
-      biçimi yalnızca belgeden okundu, ve veri seti ilk hata yazılana kadar
-      **yok**; o durumda API'nin ne döndüğü bilinmiyor.
+- [x] Cloudflare'de yalnızca **Account Analytics Read** izinli jeton,
+      GitHub'a `CLOUDFLARE_ANALIZ_TOKENI` secret'ı
+- [x] **Analytics Engine hesapta etkinleştirildi.** Dalda koşulan ilk nabız
+      (34541249091) `API 403 - Authorization error` verdi: jeton doğruydu,
+      özellik hesapta kapalıydı. Topluluk bildirimlerine göre aynı durumda
+      `HATA` binding'li bir deploy da `403 [10089] "You need to enable
+      Analytics Engine"` ile düşüyor — **ölçmeden merge edilseydi merge anı
+      kırık bir yayın anı olurdu** (yayın hattında onay kapısı yok). Bu kısım
+      topluluktan, bizde ölçülmedi.
+- [x] Etkinleştirmeden sonra nabız dalda yeşil (34604357887): SQL API
+      veri seti **henüz yokken hata dönmüyor, boş sonuç dönüyor** ve betik
+      bunu "hata yok" okuyor.
+
+Son maddenin bedeli: adı yanlış yazılmış bir veri seti de hata vermez, sonsuza
+dek sıfır sayar — yani `hata-say.ts > VERI_SETI` ile `wrangler.jsonc >
+dataset` ayrışırsa nabız kör olur. `degismezler.test.ts` iki adın aynı
+olduğunu arıyor.
+
+### Merge sonrası bakılacak
+
+- [ ] İlk `yayinla` koşumu yeşil — `HATA` binding'li ilk gerçek deploy
+- [ ] Uçtan uca yazma üretimde **henüz gözlenmedi**: yerelde binding bağlandı
+      ve kapı çağrıldı, ama Analytics Engine'e düşen ilk veri noktası ilk
+      gerçek hatayla görülecek. O gün nabız kırmızı olmalı ve Workers Logs'ta
+      `olay = "hata"` satırı bulunmalı.
 
 ### Bundle bütçesi
 
