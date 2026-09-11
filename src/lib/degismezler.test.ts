@@ -634,6 +634,19 @@ describe("DEGISMEZ 5 - hatalar tek kapidan cikiyor", () => {
     expect(kod(KAPI)).toContain('const BINDING = "HATA"');
   });
 
+  test("hata-say.ts wrangler.jsonc'deki veri setini sayiyor", () => {
+    // Analytics Engine olmayan bir veri seti icin HATA DONMUYOR, bos sonuc
+    // donuyor (nabizda olculdu: veri seti henuz yokken "hata yok"). Yani iki
+    // dosyada adlar ayrisirsa nabiz sonsuza dek yesil yanar - reddedilen
+    // "sessizce sifir" durumunun ta kendisi.
+    const wrangler = readFileSync(join(process.cwd(), "wrangler.jsonc"), "utf-8");
+    const veriSeti = wrangler.match(/"dataset"\s*:\s*"([^"]+)"/)?.[1];
+    expect(veriSeti).toBeTruthy();
+
+    const betik = readFileSync(join(process.cwd(), "scripts", "hata-say.ts"), "utf-8");
+    expect(betik).toContain(`const VERI_SETI = "${veriSeti}"`);
+  });
+
   test("nabiz hata sayimini kosuyor", () => {
     // Sayac yazilip okunmazsa kapi vardir ama kimse duymaz.
     const nabiz = readFileSync(
