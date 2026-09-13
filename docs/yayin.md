@@ -8,7 +8,7 @@ GitHub Actions dört iş akışı taşıyor. İkisi `.github/workflows/ci.yml` i
 | İş akışı | Ne zaman koşar | Ne yapar |
 |---|---|---|
 | `dogrula` | Her PR, main'e her push | `npm ci` → tip → lint → test → `cf:kur` |
-| `yayinla` | Yalnızca main'e push, `dogrula` yeşilse | **Beklemeden** Cloudflare'e deploy, ardından duman testi |
+| `yayinla` | Yalnızca main'e push, `dogrula` yeşilse | **Beklemeden** Cloudflare'e deploy, ardından duman testi; Deployments kaydı |
 | `goc` | Yalnızca elle (`workflow_dispatch`), **her daldan** | Supabase'e migration uygular |
 | `nabiz` | 30 dakikada bir + elle | Canlı siteyi yoklar, son bir saatin sunucu hatalarını sayar |
 
@@ -31,6 +31,29 @@ npx wrangler rollback <surum-id>  # önceki sürüme dön
 Kapı dosyadan kaldırıldı, ortamın ayarından değil — böylece `ci.yml`'a bakan
 biri kapının olmadığını görüyor. `environment:` satırı geri konursa kapı geri
 gelir.
+
+### Deployments kaydı
+
+Her yayın reponun **Deployments** sekmesine, `uretim` ortamının altına bir
+kayıt düşürüyor. Kaydı `yayinla` işi REST API ile kendisi açıp kapatıyor;
+`environment:` satırı **yok**. O satır kaydı kendiliğinden açardı ama ortamın
+ayarında hâlâ duran zorunlu inceleyiciyi de geri getirirdi. Koruma kuralları
+yalnızca ortama bağlı işlere işliyor, API ile açılan kayda değil.
+
+| Kaydın durumu | Anlamı |
+|---|---|
+| `success` | Yayın çıktı, duman testi yeşil. Açıklamada Worker sürüm kimliği var. |
+| `failure`, açıklamada "CANLIDA" | Yayın çıktı ama duman testi kırmızı. Sürüm canlıda, geri alınmadı. |
+| `failure`, açıklamada "yayin adimi: …" | Derleme ya da deploy tamamlanmadı. Canlıdaki sürümü `npx wrangler deployments status` söyler. |
+
+Kayıt adımları `continue-on-error`: GitHub API'sindeki bir aksaklık yayını
+durdurmuyor, yalnızca kayıt eksik kalıyor.
+
+**Kayıt bir gösterge, yayın geçmişinin kaynağı değil.** `wrangler rollback`
+ile yapılan geri alma Deployments sekmesine yansımıyor, sekme en son yayını
+göstermeye devam ediyor. Hangi sürümün trafik taşıdığını yalnızca `npx wrangler
+deployments status` doğru söyler. Yerelden elle yayın (`npm run cf:yayinla`)
+da kayıt açmıyor.
 
 ## Yayından sonra: duman testi ve nabız
 
@@ -197,12 +220,14 @@ koruma sağlıyorlardı. Faz P2 o düşmeyi bilerek kaldırdı (gerekçe:
 
 ### Environment
 
-**Hiçbir iş artık bir ortama bağlı değil.** `uretim` ortamı GitHub'da hâlâ
-duruyor (zorunlu inceleyici ve `main`-only branch policy'siyle) ama ona
-başvuran bir iş kalmadı, yani hiçbir şeyi etkilemiyor. Silinebilir; bırakmanın
-tek maliyeti ayarlar sayfasında ölü bir kayıt.
+**Hiçbir iş bir ortama bağlı değil, ama `uretim` ortamı kullanılıyor:**
+`yayinla` işinin açtığı Deployments kayıtları onun adı altında toplanıyor
+(yukarıda "Deployments kaydı"). Ortamın ayarında zorunlu inceleyici ve
+`main`-only branch policy'si hâlâ duruyor. İkisi de yalnızca ortama bağlı bir
+işi bekletebilir, yani bugün yayını etkilemiyorlar.
 
-Geri istenirse ilgili işe `environment: uretim` satırını eklemek yeterli. Ama
+Onay kapısı geri istenirse ilgili işe `environment: uretim` satırını eklemek
+yeterli; o durumda API ile açılan kayıt adımları gereksiz kalır. Ama
 `goc` için eklenmemeli — o kombinasyon çalışmıyor, sebebi yukarıda "Şema
 değişikliği varsa" bölümünde.
 
@@ -214,7 +239,8 @@ değişikliği varsa" bölümünde.
 
 Yayın için tek gereken hâlâ `CLOUDFLARE_API_TOKEN` ve `CLOUDFLARE_ACCOUNT_ID`;
 ikisi de **repository** secret'ı, ortam secret'ı değil (bu yüzden ortam bağını
-kaldırmak hiçbir sırrı kırmadı).
+kaldırmak hiçbir sırrı kırmadı). Deployments kaydı yeni bir sır istemiyor: işin
+kendi `GITHUB_TOKEN`'ı yetiyor, `yayinla` işinde `deployments: write` izniyle.
 
 ## Runtime sırları hattın dışında
 
