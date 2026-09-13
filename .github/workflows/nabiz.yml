@@ -11,24 +11,35 @@
 # Ikinci adim hata takibinin uyari kanali: sayfalar 200 donerken bir route'un
 # arka planda patladigi durumu da kirmiziya ceviriyor (scripts/hata-say.ts).
 #
-# BILINEN IKI SINIR (GitHub'in kendi davranisi):
-#   - Zamanlanmis kosumlar yogun saatlerde dakikalarca GECIKEBILIR ya da hic
-#     kosmayabilir. Bu bir nabiz, kesin bir SLA olcumu degil.
-#   - Public depoda 60 gun hic hareket olmazsa GitHub zamanlanmis is
-#     akislarini KENDILIGINDEN kapatir. Yani nabiz, en cok ihtiyac duyulacagi
-#     "kimse depoya bakmiyor" doneminde sessizce durabilir.
+# SAAT CLOUDFLARE'DE (src/lib/zamanlayici.ts). Bu is akisi once yalnizca
+# `schedule: */30` ile kosuyordu; 10-13 Eylul 2026'da olculen gercek aralik 2
+# ile 5,5 saatti. GitHub zamanlanmis kosumlari "mumkun oldugunda" baslatiyor.
+# Simdi Worker'in Cron Trigger'i 30 dakikada bir `workflow_dispatch` ile
+# tetikliyor; o tur kosum ertelenip dusurulmuyor. Kontrollerin kendisi ve
+# uyari kanali (basarisiz kosumun e-postasi) yine burada: gozcu gozledigi
+# Worker'in DISINDA kalsin.
 #
-# Basarisizlik bildirimi, cron satirini EN SON degistiren kisiye gidiyor.
+# `schedule` YEDEK: Cloudflare tetigi olurse (silindi, jetonun suresi doldu,
+# Worker patladi) nabiz tamamen susmasin, ve "zamanlayici canli mi" adimi o
+# oldugu anda kirmizi yaksin.
+#
+# Public depoda 60 gun hareket olmazsa GitHub zamanlanmis is akislarini
+# KENDILIGINDEN kapatir. Artik yalnizca yedegi etkiliyor; Cloudflare'in
+# tetikledigi kosumlar devam ediyor.
+#
+# Basarisizlik bildirimi: zamanlanmis kosumda cron satirini EN SON degistiren
+# kisiye, tetiklenen kosumda jetonun sahibine gidiyor.
 
 name: Nabiz
 
 on:
-  schedule:
-    # Otuz dakika: arizayi yarim saat icinde duyurmak yeterli, daha sik kosmak
-    # site dustugunde saatte dort ayri bildirim demek.
-    - cron: "*/30 * * * *"
-  # Elle tetikleme - birlestirmeden sonra ilk kosumu beklemeden gormek icin.
+  # Cloudflare Cron Trigger (worker-girisi.ts) ve elle tetikleme.
   workflow_dispatch:
+  schedule:
+    # Yedek. Alti saat: amaci arizayi hizla duyurmak degil, zamanlayicinin
+    # oldugunu fark etmek. Dakika 17: GitHub saat basindaki yogunlukta
+    # zamanlanmis kosumlari en cok o anda geciktiriyor.
+    - cron: "17 */6 * * *"
 
 concurrency:
   group: nabiz
@@ -41,6 +52,8 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      # "zamanlayici canli mi" adimi bu is akisinin kendi kosumlarini okuyor.
+      actions: read
 
     steps:
       # Yalnizca betikler gerekiyor; `npm ci` YOK. Ikisi de bagimliliksiz
@@ -73,3 +86,28 @@ jobs:
           # Yalnizca okuyan ayri jeton (Account Analytics Read) - yayin jetonu
           # degil. Kurulumu docs/yayin.md > Hata takibi.
           CLOUDFLARE_ANALIZ_TOKENI: ${{ secrets.CLOUDFLARE_ANALIZ_TOKENI }}
+
+      # Cloudflare tetigi hic kosmuyorsa hata kapisina da yazamaz; o durumu
+      # yakalayan tek sey bu adim. YALNIZCA yedek kosumda: tetiklenen kosumda
+      # sorunun cevabi kosumun kendisi.
+      #
+      # Doksan dakika: tetik 30 dakikada bir, tetigin degisikligi Cloudflare'de
+      # 15 dakikaya kadar yayiliyor. Iki kacirilmis tetik ariza, biri degil.
+      - name: zamanlayici canli mi
+        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          son=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow nabiz.yml \
+            --event workflow_dispatch --limit 1 --json createdAt --jq '.[0].createdAt // ""')
+          if [ -z "$son" ]; then
+            echo "zamanlayici: hic tetiklenmis kosum yok - Cloudflare Cron Trigger kosmuyor."
+            exit 1
+          fi
+          dakika=$(( ( $(date -u +%s) - $(date -u -d "$son" +%s) ) / 60 ))
+          if [ "$dakika" -gt 90 ]; then
+            echo "zamanlayici: son tetik $dakika dakika once - Cloudflare Cron Trigger kosmuyor."
+            echo "Ayrinti: Cloudflare > Workers & Pages > randevu > Logs, kaynak = \"cron nabiz\"."
+            exit 1
+          fi
+          echo "zamanlayici: son tetik $dakika dakika once."
