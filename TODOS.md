@@ -3865,18 +3865,23 @@ zaten iki çıkış taşıyor (Faz P kararı, müşteri/işletme ayrımı) ve ü
 ### Elle yapılan (kod dışı)
 
 - [x] Supabase custom SMTP kuruldu (Resend, `bildirim@randevu.enesmemduhoglu.tech`).
-- [ ] **Mail şablonu henüz değiştirilmedi.** `Authentication → Emails →
-      Templates → Reset Password`'de `{{ .ConfirmationURL }}` yerine
-      `{{ .SiteURL }}/sifre-yenile?token_hash={{ .TokenHash }}&type=recovery`
-      yazılmalı. Bu depo dışında yaşayan bir ayar — hiçbir test bunu
-      göremiyor. Değiştirilmeden linkler `/sifre-yenile`'e değil Supabase'in
-      kendi `/verify` ucuna düşer ve `token_hash` hiç gelmez. **Kod bu
-      şablona bağımlı, PR merge olsa bile şablon değişmeden akış uçtan uca
-      çalışmaz.**
-- [ ] E-posta OTP/recovery süresi 24 saatten 1 saate düşürülmedi (öneri
-      duruyor, elle yapılmadı).
-- [ ] Auth hız sınırları (`Authentication → Rate Limits`) gözden geçirilip
-      seçilen değer buraya yazılmadı.
+- [x] **Mail şablonu değiştirildi — 13 Eylül 2026**, Management API
+      (`PATCH /v1/projects/<ref>/config/auth`) ile. Bağlantı
+      `{{ .SiteURL }}/sifre-yenile?token_hash={{ .TokenHash }}&type=recovery`.
+      Konu ve metin de Türkçeye çevrildi ("Şifrenizi yenileyin"); o güne
+      kadar Supabase'in İngilizce varsayılanıydı. Geri okunarak doğrulandı.
+      Bu depo dışında yaşayan bir ayar, hiçbir test onu göremiyor.
+      Değiştirilmeden linkler Supabase'in kendi `/verify` ucuna düşüyordu ve
+      `token_hash` hiç gelmiyordu.
+- [x] E-posta OTP/recovery süresi **zaten 3600 sn** (1 saat). 13 Eylül'de
+      okunduğunda öyleydi; bu satır ne zaman değiştiği bilinmeden açık kalmıştı.
+- [x] Auth hız sınırları okundu, **varsayılanlarında bırakıldı** (13 Eylül):
+      e-posta gönderimi saatte 30, doğrulama 30, OTP 30, anonim kullanıcı
+      30, token yenileme 150. Kullanıcı yokken ölçülecek bir yük yok. Faz Q'da
+      (kalkan 2) yeniden bakılmalı.
+- [ ] **Uçtan uca henüz denenmedi:** gerçek bir kutuya sıfırlama maili
+      isteyip bağlantının `/sifre-yenile?token_hash=` ile açıldığını ve yeni
+      şifreyle girişin çalıştığını görmek.
 
 ### Elle doğrulandı — 7 Eylül 2026
 
@@ -4201,7 +4206,8 @@ olduğunu arıyor.
 
 ### Merge sonrası bakılacak
 
-- [ ] İlk `yayinla` koşumu yeşil — `HATA` binding'li ilk gerçek deploy
+- [x] İlk `yayinla` koşumu yeşil — `HATA` binding'li ilk gerçek deploy
+      (34604897458, 11 Eylül 2026)
 - [ ] Uçtan uca yazma üretimde **henüz gözlenmedi**: yerelde binding bağlandı
       ve kapı çağrıldı, ama Analytics Engine'e düşen ilk veri noktası ilk
       gerçek hatayla görülecek. O gün nabız kırmızı olmalı ve Workers Logs'ta
@@ -4211,3 +4217,131 @@ olduğunu arıyor.
 
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1872,68 KiB** (bütçe 3 MiB).
 P2d sonundaki 1869,57 KiB'den **+3,11 KiB**.
+
+## Faz P2 — nabız zamanlayıcısı
+
+**Kapandı:** Nabzın saati GitHub'dan Cloudflare'e taşındı. Kontroller ve
+bildirim kanalı değişmedi.
+
+### Bulgu — `*/30` gerçekte 2–5,5 saatti
+
+P2e'den sonra koşumlara bakıldığında görüldü: 10–13 Eylül 2026 arasında
+`nabiz.yml`'nin 22 zamanlanmış koşumu arasındaki aralık 2 ile 5,5 saat,
+ortalaması ~3 saatti (ör. 13 Eylül 03:36 → 09:08 arasında hiç koşum yok).
+GitHub zamanlanmış koşumları "mümkün olunca" başlatıyor.
+
+İki sonucu vardı:
+
+- **Hata sayımı kördü.** `hata-say.ts`'in 60 dakikalık penceresi "koşumlar
+  biraz gecikebilir" varsayımıyla seçilmişti. 3 saatlik aralıkta bu, sürenin
+  üçte ikisinde çıkan hataların hiç sayılmaması demekti. P2e'nin "pencere >
+  aralık" gerekçesi bu yüzden hiç tutmadı.
+- **Site çöktüğünde** bu, 30 dakika içinde değil saatler içinde fark ediliyordu.
+
+### Karar — saat Cloudflare'de, kontrol GitHub'da
+
+Worker'ın Cron Trigger'ı 30 dakikada bir `nabiz.yml`'yi `workflow_dispatch`
+ile tetikliyor (`worker-girisi.ts > scheduled` → `src/lib/zamanlayici.ts`).
+Bu tür koşum zamanlanmış koşum gibi ertelenip düşürülmüyor.
+
+**Reddedilen: her şeyi Cloudflare'de yapmak** (kontroller ve uyarı e-postası
+Worker'ın içinde). İki sebep:
+
+- Gözcü gözlediği şeyin içinde kalırdı. Worker bozuk yayınlanırsa, DNS ya da
+  sertifika giderse uyarı da susardı.
+- Uyarı kanalını sıfırdan yazmak gerekirdi: `email.ts` üzerinden e-posta ve
+  site düştüğünde her 30 dakikada bir mail atmamak için bir "bildirdim"
+  durumu. GitHub'ın başarısız koşum e-postası bunu bedavaya yapıyor.
+
+**Reddedilen: pencereyi "son koşumdan bu yana" yapmak.** İlk öneri buydu.
+Hata sayımını düzeltirdi ama sitenin saatlerce düşük kalmasını düzeltmezdi;
+sorun pencerede değil saatteydi.
+
+### Neden ayrı Worker değil
+
+Plan Faz K'nin hatırlatıcısını "adaptörün iç yapısına bağımlılık" gerekçesiyle
+ayrı bir Worker'a koymuştu. OpenNext bu deseni artık belgeliyor
+(opennext.js.org/cloudflare/howtos/custom-worker): giriş dosyası üretilen
+Worker'ın `fetch`'ini aynen geçiriyor, `scheduled` ekliyor. Ayrı Worker ise
+ikinci bir yayın adımı, ikinci bir sır seti ve ikinci bir wrangler dosyası
+demekti. `plan.md > Faz K` buna göre güncellendi; hatırlatıcının nerede
+duracağı Faz K'nin kararı.
+
+Adlandırılmış export'lar (OpenNext'in Durable Object sınıfları) `export *`
+ile geçiyor. Tek tek yazılsaydı OpenNext ileride yeni bir sınıf eklediğinde
+burada unutulurdu.
+
+### Sessizce ölemiyor — iki katman
+
+1. **Tetik koşuyor ama başarısız** (jeton yok, süresi dolmuş, GitHub cevap
+   vermiyor): `hataBildir("cron nabiz", ..., env)`. `kod` alanı `JETON_YOK`,
+   `HTTP_<durum>` ya da ağ hatasının türü. Jeton ve GitHub'ın yanıt gövdesi
+   hiçbir yere konmuyor.
+2. **Tetik hiç koşmuyor** (silindi, Worker patlıyor, işlemci sınırı): kapıya
+   da yazılamaz. `nabiz.yml`'nin yedek zamanlanmış koşumu (6 saatte bir) son
+   `workflow_dispatch` koşumuna bakıyor, 90 dakikadan eskiyse kırmızı.
+
+`hataBildir`'e isteğe bağlı `ortam` parametresi bu yüzden eklendi: sayaç
+`getCloudflareContext`'ten alınıyordu, o da OpenNext'in `fetch`
+sarmalayıcısından geliyor. Cron Trigger o sarmalayıcıdan geçmiyor. Parametre
+olmasaydı tetik hatası yalnızca log'a düşer, sayılmazdı. `writeDataPoint` yine
+yalnızca `hata.ts`'te.
+
+**Doksan dakika:** tetik 30 dakikada bir, tetik değişikliği Cloudflare'de 15
+dakikaya kadar yayılıyor. Tek bir kaçırılmış tetik arıza değil, iki tanesi arıza.
+
+**Yedek neden 6 saat:** yedeğin amacı arızayı hızla duyurmak değil,
+zamanlayıcının öldüğünü fark etmek. Dakikası 17, çünkü GitHub saat başındaki
+yoğunlukta en çok o anı geciktiriyor. Yedek de GitHub'ın saatine tabi; gerçek
+aralığı muhtemelen 6 saatten uzun olacak.
+
+### Sınırlar (ücretsiz plan)
+
+Hesap başına 5 Cron Trigger; bu ilki. Zamanlanmış çağrı başına **10 ms
+işlemci süresi**. Tetik tek bir `fetch` atıyor ve yanıt beklenirken geçen
+süre sayılmıyor. Yerelde ölçülemiyor. Aşılırsa çağrı düşer ve 2. katman
+yakalar.
+
+### `cf:onizle` ile ölçülenler — 13 Eylül 2026
+
+`wrangler dev --test-scheduled` ile, `/__scheduled` elle tetiklenerek:
+
+- [x] `/`, `/api/saglik`, `/dizin` → 200. `fetch` giriş dosyasından aynen geçiyor
+- [x] Jetonsuz tetik → `{"olay":"hata","kaynak":"cron nabiz","tur":"ZamanlayiciHatasi","kod":"JETON_YOK",...}`
+- [x] Sahte jetonla tetik **gerçek GitHub'a** gitti → `HTTP_401`. İstek
+      GitHub'ın kimlik doğrulamasına kadar ulaşıyor (User-Agent ya da biçim
+      yüzünden 403/422 değil). Jeton log'da hiç geçmiyor
+- [x] "Zamanlayıcı canlı mı" betiği yerelde gerçek depoya karşı → son tetik
+      3298 dakika önce, çıkış 1
+- [x] `npm run tip && npm run lint && npm test` temiz
+
+**Ölçülmedi:** gerçek jetonla mutlu yol (204) ve Cron Trigger'ın üretimde
+kendiliğinden koşması. İkisi de merge sonrası.
+
+### Merge öncesi elle iş
+
+- [x] İnce taneli GitHub jetonu: yalnızca bu depo, yalnızca **Actions: Read and
+      write** (`docs/yayin.md > Nabız zamanlayıcısı`) — 14 Eylül 2026
+- [x] `wrangler secret put GITHUB_NABIZ_TOKENI` — 14 Eylül 2026, `wrangler
+      secret list`'te görüldü. Girilmeden merge edilseydi yayın düşmezdi ama
+      tetik her 30 dakikada `JETON_YOK` yazar ve yedek nabız kırmızı yanardı.
+- [ ] Hesapta başka Cron Trigger var mı (ücretsiz planda 5 hak)
+
+### Merge sonrası bakılacak
+
+- [ ] 15 dakika içinde Actions'ta `workflow_dispatch` olaylı ilk Nabız koşumu
+- [ ] Bir gün sonra: tetiklenen koşumlar arası gerçekten ~30 dakika mı
+- [ ] İlk yedek koşumda "zamanlayıcı canlı mı" yeşil
+
+### Bilerek kapsam dışı
+
+- **Nabzın kontrollerini değiştirmek.** Duman testi ve hata sayımı aynı.
+- **Aynı hatanın iki kez bildirilmesi.** 60 dakikalık pencere ile 30
+  dakikalık aralıkta her hata iki koşumda görünüyor. Bilerek: kaçırmaktansa
+  iki kez duymak (P2e'nin gerekçesi, artık gerçekten geçerli).
+- **Next'in log satırındaki sorgu parametreleri** (P2e bulgusu) ayrı iş.
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1876,54 KiB** (bütçe 3 MiB).
+P2e sonundaki 1872,68 KiB'den **+3,86 KiB**.
