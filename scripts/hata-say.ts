@@ -22,10 +22,13 @@
 
 const VERI_SETI = "randevu_hata";
 
-// Pencere nabiz araligindan (30 dk) BILEREK uzun. GitHub zamanlanmis kosumlari
-// dakikalarca geciktirebiliyor; pencere araliga esit olsaydi iki kosum
-// arasindaki fark 30 dakikayi astiginda aradaki hatalar hic sayilmazdi. Bedeli
-// ayni hatanin iki kosumda gorulmesi - kacirmaktansa iki kez duymak.
+// Pencere nabiz araligindan (30 dk) BILEREK uzun: bir tetik kacirilsa ya da
+// kosum birkac dakika gec baslasa da aradaki hatalar sayilsin. Bedeli ayni
+// hatanin iki kosumda gorulmesi - kacirmaktansa iki kez duymak.
+//
+// Bu pencere GitHub'in kendi zamanlamasiyla YETMIYORDU: `*/30` yazili is
+// akisi gercekte 2-5,5 saatte bir kosuyordu ve saatlerin cogu hic
+// sayilmiyordu. Saat artik Cloudflare'de (src/lib/zamanlayici.ts).
 const PENCERE_DAKIKA = 60;
 
 const ZAMAN_ASIMI_MS = 15_000;

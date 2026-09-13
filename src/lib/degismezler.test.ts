@@ -656,3 +656,39 @@ describe("DEGISMEZ 5 - hatalar tek kapidan cikiyor", () => {
     expect(nabiz).toContain("node scripts/hata-say.ts");
   });
 });
+
+describe("Nabiz zamanlayicisi - saat Cloudflare'de, kontrol GitHub'da", () => {
+  // Zincirin her halkasi baska bir dosyada ve biri koptugunda hicbir sey
+  // patlamiyor: nabiz yalnizca GitHub'in kayan zamanlamasina geri donuyor ve
+  // bu, fark edilene kadar saatler suruyor. Halkalar burada tek tek araniyor.
+  const KOK = process.cwd();
+  const oku = (...yol: string[]) => readFileSync(join(KOK, ...yol), "utf-8");
+  const yorumsuzYaml = (metin: string) => metin.replace(/^\s*#.*$/gm, "");
+
+  test("Worker'in girisi zamanlayiciyi tasiyor ve tetik tanimli", () => {
+    const wrangler = oku("wrangler.jsonc");
+    expect(wrangler).toMatch(/"main"\s*:\s*"worker-girisi\.ts"/);
+    expect(wrangler).toMatch(/"crons"\s*:\s*\[\s*"[^"]+"/);
+
+    const giris = oku("worker-girisi.ts");
+    // `fetch` aynen gecmezse site duser; `scheduled` yoksa tetik bos kosar.
+    expect(giris).toContain("fetch: openNext.fetch");
+    expect(giris).toMatch(/async scheduled\([^)]*\)[^{]*\{[^}]*nabziTetikle\(/);
+  });
+
+  test("tetiklenen is akisi var ve elle tetiklenebiliyor", async () => {
+    const { NABIZ_IS_AKISI } = await import("@/lib/zamanlayici");
+    const akis = yorumsuzYaml(oku(".github", "workflows", NABIZ_IS_AKISI));
+    // `workflow_dispatch` yoksa GitHub 422 donuyor - kapiya duser ama ancak
+    // yedek kosumda gorulur.
+    expect(akis).toMatch(/^\s*workflow_dispatch:/m);
+  });
+
+  test("yedek zamanlanmis kosum zamanlayicinin canli oldugunu yokluyor", () => {
+    // Tetik hic kosmuyorsa (silindi, Worker patladi, islemci siniri) kapiya da
+    // yazilamaz. Onu yakalayan tek sey bu adim.
+    const akis = yorumsuzYaml(oku(".github", "workflows", "nabiz.yml"));
+    expect(akis).toMatch(/^\s*schedule:/m);
+    expect(akis).toContain("--event workflow_dispatch");
+  });
+});

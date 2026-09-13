@@ -41,7 +41,7 @@ Yayının yeşil olması Worker'ın **yüklendiğini** söyler, **çalıştığ�
 | Nereden | Nasıl |
 |---|---|
 | `yayinla` işinin son adımı | `--surum` ile — sürüm kimliği `wrangler deployments status --json`'dan |
-| `nabiz` iş akışı | Sürümsüz, 30 dakikada bir |
+| `nabiz` iş akışı | Sürümsüz. Cloudflare Cron Trigger 30 dakikada bir tetikliyor, GitHub'ın kendi zamanlaması 6 saatte bir yedek |
 | Elle | `npm run duman -- https://randevu.enesmemduhoglu.tech` |
 
 **Sürüm neden karşılaştırılıyor:** deploy'dan hemen sonra gelen bir 200'ü eski
@@ -53,10 +53,34 @@ karşılayan sürümün kimliğini taşıyor (`wrangler.jsonc > version_metadata
 geri alma bilerek yok — şema bozuksa eski kod da bozuk çalışır ve geri alma
 yalnızca belirtiyi saklar. Log'a bakılır, gerekiyorsa `npx wrangler rollback`.
 
-**Nabız kırmızıysa** bildirim, `nabiz.yml`'deki cron satırını **en son
-değiştiren** kişiye gidiyor (GitHub'ın kuralı). İki bilinen sınırı var:
-zamanlanmış koşumlar yoğun saatlerde gecikebiliyor, ve public depoda 60 gün
-hareket olmazsa GitHub zamanlanmış iş akışlarını kendiliğinden kapatıyor.
+**Nabzın saati Cloudflare'de.** `nabiz.yml` önce yalnızca `schedule: */30`
+ile koşuyordu. 10-13 Eylül 2026'da ölçülen gerçek aralık 2 ile 5,5 saatti:
+GitHub zamanlanmış koşumları "mümkün olunca" başlatıyor. Şimdi Worker'ın Cron
+Trigger'ı (`worker-girisi.ts > scheduled`, `src/lib/zamanlayici.ts`) iş akışını
+`workflow_dispatch` ile tetikliyor. Kontroller ve bildirim yine GitHub'da,
+çünkü gözcü gözlediği Worker'ın dışında kalmalı.
+
+```
+Cloudflare Cron Trigger (*/30) ──> zamanlayici.ts ──> GitHub workflow_dispatch ──> nabiz.yml
+        │ tetik başarısız                                                        (duman + hata sayımı)
+        v
+  hataBildir("cron nabiz") ──> HATA sayacı ──> yedek koşumun hata sayımı kırmızı
+
+GitHub schedule (6 saatte bir, yedek) ──> nabiz.yml + "zamanlayıcı canlı mı"
+                                          (son tetik 90 dakikadan eskiyse kırmızı)
+```
+
+**Nabız kırmızıysa** bildirim, tetiklenen koşumda jetonun sahibine, yedek
+koşumda `nabiz.yml`'deki cron satırını **en son değiştiren** kişiye gidiyor
+(GitHub'ın kuralı). Public depoda 60 gün hareket olmazsa GitHub zamanlanmış iş
+akışlarını kendiliğinden kapatıyor. Bu artık yalnızca yedeği etkiliyor,
+Cloudflare'in tetiklediği koşumlar devam ediyor.
+
+**"Zamanlayıcı canlı mı" kırmızıysa:** Cloudflare 90 dakikadır tetiklemiyor.
+Logs'ta `kaynak = "cron nabiz"` satırı varsa tetik koşuyor ama GitHub reddediyor.
+`kod` alanı sebebi söylüyor: `JETON_YOK` sır girilmemiş demek, `HTTP_401` ise
+jetonun süresi dolmuş. Satır hiç yoksa tetik hiç koşmuyor: `wrangler.jsonc >
+triggers` silinmiş olabilir ya da Worker patlıyordur.
 
 ## Hata takibi
 
@@ -88,10 +112,10 @@ altında başka bir yerde geçmesini `degismezler.test.ts` yasaklıyor.
 `olay = "hata"` süzgeci. `kaynak` alanı route'u (`route /api/musaitlik`,
 `render /dizin`), `digest` Next'in aynı hataya ait kendi satırını gösteriyor.
 
-**Pencere bir saat, aralık yarım saat.** GitHub zamanlanmış koşumları
-geciktirebiliyor. Pencere aralığa eşit olsaydı, iki koşum arası 30 dakikayı
-aştığında aradaki hatalar hiç sayılmazdı. Bedeli, aynı hatanın iki koşumda
-görünmesi.
+**Pencere bir saat, aralık yarım saat.** Bir tetik kaçırılsa ya da koşum
+birkaç dakika geç başlasa da aradaki hatalar sayılsın diye. Bedeli, aynı
+hatanın iki koşumda görünmesi. Bu pencere GitHub'ın kendi zamanlamasıyla
+yetmiyordu (yukarıda); saat Cloudflare'e bu yüzden taşındı.
 
 **Jeton yoksa nabız kırmızı yanar, sessizce geçmez.** Kurulum için
 aşağıdaki `CLOUDFLARE_ANALIZ_TOKENI` satırına bakın.
@@ -200,7 +224,24 @@ haberi yok:
 ```bash
 wrangler secret put TURNSTILE_SECRET
 wrangler secret put RESEND_API_KEY      # Faz I
+wrangler secret put GITHUB_NABIZ_TOKENI # nabız zamanlayıcısı
 ```
+
+### Nabız zamanlayıcısı
+
+`GITHUB_NABIZ_TOKENI` bir **ince taneli** GitHub jetonu: GitHub → Settings →
+Developer settings → Personal access tokens → *Fine-grained tokens*.
+
+- Repository access: **Only select repositories** → `enesmemduhoglu/randevu`
+- Permissions → Repository → **Actions: Read and write**. Başka izin yok.
+
+Jeton Worker'da duruyor, GitHub'ın secret'larında değil: onu kullanan şey
+GitHub'daki bir iş değil, Cloudflare'in tetiği.
+
+**Jeton girilmezse ya da süresi dolarsa tetik sessizce durmuyor.** Her
+denemede kapıya `JETON_YOK` ya da `HTTP_401` yazılıyor. Yedek koşumun hata
+sayımı ve "zamanlayıcı canlı mı" adımı ikisini de kırmızıya çeviriyor. Süre
+dolduğunda yeni jeton aynı komutla giriliyor.
 
 **Faz L'ye kadar `TURNSTILE_MODU` üretimde tanımsızdı** — `wrangler.jsonc`'de
 `vars` bloğu hiç yoktu, mod `sahte`ye düşüyordu ve bot kapısı canlıda koşulsuz

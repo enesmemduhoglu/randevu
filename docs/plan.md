@@ -328,10 +328,11 @@ karar kaydı `TODOS.md`'de.
 | **H2b** — müşteri listesi | `/panel/musteriler` + detay, müşteri geçmişi, kayıt düzenleme (`PATCH /api/musteriler/[id]`), L3 kısıtının tek müşteri için kaldırılması |
 | **P2a** — sırsız build | `supabaseSunucu()` env'i `cookies()`ten sonra okuyor, CI'ın `cf:kur` adımından sahte değerler kalktı, iki statik kapı |
 | **P2b** — `/saglik` şema kontrolü | Kolon kümesi `sema.ts`'ten türetiliyor, göç sayısı ve `EXCLUDE` kısıtının varlığı; `/api/saglik` makine yolu (200/503), halka açık gövde daraltılmış |
-| **P2c** — şifre sıfırlama | `token_hash` + `verifyOtp`, `/sifremi-unuttum` + `/sifre-yenile`, `girisYonu` `/api/giris` ile ortak, kullanıcı numaralandırması yok. Mail şablonu elle iş olarak açık |
+| **P2c** — şifre sıfırlama | `token_hash` + `verifyOtp`, `/sifremi-unuttum` + `/sifre-yenile`, `girisYonu` `/api/giris` ile ortak, kullanıcı numaralandırması yok. Mail şablonu 13 Eylül'de Management API ile değiştirildi |
 | **P2d** — duman ve nabız | `scripts/duman.ts`; yayından sonra sürüm kimliği eşleşene kadar `/api/saglik` + beş sayfa, `nabiz.yml` 30 dakikada bir. `version_metadata` binding'i → `X-Worker-Surum` |
 | **P2e** — hata takibi | `src/lib/hata.ts > hataBildir()` tek kapı (mesaj taşımıyor), `onRequestError`, Analytics Engine sayacı, nabızda `scripts/hata-say.ts`. `console.error` yalnızca kapıda |
 | **Q** — kalkan 2 | `randevu-kotasi.ts`: numara başına 24 saatte 5 randevu (iptaller dahil), işletme başına 24 saatte 20 yeni çevrim içi müşteri (dolunca yeni numara reddediliyor), `/panel`de yoğunluk uyarısı. IP sınırı CGNAT yüzünden sıkılaştırılmadı |
+| **P2f** — nabız zamanlayıcısı | GitHub'ın `*/30`'u gerçekte 2–5,5 saatte bir koşuyordu. Saat Cloudflare Cron Trigger'a taşındı (`worker-girisi.ts`, `zamanlayici.ts` → `workflow_dispatch`); kontroller GitHub'da kaldı. Tetik başarısızsa kapıya yazıyor, 6 saatlik yedek koşum "zamanlayıcı canlı mı" diye yokluyor |
 
 ### Sıradakiler
 
@@ -341,9 +342,8 @@ motorundan çekildi). P2'nin ilk PR'ı sırların yokluğunda build'i ayağa kal
 (PR #35). Kalanlar, öncelik sırasıyla:
 
 1. **Şifre sıfırlama.** **Kapandı** (PR #37): `token_hash` + `verifyOtp`, `girisYonu`
-   `/api/giris` ile ortak. **Mail şablonu henüz değiştirilmedi** — bu depo dışında
-   yaşayan bir ayar, `TODOS.md > Faz P2` içinde elle iş olarak duruyor; değişmeden
-   akış uçtan uca çalışmıyor.
+   `/api/giris` ile ortak. Mail şablonu (depo dışında yaşayan bir ayar) 13 Eylül'de
+   değiştirildi; uçtan uca deneme hâlâ açık (`TODOS.md > Faz P2 — şifre sıfırlama`).
 2. **`/saglik`'in şemayı gerçekten kontrol etmesi** — kolon kümesini `sema.ts`'ten
    türetip DB ile karşılaştırmak, göç sayısı ve `EXCLUDE` kısıtının varlığı. **Kapandı**
    (PR #36). Deploy sonrası duman testi ve zamanlanmış nabız da **kapandı** (P2d).
@@ -370,10 +370,12 @@ göç gerektirdiği için bekliyor. Gerekçeler `TODOS.md > Faz Q — kalkan 2`.
 `sms.ts > gonder()` adaptörü. **Faz J'nin bıraktığı iş burada kapanıyor:** telefon
 doğrulanmış bir kimlik olunca misafir randevularını numarayla toplu bağlamak güvenli
 hale geliyor (bugün yalnızca iptal bağlantısıyla tek tek ekleniyor — gerekçe
-`TODOS.md > Faz J`). `workers/hatirlatici/` — ayrı, küçük bir Worker; Cron
-Trigger'la `POST /api/cron/hatirlatma` yolunu paylaşılan sırla çağırır. Ayrı Worker, çünkü
-OpenNext'in ürettiği Worker `fetch` export ediyor; `scheduled` handler'ı oraya iliştirmek
-adaptörün iç yapısına bağımlılık yaratır.
+`TODOS.md > Faz J`). Hatırlatıcı bir Cron Trigger. **Ayrı Worker kararı P2f'de
+zayıfladı:** gerekçe "`scheduled`'ı OpenNext'in Worker'ına iliştirmek adaptörün iç
+yapısına bağımlılık yaratır" idi. OpenNext bu deseni artık kendisi belgeliyor ve nabız
+zamanlayıcısı tam bu şekilde kuruldu (`worker-girisi.ts`). Hatırlatma aynı `scheduled`'a
+ikinci tetik olarak eklenebilir. O zaman `POST /api/cron/hatirlatma` ve paylaşılan sır da
+gerekmeyebilir, çünkü `scheduled` iş mantığını doğrudan çağırabilir. Karar Faz K'de verilecek.
 
 ## Doğrulama
 
@@ -401,7 +403,7 @@ oturumuyla iste, sızmadığını gör.
 `/r/<slug>`ten randevu al → panelde gör → iptal linkiyle iptal et → bildirim önizlemesini
 gör. **Aynısı mobil genişlikte ve koyu temada** — hedef kitle telefondan giriyor.
 
-**Deploy doğrulaması:** `cf:kur` çıktısının gzip boyutu (bütçe 3 MiB, bugün 1874 KiB);
+**Deploy doğrulaması:** `cf:kur` çıktısının gzip boyutu (bütçe 3 MiB, bugün 1878 KiB);
 canlı yoklama artık elle değil, `yayinla` işinin son adımı (`scripts/duman.ts`).
 
 ## Riskler ve elle yapılacaklar

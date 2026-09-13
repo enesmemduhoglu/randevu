@@ -1,7 +1,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "randevu",
-  "main": ".open-next/worker.js",
+  // OpenNext'in urettigi Worker'i saran giris: `fetch` aynen geciyor, ustune
+  // Cron Trigger'in `scheduled`'i ekleniyor. Gerekce dosyanin basinda.
+  "main": "worker-girisi.ts",
+  // Nabizin SAATI (src/lib/zamanlayici.ts). GitHub'in kendi zamanlamasi
+  // saatlerce kayiyordu; bu tetik GitHub'daki nabiz is akisini elle tetikliyor.
+  // Ucretsiz planda hesap basina 5 tetik ve cagri basina 10 ms islemci suresi -
+  // tek bir `fetch`, bekleme suresi sayilmiyor.
+  "triggers": {
+    "crons": ["*/30 * * * *"]
+  },
   // workerd 1.20260828.1 ile hizali; ileri bir tarih verilirse calistirici reddeder.
   "compatibility_date": "2026-08-28",
   // nodejs_compat: Prisma ve pg node: API'lerine ihtiyac duyuyor.
