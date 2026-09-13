@@ -4508,3 +4508,69 @@ kendiliğinden koşması. İkisi de merge sonrası.
 `cf:kur` + `wrangler deploy --dry-run`, Faz Q ile birleştikten sonra: **gzip
 1877,85 KiB** (bütçe 3 MiB). Faz Q sonundaki 1873,98 KiB'den **+3,87 KiB**
 (dal tek başına P2e'nin üstünde de +3,86 ölçülmüştü).
+
+---
+
+## Deployments kaydı geri geldi — 14 Eylül 2026
+
+**Kapandı:** "Onay kapıları kaldırıldı — 2 Eylül 2026" bölümünde bilerek kabul
+edilen ikinci kayıp. Kullanıcı reponun Deployments sekmesini kullanmak istedi;
+son kayıt 2 Eylül'deydi, çünkü kaydı açan şey `yayinla` işinin ortam bağıydı.
+
+### `environment:` satırı değil, REST API
+
+Satırı geri koymak tek satırlık iş olurdu ve kaydı GitHub kendisi açardı. Ama
+`uretim` ortamının ayarında zorunlu inceleyici hâlâ duruyor, yani satır kapıyı
+da geri getirirdi. Kapıyı ayardan silmek de 2 Eylül'deki ilkeyi bozardı:
+kapının varlığı yine PR'da görünmeyen bir ayara bağlı kalırdı.
+
+Kayıt `POST /repos/{depo}/deployments` ve `.../statuses` ile açılıp kapatılıyor.
+GitHub'ın belgesinde koruma kurallarının API ile açılan dağıtıma işlediğine
+dair bir şey yok; kurallar ortama bağlı işler için tanımlı. Bir API çağrısı
+zaten bekleyemez: kural işleseydi kayıt adımı düşerdi, yayın değil.
+
+### Ayrıntılar
+
+- **`required_contexts[]` boş dizi.** Verilmezse GitHub commit'in bütün durum
+  kontrollerini yeşil istiyor. `yayinla` işinin kendisi o anda koştuğu için
+  istek 409 ile dönerdi.
+- **`auto_merge=false`.** Ref zaten main'deki SHA; varsayılan `true` main'i
+  ref'e birleştirmeyi deniyor.
+- **Ortam adı `uretim`.** 1–2 Eylül'deki kayıtlar o adın altında, geçmiş
+  kesintisiz kalsın.
+- **`production_environment` verilmedi** (varsayılan `false`), eski kayıtlarla
+  aynı. `auto_inactive` yalnızca üretim olmayan ortamlarda önceki başarılı
+  kayıtları `inactive`e çeviriyor, sekmede tek bir aktif kayıt kalıyor.
+- **Açıklamada Worker sürüm kimliği.** `wrangler rollback <id>` için gereken
+  şey sekmede duruyor. Kimlik opak bir uuid, sır değil (Faz P2).
+- **Duman kırmızıysa `failure`, ama açıklama "CANLIDA" diyor.** Kırmızı duman
+  testi geri alma demek değil; otomatik geri alma bilerek yok.
+- **`continue-on-error`.** Kayıt bir gösterge, kapı değil.
+- **İzin.** Depo varsayılanı `read`. İş düzeyinde `contents: read` +
+  `deployments: write`; yeni sır yok.
+
+### Doğrulama
+
+- [x] `actionlint` (shellcheck dahil) üç iş akışında temiz
+- [x] `gh api` isteğinin gövdesi var olmayan bir adrese gönderilerek görüldü:
+      `required_contexts: []`, `auto_merge: false`
+- [x] `degismezler.test.ts` — 93 test (ci.yml'ın taranan bölümü `dogrula`)
+
+**Ölçülmedi:** kaydın gerçekten açılması. `yayinla` PR'da koşmuyor; ilk kanıt
+merge sonrası.
+
+### Merge sonrası bakılacak
+
+- [ ] Deployments → `uretim` altında merge commit'inin kaydı: `success`,
+      açıklamada sürüm kimliği
+- [ ] İki kayıt adımı log'da yeşil. `continue-on-error` bir hatayı yutmuş
+      olmasın
+- [ ] "View deployment" bağlantısı siteyi açıyor
+
+### Bilerek kapsam dışı
+
+- **`wrangler rollback`'in sekmeye yansıması.** Rollback elle yapılıyor; kaydı
+  da elle güncellemek ikinci bir unutulacak adım olurdu. Kaynak Cloudflare'in
+  sürüm listesi (`docs/yayin.md > Deployments kaydı`).
+- **Yerelden elle yayının kaydı.**
+- **`uretim` ortamının ayarları.** Zorunlu inceleyici duruyor ve etkisiz.

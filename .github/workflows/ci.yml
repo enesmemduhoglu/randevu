@@ -143,10 +143,18 @@ jobs:
     concurrency:
       group: yayin
 
+    # Depo varsayilani `read`; Deployments kaydini acmak yazma izni istiyor.
+    # Is duzeyinde `permissions:` yazilinca sayilmayan her kapsam `none`a
+    # dusuyor, o yuzden checkout'un istedigi `contents: read` de burada.
+    permissions:
+      contents: read
+      deployments: write
+
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_SEND_METRICS: "false"
+      KOSUM_ADRESI: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       # Bunlar secret degil repository VARIABLE olarak duruyor, cunku hepsi
       # tanimi geregi halka acik: anon anahtari ve Turnstile site anahtari
@@ -209,11 +217,39 @@ jobs:
             exit 1
           fi
 
+      # GITHUB DEPLOYMENTS KAYDI - ortam bagi OLMADAN.
+      #
+      # `environment: uretim` satiri bu kaydi kendiliginden acardi, ama ortamin
+      # ayarinda duran zorunlu inceleyiciyi de geri getirirdi (bkz. yukaridaki
+      # ONAY KAPISI YOK). Kayit REST API ile elle aciliyor: koruma kurallari
+      # yalnizca ortama BAGLI isler icin isliyor, API ile acilan dagitimda kapi
+      # yok. Ortam adi yine `uretim`, cunku 1-2 Eylul'deki gecmis o adin altinda.
+      #
+      # `required_contexts[]` bos dizi olarak gitmek ZORUNDA: verilmezse GitHub
+      # commit'in butun durum kontrollerinin yesil olmasini istiyor, bu isin
+      # kendisi o anda hala kosuyor ve istek 409 ile doner.
+      #
+      # continue-on-error: kayit bir GOSTERGE, kapi degil. GitHub API'sindeki
+      # bir aksaklik yayini durdurmasin.
+      - name: dagitim kaydi ac
+        id: kayit
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/deployments" \
+            -f ref="$GITHUB_SHA" -f environment=uretim -F auto_merge=false \
+            -f 'required_contexts[]' --jq .id)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" \
+            -f state=in_progress -f log_url="$KOSUM_ADRESI" --silent
+
       # cf:yayinla = opennextjs-cloudflare build + deploy. Wrangler'in cikti
       # verdigi "Total Upload / gzip" satiri plandaki boyut olcumu: ucretsiz
       # plan sinirinin (3 MiB gzip) her yayinda neresinde oldugumuz burada
       # gorunur.
       - name: derle ve yayinla
+        id: yayin
         run: npm run cf:yayinla
 
       # Yayinin YESIL olmasi Worker'in yuklendigini soyler, calistigini degil.
@@ -232,6 +268,7 @@ jobs:
       # Otomatik geri alma BILEREK yok - sema bozuksa eski kod da bozuk
       # calisir ve geri alma yalnizca belirtiyi saklar.
       - name: duman testi
+        id: duman
         run: |
           surum=$(npx wrangler deployments status --json | node -e '
             let v = ""; process.stdin.on("data", (p) => (v += p));
@@ -242,4 +279,39 @@ jobs:
               console.log(tam.version_id);
             });')
           echo "yayinlanan surum: $surum"
+          echo "surum=$surum" >> "$GITHUB_OUTPUT"
           node scripts/duman.ts "$NEXT_PUBLIC_SITE_URL" --surum "$surum"
+
+      # Kaydin son durumu, uc ihtimal:
+      #   - duman yesil                 -> success; aciklamada surum kimligi,
+      #                                    `wrangler rollback <id>` icin gereken sey
+      #   - yayin cikti, duman kirmizi  -> failure, ama aciklama "CANLIDA" diyor:
+      #                                    kirmizi duman testi geri alma DEMEK
+      #                                    DEGIL (otomatik geri alma bilerek yok)
+      #   - yayin adimi tamamlanmadi    -> failure
+      #
+      # `always()`: kirmizi bir kosumda kayit "in_progress"te asili kalmasin.
+      # Aciklama GitHub'da en fazla 140 karakter.
+      - name: dagitim kaydini kapat
+        if: always() && steps.kayit.outputs.id != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KAYIT: ${{ steps.kayit.outputs.id }}
+          YAYIN: ${{ steps.yayin.outcome }}
+          DUMAN: ${{ steps.duman.outcome }}
+          SURUM: ${{ steps.duman.outputs.surum }}
+        run: |
+          if [ "$DUMAN" = success ]; then
+            durum=success
+            aciklama="surum $SURUM - duman testi yesil"
+          elif [ "$YAYIN" = success ]; then
+            durum=failure
+            aciklama="surum ${SURUM:-bilinmiyor} CANLIDA ama duman testi kirmizi - bkz. docs/yayin.md"
+          else
+            durum=failure
+            aciklama="yayin adimi: $YAYIN - canlidaki surum icin: wrangler deployments status"
+          fi
+          gh api -X POST "repos/$GITHUB_REPOSITORY/deployments/$KAYIT/statuses" \
+            -f state="$durum" -f description="$aciklama" \
+            -f environment_url="$NEXT_PUBLIC_SITE_URL" -f log_url="$KOSUM_ADRESI" --silent
