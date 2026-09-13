@@ -96,14 +96,22 @@ export function hataOzeti(kaynak: string, hata: unknown): HataOzeti {
   }
 }
 
+/// Worker'in `env`'i ya da ona benzeyen herhangi bir nesne. Yalnizca `HATA`
+/// alanina bakiliyor.
+export type HataOrtami = Record<string, unknown>;
+
+function yaziciSec(ortam: HataOrtami): OlayYazici | null {
+  const aday = ortam[BINDING];
+  return aday && typeof (aday as OlayYazici).writeDataPoint === "function"
+    ? (aday as OlayYazici)
+    : null;
+}
+
 async function olayYazici(): Promise<OlayYazici | null> {
   try {
     const { getCloudflareContext } = await import("@opennextjs/cloudflare");
     const { env } = await getCloudflareContext({ async: true });
-    const aday = (env as unknown as Record<string, unknown>)[BINDING];
-    return aday && typeof (aday as OlayYazici).writeDataPoint === "function"
-      ? (aday as OlayYazici)
-      : null;
+    return yaziciSec(env as unknown as HataOrtami);
   } catch {
     // Cloudflare baglami yok (vitest, `next dev`): yalnizca log.
     return null;
@@ -112,7 +120,16 @@ async function olayYazici(): Promise<OlayYazici | null> {
 
 /// ASLA firlatmaz. Hata kapisinin kendi hatasi, bildirmeye calistigi hatanin
 /// yerini alip istegi baska bir sekilde dusurmemeli.
-export async function hataBildir(kaynak: string, hata: unknown): Promise<void> {
+///
+/// `ortam` YALNIZCA istek disinda verilir (`worker-girisi.ts > scheduled`).
+/// `getCloudflareContext` baglami OpenNext'in `fetch` sarmalayicisindan aliyor;
+/// Cron Trigger o sarmalayicidan gecmiyor, yani orada sayac bulunamaz ve hata
+/// yalnizca log'a duserdi - nabizin sayamadigi bir hata, uyari da uretmez.
+export async function hataBildir(
+  kaynak: string,
+  hata: unknown,
+  ortam?: HataOrtami,
+): Promise<void> {
   const ozet = hataOzeti(kaynak, hata);
 
   try {
@@ -122,7 +139,7 @@ export async function hataBildir(kaynak: string, hata: unknown): Promise<void> {
   }
 
   try {
-    const yazici = await olayYazici();
+    const yazici = ortam ? yaziciSec(ortam) : await olayYazici();
     yazici?.writeDataPoint({
       blobs: [ozet.kaynak, ozet.tur, ozet.kod ?? "", ozet.kisit ?? ""],
       indexes: [ozet.kaynak],
