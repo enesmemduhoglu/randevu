@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
 
 import { hizmet, isletme, kullanici, musteri, personel, randevu } from "@/db/sema";
@@ -463,7 +463,14 @@ async function hamKisitAyariYaz(isletmeId: string, gun: number) {
 async function halkaAcikYaz(
   slug: string,
   k: Kurulum,
-  secenekler: { simdi: Date; telefon?: string; baslangicSaati?: number },
+  secenekler: {
+    simdi: Date;
+    telefon?: string;
+    baslangicSaati?: number;
+    acik?: number;
+    gunluk?: number;
+    yeniMusteri?: number;
+  },
 ) {
   const db = await getHalkaAcikDb(slug);
   if (!db) throw new Error("isletme bulunamadi");
@@ -480,7 +487,12 @@ async function halkaAcikYaz(
     not: null,
     iptalToken: token(),
     simdi: secenekler.simdi,
-    enCokAcikRandevu: 3,
+    enCokAcikRandevu: secenekler.acik ?? 3,
+    // Faz Q tavanlari varsayilan olarak ULASILMAZ: bu dosyadaki diger
+    // testlerin konusu degiller ve bir gun o testleri sebebi gorunmeyen bir
+    // "gunluk-sinir" ile kirmiziya dusurmemeliler.
+    enCokGunlukRandevu: secenekler.gunluk ?? 100,
+    enCokGunlukYeniMusteri: secenekler.yeniMusteri ?? 100,
     otomatikOnay: true,
   });
 }
@@ -673,5 +685,270 @@ describe("gelmedi kisitinin OKUNMASI", () => {
     expect((await halkaAcikYaz("a", a, { simdi })).durum).toBe("kisitli");
     // Ayni numara, baska salon: kisit kiraciya ozel, gecmis ve notlar gibi.
     expect((await halkaAcikYaz("b", b, { simdi })).durum).toBe("tamam");
+  });
+});
+
+// ---- Son 24 saatin tavanlari (Faz Q) --------------------------------------
+//
+// Oturumsuz yolun numara degistiren betige karsi iki kapisi. Iki tavan da
+// `olusturma_tarihi` uzerinden VERITABANI SAATIYLE sayiliyor; pencerenin
+// disini sinamak icin satirlarin olusturma ani geriye yaziliyor - 24 saat
+// beklemek mumkun degil.
+//
+// Tavanlar testte kucuk (1-2) veriliyor: gercek degerler (5 ve 20)
+// `randevu-kotasi.ts`'te ve route testi onlari uctan uca ariyor.
+
+/// Randevularin acik sayilmasi icin "su an" randevu gununden once.
+const ONCESI = new Date(Date.UTC(2026, 2, 1, 12, 0, 0));
+
+async function hamOlusturmayiGeriAl(tablo: "randevu" | "musteri", id: string) {
+  const db = await getDb();
+  const geri = sql`now() - interval '25 hours'`;
+  if (tablo === "randevu") {
+    await db.update(randevu).set({ olusturmaTarihi: geri }).where(eq(randevu.id, id));
+  } else {
+    await db.update(musteri).set({ olusturmaTarihi: geri }).where(eq(musteri.id, id));
+  }
+}
+
+async function hamDurumYaz(id: string, durum: RandevuDurumu) {
+  const db = await getDb();
+  await db.update(randevu).set({ durum }).where(eq(randevu.id, id));
+}
+
+/// Isletmenin panelden ekledigi musteri ve randevusu (`kaynak: ISLETME`).
+async function hamIsletmeRandevusu(
+  k: Kurulum,
+  veri: { musteriId?: string; telefon?: string; baslangicSaati: number },
+) {
+  const db = await getDb();
+  let musteriId = veri.musteriId;
+  if (!musteriId) {
+    const [m] = await db
+      .insert(musteri)
+      .values({ isletmeId: k.isletmeId, ad: "Telefonla arayan", telefon: veri.telefon! })
+      .returning();
+    musteriId = m.id;
+  }
+  const bas = saat(veri.baslangicSaati);
+  await db.insert(randevu).values({
+    isletmeId: k.isletmeId,
+    personelId: k.personelId,
+    hizmetId: k.hizmetId,
+    musteriId,
+    baslangic: bas,
+    bitis: new Date(bas.getTime() + 30 * 60_000),
+    durum: "ONAYLI",
+    kaynak: "ISLETME",
+    iptalToken: token(),
+  });
+}
+
+async function hamMusteriTelefonla(isletmeId: string, telefon: string) {
+  const db = await getDb();
+  const [kayit] = await db
+    .select()
+    .from(musteri)
+    .where(and(eq(musteri.isletmeId, isletmeId), eq(musteri.telefon, telefon)))
+    .limit(1);
+  return kayit ?? null;
+}
+
+async function hamRandevuSay(musteriId: string) {
+  const db = await getDb();
+  return (await db.select().from(randevu).where(eq(randevu.musteriId, musteriId)))
+    .length;
+}
+
+/// Basarili yazmanin randevusu - testin sonraki adimi ona dokunacak.
+function yazilan(sonuc: Awaited<ReturnType<typeof halkaAcikYaz>>) {
+  if (sonuc.durum !== "tamam") throw new Error(`beklenmeyen sonuc: ${sonuc.durum}`);
+  return sonuc.randevu;
+}
+
+describe("numara basina gunluk tavan", () => {
+  test("tavan dolunca ayni numara 'gunluk-sinir' aliyor, randevu yazilmiyor", async () => {
+    const a = await isletmeKur("a");
+    const kota = { simdi: ONCESI, gunluk: 2 };
+
+    yazilan(await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 13 }));
+    yazilan(await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 14 }));
+    const ucuncu = await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 15 });
+
+    expect(ucuncu.durum).toBe("gunluk-sinir");
+    expect(await hamRandevuSay(a.musteriId)).toBe(2);
+  });
+
+  test("IPTAL edilen randevular da sayiliyor - al/iptal et dongusu kapali", async () => {
+    const a = await isletmeKur("a");
+    const kota = { simdi: ONCESI, gunluk: 2 };
+
+    // Acik randevu sayisi burada SIFIR: acik sinir bu donguyu hic gormezdi.
+    for (const baslangicSaati of [13, 14]) {
+      const r = yazilan(await halkaAcikYaz("a", a, { ...kota, baslangicSaati }));
+      await hamDurumYaz(r.id, "IPTAL");
+    }
+
+    expect((await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 15 })).durum).toBe(
+      "gunluk-sinir",
+    );
+  });
+
+  test("24 saatten eski randevular sayilmiyor - pencere kayiyor", async () => {
+    const a = await isletmeKur("a");
+    const kota = { simdi: ONCESI, gunluk: 2 };
+
+    for (const baslangicSaati of [13, 14]) {
+      const r = yazilan(await halkaAcikYaz("a", a, { ...kota, baslangicSaati }));
+      await hamOlusturmayiGeriAl("randevu", r.id);
+    }
+
+    expect((await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 15 })).durum).toBe(
+      "tamam",
+    );
+  });
+
+  test("isletmenin elle ekledigi randevu musterinin kotasini yemiyor", async () => {
+    const a = await isletmeKur("a");
+    await hamIsletmeRandevusu(a, { musteriId: a.musteriId, baslangicSaati: 9 });
+    await hamIsletmeRandevusu(a, { musteriId: a.musteriId, baslangicSaati: 10 });
+
+    const sonuc = await halkaAcikYaz("a", a, { simdi: ONCESI, gunluk: 2, acik: 10 });
+
+    expect(sonuc.durum).toBe("tamam");
+  });
+
+  test("ikisi birden doluysa gunluk sinir aciktan ONCE donuyor", async () => {
+    const a = await isletmeKur("a");
+    const kota = { simdi: ONCESI, gunluk: 2, acik: 2 };
+
+    yazilan(await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 13 }));
+    yazilan(await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 14 }));
+
+    // "Once birini iptal edin" (acik sinirin mesaji) burada yanlis yol olurdu:
+    // iptal edilen randevu da gunluk sayimda kaliyor.
+    expect((await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 15 })).durum).toBe(
+      "gunluk-sinir",
+    );
+  });
+
+  test("IDOR: bir isletmedeki gunluk sayim digerine SIZMIYOR", async () => {
+    const a = await isletmeKur("a");
+    const b = await isletmeKur("b");
+    const kota = { simdi: ONCESI, gunluk: 1 };
+
+    yazilan(await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 13 }));
+
+    expect((await halkaAcikYaz("a", a, { ...kota, baslangicSaati: 14 })).durum).toBe(
+      "gunluk-sinir",
+    );
+    // Ayni numara, baska salon: ayri musteri satiri, ayri sayim.
+    expect((await halkaAcikYaz("b", b, { ...kota, baslangicSaati: 14 })).durum).toBe(
+      "tamam",
+    );
+  });
+});
+
+/// Yeni bir numarayla, verilen saatte, tavani 2 olan kapidan randevu ister.
+/// Yeni musteri testlerinde degisen yalnizca numara ve saat.
+function yeniNumarayla(slug: string, k: Kurulum, telefon: string, baslangicSaati: number) {
+  return halkaAcikYaz(slug, k, { simdi: ONCESI, yeniMusteri: 2, telefon, baslangicSaati });
+}
+
+describe("isletme basina gunluk yeni musteri tavani", () => {
+  test("tavan dolunca YENI numara reddediliyor ve musteri satiri YAZILMIYOR", async () => {
+    const a = await isletmeKur("a");
+
+    yazilan(await yeniNumarayla("a", a, "5550000001", 13));
+    yazilan(await yeniNumarayla("a", a, "5550000002", 14));
+    const sonuc = await yeniNumarayla("a", a, "5550000003", 15);
+
+    expect(sonuc.durum).toBe("yeni-musteri-siniri");
+    // Reddedilen istek transaction'i hatasiz bitiriyor. Musteri kaydi kapidan
+    // SONRA yazilsaydi burada randevusu olmayan bir satir kalirdi.
+    expect(await hamMusteriTelefonla(a.isletmeId, "5550000003")).toBeNull();
+  });
+
+  test("kayitli musteri tavan doluyken randevu alabiliyor", async () => {
+    const a = await isletmeKur("a");
+    yazilan(await yeniNumarayla("a", a, "5550000001", 13));
+    yazilan(await yeniNumarayla("a", a, "5550000002", 14));
+
+    // Kurulumun musterisi (5551112233) zaten kayitli: tavan yalnizca yeni
+    // numaraya, salonun tanidigi musteriye degil.
+    expect((await yeniNumarayla("a", a, "5551112233", 15)).durum).toBe("tamam");
+  });
+
+  test("24 saatten eski musteriler sayilmiyor", async () => {
+    const a = await isletmeKur("a");
+    for (const [telefon, baslangicSaati] of [
+      ["5550000001", 13],
+      ["5550000002", 14],
+    ] as const) {
+      yazilan(await yeniNumarayla("a", a, telefon, baslangicSaati));
+      const m = await hamMusteriTelefonla(a.isletmeId, telefon);
+      await hamOlusturmayiGeriAl("musteri", m!.id);
+    }
+
+    expect((await yeniNumarayla("a", a, "5550000003", 15)).durum).toBe("tamam");
+  });
+
+  test("panelden eklenen musteriler cevrim ici tavani doldurmuyor", async () => {
+    const a = await isletmeKur("a");
+    // Telefonla arayanlari deftere geciren isletme kendi kapisini kapatmamali.
+    await hamIsletmeRandevusu(a, { telefon: "5550000001", baslangicSaati: 9 });
+    await hamIsletmeRandevusu(a, { telefon: "5550000002", baslangicSaati: 10 });
+
+    expect((await yeniNumarayla("a", a, "5550000003", 15)).durum).toBe("tamam");
+  });
+
+  test("IDOR: baska isletmenin yeni musterileri tavani doldurmuyor", async () => {
+    const a = await isletmeKur("a");
+    const b = await isletmeKur("b");
+    yazilan(await yeniNumarayla("b", b, "5550000001", 13));
+    yazilan(await yeniNumarayla("b", b, "5550000002", 14));
+
+    expect((await yeniNumarayla("b", b, "5550000003", 15)).durum).toBe(
+      "yeni-musteri-siniri",
+    );
+    // Ayni numara A'da yepyeni bir musteri ve A'nin tavani bos.
+    expect((await yeniNumarayla("a", a, "5550000003", 15)).durum).toBe("tamam");
+  });
+});
+
+describe("cevrimIciYeniMusteriSayisi", () => {
+  test("panel kapinin saydigini sayiyor: eski ve panelden eklenenler disarida", async () => {
+    const a = await isletmeKur("a");
+    const yaz = (telefon: string, baslangicSaati: number) =>
+      halkaAcikYaz("a", a, { simdi: ONCESI, telefon, baslangicSaati });
+
+    yazilan(await yaz("5550000001", 13));
+    yazilan(await yaz("5550000002", 14));
+    // Ayni musterinin ikinci randevusu sayiyi artirmiyor: sayilan musteri.
+    yazilan(await yaz("5550000002", 16));
+
+    yazilan(await yaz("5550000003", 15));
+    const eski = await hamMusteriTelefonla(a.isletmeId, "5550000003");
+    await hamOlusturmayiGeriAl("musteri", eski!.id);
+
+    await hamIsletmeRandevusu(a, { telefon: "5550000004", baslangicSaati: 9 });
+
+    const db = await getScopedDb(a.oturum);
+    expect(await db.cevrimIciYeniMusteriSayisi()).toBe(2);
+  });
+
+  test("IDOR: yalnizca oturumun isletmesini sayiyor", async () => {
+    const a = await isletmeKur("a");
+    const b = await isletmeKur("b");
+    for (const [telefon, baslangicSaati] of [
+      ["5550000001", 13],
+      ["5550000002", 14],
+      ["5550000003", 15],
+    ] as const) {
+      yazilan(await halkaAcikYaz("b", b, { simdi: ONCESI, telefon, baslangicSaati }));
+    }
+
+    expect(await (await getScopedDb(a.oturum)).cevrimIciYeniMusteriSayisi()).toBe(0);
+    expect(await (await getScopedDb(b.oturum)).cevrimIciYeniMusteriSayisi()).toBe(3);
   });
 });

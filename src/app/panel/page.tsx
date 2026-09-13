@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { YogunlukUyarisi } from "@/components/panel/yogunluk-uyarisi";
 import { auth, isletmeOturumu } from "@/lib/auth";
 import { getScopedDb } from "@/lib/scoped-db";
 
@@ -39,11 +40,17 @@ export default async function PanelSayfasi() {
   const isletme = await db.isletmeyiGetir();
   if (!isletme) redirect("/");
 
-  const [hizmetler, personeller, calismaSaatleri] = await Promise.all([
-    db.hizmetleriListele(),
-    db.personelleriListele(),
-    db.calismaSaatleriniListele(),
-  ]);
+  const [hizmetler, personeller, calismaSaatleri, yeniMusteriSayisi] =
+    await Promise.all([
+      db.hizmetleriListele(),
+      db.personelleriListele(),
+      db.calismaSaatleriniListele(),
+      // Yogunluk uyarisi (Faz Q) YALNIZCA bu sayfada: isletmenin giriste
+      // indigi yer burasi. Duzene koymak her panel sayfasina bir sorgu
+      // eklerdi, ustelik duzen sayfalar arasi geciste yeniden cizilmiyor -
+      // uyari zaten tazelenmezdi.
+      db.cevrimIciYeniMusteriSayisi(),
+    ]);
 
   const aktifPersonel = personeller.filter((p) => p.aktif);
 
@@ -88,6 +95,8 @@ export default async function PanelSayfasi() {
             : `İşletmenizi randevu almaya hazırlamak için ${kalanAdim} adım kaldı.`}
         </p>
       </div>
+
+      <YogunlukUyarisi sayi={yeniMusteriSayisi} />
 
       <Card>
         <CardHeader>

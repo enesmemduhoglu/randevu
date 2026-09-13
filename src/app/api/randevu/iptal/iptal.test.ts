@@ -121,6 +121,8 @@ async function randevuKur(k: Kurulum, token: string) {
     iptalToken: token,
     simdi: SIMDI,
     enCokAcikRandevu: 5,
+    enCokGunlukRandevu: 100,
+    enCokGunlukYeniMusteri: 100,
     otomatikOnay: true,
   });
 

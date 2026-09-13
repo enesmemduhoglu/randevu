@@ -611,6 +611,75 @@ test("sinir BASKA numarayi engellemiyor", async () => {
   expect(await doluSaatler(a)).toHaveLength(4);
 });
 
+// ---- Son 24 saatin tavanlari (Faz Q) ---------------------------------------
+//
+// Kurallarin kendisi (pencere, iptallerin sayilmasi, kaynak, IDOR)
+// scoped-db-randevu.test.ts'te kucuk tavanlarla sinaniyor. Burada aranan:
+// route GERCEK sayilari geciyor mu ve cevap musteriye kullanilabilir, sayi
+// sizdirmayan bir metin mi.
+
+test("gunluk tavan: iptal edilenler dahil 5 randevudan sonra ayni numara 429", async () => {
+  const a = await isletmeKur("A Salonu");
+
+  for (const baslangic of [SAAT_10, SAAT_12, SAAT_14]) {
+    await basari(await POST(istek(govde(a, { baslangic }))));
+  }
+  // Acik sinir (3) doldu; isletme ucunu de iptal ediyor ve saatler bosaliyor.
+  for (const r of await a.db.randevulariListele(GUN_BASI, ERTESI_GUN)) {
+    expect(await a.db.randevuDurumunuDegistir(r.id, "IPTAL")).toBe(1);
+  }
+  for (const baslangic of [SAAT_10, SAAT_12]) {
+    await basari(await POST(istek(govde(a, { baslangic }))));
+  }
+
+  const altinci = await POST(istek(govde(a, { baslangic: SAAT_14 })));
+
+  expect(altinci.status).toBe(429);
+  const metin = await hataMetni(altinci);
+  expect(metin).toContain("son 24 saatte");
+  // Sayi betige kotasini ogretirdi; mesru musteriye bir sey kazandirmiyor.
+  expect(metin).not.toContain("5");
+  // Acik sinirin "once birini iptal edin" yolu burada ise yaramaz.
+  expect(metin).not.toContain("iptal");
+  expect(await doluSaatler(a)).toHaveLength(2);
+});
+
+test("yeni musteri tavani: 21. yeni numara 429 aliyor, kayitli musteri geciyor", async () => {
+  const a = await isletmeKur("A Salonu");
+  await a.db.ayarlariGuncelle({ telefon: "2241234567" });
+
+  // Her biri ayri numara ve ayri saat: 20 yeni musteri, 00:00-19:00.
+  for (let i = 0; i < 20; i++) {
+    const yanit = await POST(
+      istek(
+        govde(a, {
+          baslangic: saat(i * 60),
+          telefon: `53000000${String(i).padStart(2, "0")}`,
+        }),
+      ),
+    );
+    expect(yanit.status).toBe(201);
+  }
+
+  const yirmiBirinci = await POST(
+    istek(govde(a, { baslangic: saat(20 * 60), telefon: "5309999999" })),
+  );
+
+  expect(yirmiBirinci.status).toBe(429);
+  const metin = await hataMetni(yirmiBirinci);
+  // Musterinin yapabilecegi tek sey aramak: numara mesajda.
+  expect(metin).toContain("0224 123 45 67");
+  // Ne tavan ne sebep: isletmenin hacmi disari verilmiyor.
+  expect(metin).not.toContain("20");
+  expect(metin).not.toContain("yeni müşteri");
+
+  // Ilk gelen numara artik kayitli musteri - tavan ona uygulanmiyor.
+  const kayitli = await POST(
+    istek(govde(a, { baslangic: saat(21 * 60), telefon: "5300000000" })),
+  );
+  expect(kayitli.status).toBe(201);
+});
+
 // ---- Gelmedi kisiti (Faz L3) -----------------------------------------------
 //
 // Kisitin kendi kurallari (sinir, kiraci izolasyonu, ayarin 0 olmasi)

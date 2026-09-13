@@ -114,6 +114,8 @@ async function randevuKur(
     iptalToken: token,
     simdi: SIMDI,
     enCokAcikRandevu: 5,
+    enCokGunlukRandevu: 100,
+    enCokGunlukYeniMusteri: 100,
     otomatikOnay: true,
   });
 
