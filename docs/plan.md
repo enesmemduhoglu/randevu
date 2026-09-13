@@ -331,6 +331,7 @@ karar kaydı `TODOS.md`'de.
 | **P2c** — şifre sıfırlama | `token_hash` + `verifyOtp`, `/sifremi-unuttum` + `/sifre-yenile`, `girisYonu` `/api/giris` ile ortak, kullanıcı numaralandırması yok. Mail şablonu elle iş olarak açık |
 | **P2d** — duman ve nabız | `scripts/duman.ts`; yayından sonra sürüm kimliği eşleşene kadar `/api/saglik` + beş sayfa, `nabiz.yml` 30 dakikada bir. `version_metadata` binding'i → `X-Worker-Surum` |
 | **P2e** — hata takibi | `src/lib/hata.ts > hataBildir()` tek kapı (mesaj taşımıyor), `onRequestError`, Analytics Engine sayacı, nabızda `scripts/hata-say.ts`. `console.error` yalnızca kapıda |
+| **Q** — kalkan 2 | `randevu-kotasi.ts`: numara başına 24 saatte 5 randevu (iptaller dahil), işletme başına 24 saatte 20 yeni çevrim içi müşteri (dolunca yeni numara reddediliyor), `/panel`de yoğunluk uyarısı. IP sınırı CGNAT yüzünden sıkılaştırılmadı |
 
 ### Sıradakiler
 
@@ -361,11 +362,9 @@ takibi`.
 **`scoped-db.ts` bölünmesi P2'den düşürüldü** — ölçülen faydası yok (bundle 0, test
 süresi 0) ve kapanış değişkeni disiplinini zayıflatıyor. Gerekçe `TODOS.md > Faz P2`.
 
-**Faz Q — kalkan 2**
-Misafir randevusu kalıyor (gerekçe `TODOS.md > Faz J üstüne gelen düzeltmeler`);
-kalkan burada güçleniyor: IP hız sınırının sıkılaştırılması, telefon başına günlük
-randevu tavanı, işletme başına günlük yeni-müşteri tavanı, panelde şüpheli yoğunluk
-uyarısı.
+**Faz Q — kalkan 2** — **kapandı.** Dört maddenin üçü yapıldı; IP hız sınırının
+sıkılaştırılması CGNAT gerekçesiyle reddedildi. İşletmeye özel ayarlanabilir tavan
+göç gerektirdiği için bekliyor. Gerekçeler `TODOS.md > Faz Q — kalkan 2`.
 
 **Faz K — SMS ve hatırlatma**
 `sms.ts > gonder()` adaptörü. **Faz J'nin bıraktığı iş burada kapanıyor:** telefon
@@ -402,7 +401,7 @@ oturumuyla iste, sızmadığını gör.
 `/r/<slug>`ten randevu al → panelde gör → iptal linkiyle iptal et → bildirim önizlemesini
 gör. **Aynısı mobil genişlikte ve koyu temada** — hedef kitle telefondan giriyor.
 
-**Deploy doğrulaması:** `cf:kur` çıktısının gzip boyutu (bütçe 3 MiB, bugün 1873 KiB);
+**Deploy doğrulaması:** `cf:kur` çıktısının gzip boyutu (bütçe 3 MiB, bugün 1874 KiB);
 canlı yoklama artık elle değil, `yayinla` işinin son adımı (`scripts/duman.ts`).
 
 ## Riskler ve elle yapılacaklar
