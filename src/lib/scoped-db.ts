@@ -152,6 +152,11 @@ export type RandevuYazma = {
   /// `new Date()` okumuyor ki testler zamani sabitleyebilsin.
   simdi: Date;
   enCokAcikRandevu: number;
+  /// Son 24 saatin iki tavani (Faz Q, `randevu-kotasi.ts`). Parametre, cunku
+  /// testler kucuk bir tavanla sinayabilmeli; ZORUNLU alan, cunku route birini
+  /// gecmeyi unuttugunda koruma sessizce kalkmasin, derleme dussun.
+  enCokGunlukRandevu: number;
+  enCokGunlukYeniMusteri: number;
   otomatikOnay: boolean;
 };
 
@@ -276,6 +281,50 @@ async function musteriyiCoz(
   if (!yarisiKaybeden) throw new Error("Musteri kaydi olusturulamadi");
 
   return { id: yarisiKaybeden.id, kisitBitis: yarisiKaybeden.kisitBitis };
+}
+
+/// "Son 24 saat" penceresinin alt siniri - VERITABANI SAATIYLE (Faz Q).
+///
+/// Sayilan kolon (`olusturma_tarihi`) `defaultNow()` ile Postgres'in saatinden
+/// yaziliyor. Pencere uygulamadan gelen `simdi` ile olculseydi Worker ile
+/// Postgres arasindaki kayma pencereyi kaydirirdi - L3'te kisit suresinin
+/// `now()` ile hesaplanmasinin gerekcesiyle ayni. Transaction icinde `now()`
+/// islemin baslangic ani, yani ayni islemdeki iki sayim ayni pencereye bakiyor.
+function son24Saat() {
+  return sql`now() - interval '24 hours'`;
+}
+
+/// Son 24 saatte CEVRIM ICI randevu alan yeni musteri sayisi (Faz Q).
+///
+/// Iki tarafta AYNI kod: yazma kapisi tavani bununla sayiyor, panel uyarisi
+/// bununla gosteriyor. Iki kopya ayrissa panel "tavana uc kisi kaldi" derken
+/// kapi coktan kapanmis olurdu.
+///
+/// "Yeni musteri" = musteri SATIRI son 24 saatte olusmus VE en az bir
+/// `kaynak: MUSTERI` randevusu olan. Randevu kosulu, isletmenin panelden
+/// ekledigi musterileri disarida birakiyor: telefonla arayanlari deftere
+/// geciren isletme kendi cevrim ici tavanini doldurmamali.
+async function cevrimIciYeniMusteriSay(
+  q: Veritabani | Islem,
+  kiraci: string,
+): Promise<number> {
+  const [satir] = await q
+    .select({ sayi: sql<number>`count(distinct ${musteri.id})::int` })
+    .from(musteri)
+    .innerJoin(randevu, eq(randevu.musteriId, musteri.id))
+    .where(
+      and(
+        eq(musteri.isletmeId, kiraci),
+        // Musteri kiraciya ait oldugu icin randevusu da oyle; ikinci filtre
+        // yine de yaziliyor - bu dosyada her tablonun kiracisi acikca
+        // suzuluyor, "zaten dogrudur" diye atlanan bir filtre bir gun
+        // dogru olmayi birakir.
+        eq(randevu.isletmeId, kiraci),
+        eq(randevu.kaynak, "MUSTERI"),
+        gte(musteri.olusturmaTarihi, son24Saat()),
+      ),
+    );
+  return satir?.sayi ?? 0;
 }
 
 /// Kuyruga yazilacak tek bir mesaj. `tur` yok cunku Faz I yalnizca e-posta
@@ -1281,6 +1330,13 @@ export async function getScopedDb(oturum: IsletmeOturumu) {
 
     // ---- Musteriler (Faz H2, ikinci yari) ---------------------------------
 
+    /// Son 24 saatte cevrim ici randevu alan yeni musteri sayisi - panelin
+    /// yogunluk uyarisi (Faz Q). Halka acik yazma kapisinin tavani sayan
+    /// kodla AYNI fonksiyon; gerekce `cevrimIciYeniMusteriSay`in yaninda.
+    async cevrimIciYeniMusteriSayisi(): Promise<number> {
+      return cevrimIciYeniMusteriSay(db, kiraci);
+    },
+
     /// Musteri listesi. Satir basina randevu sayisi ve son randevu tarihi
     /// AYNI SORGUDA hesaplaniyor - liste basina bir sorgu, musteri basina bir
     /// tane degil. Yuz musterilik bir salonda N+1, panelin ilk aciliste en
@@ -1548,6 +1604,32 @@ export async function getHalkaAcikDb(slug: string) {
   async function randevuYaz(veri: RandevuYazma) {
     try {
       return await db.transaction(async (tx) => {
+        // YENI MUSTERI TAVANI (Faz Q). Musteri satiri YAZILMADAN ONCE
+        // bakiliyor: reddedilen istek transaction'i hatasiz bitiriyor, yani
+        // sonra bakilsaydi commit edilen sey randevusu olmayan bir musteri
+        // kaydi olurdu - panelde hic gelmemis biri gibi duran bir satir.
+        //
+        // Kayitli musteri bu kapiyi hic gormuyor: tavan numarayi her istekte
+        // degistiren betige karsi, salonun tanidigi musteriye karsi degil.
+        //
+        // `musteriyiCoz` ayni satiri bir kez daha okuyor. Bir indeksli okuma;
+        // iki yazma yolunun paylastigi yardimciyi yalnizca birinin kotasiyla
+        // kirletmekten ucuz.
+        //
+        // Sayim SERIALIZABLE degil, ayni anda gelen istekler tavani birkac
+        // kisi asabilir. Acik randevu sinirindaki gerekceyle kabul edildi.
+        const [kayitli] = await tx
+          .select({ id: musteri.id })
+          .from(musteri)
+          .where(and(eq(musteri.isletmeId, kiraci), eq(musteri.telefon, veri.telefon)))
+          .limit(1);
+        if (
+          !kayitli &&
+          (await cevrimIciYeniMusteriSay(tx, kiraci)) >= veri.enCokGunlukYeniMusteri
+        ) {
+          return { durum: "yeni-musteri-siniri" as const };
+        }
+
         // Musteri TELEFONLA tekilleniyor (sema: musteri_isletme_telefon_idx).
         // Yarisin cozumu ve "mevcut kaydin adi guncellenmiyor" karari ortak
         // yardimcida (musteriyiCoz).
@@ -1578,6 +1660,31 @@ export async function getHalkaAcikDb(slug: string) {
           kisitBitis.getTime() > veri.simdi.getTime()
         ) {
           return { durum: "kisitli" as const, bitis: kisitBitis };
+        }
+
+        // NUMARA BASINA GUNLUK TAVAN (Faz Q). Durumdan bagimsiz sayiliyor:
+        // al - iptal et - yeniden al dongusu acik siniri hic asmadan takvimde
+        // gezinebiliyor ve her tur bildirim uretiyor (gerekce
+        // randevu-kotasi.ts'te). `kaynak: MUSTERI` - isletmenin bu numaraya
+        // kendi yazdigi randevu musterinin kotasini yemiyor.
+        //
+        // Acik sinirdan ONCE, cunku ikisi birden dolduysa dogru mesaj bu:
+        // "once birini iptal edin" demek, iptalden sonra yine reddedilecek
+        // birine yanlis yol gostermek olurdu.
+        const [gunluk] = await tx
+          .select({ sayi: sql<number>`count(*)::int` })
+          .from(randevu)
+          .where(
+            and(
+              eq(randevu.isletmeId, kiraci),
+              eq(randevu.musteriId, musteriId),
+              eq(randevu.kaynak, "MUSTERI"),
+              gte(randevu.olusturmaTarihi, son24Saat()),
+            ),
+          );
+
+        if ((gunluk?.sayi ?? 0) >= veri.enCokGunlukRandevu) {
+          return { durum: "gunluk-sinir" as const };
         }
 
         // Ayni musterinin ACIK randevu sayisi sinirli. Bot korumasi degil

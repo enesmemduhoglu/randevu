@@ -3877,8 +3877,8 @@ zaten iki çıkış taşıyor (Faz P kararı, müşteri/işletme ayrımı) ve ü
       okunduğunda öyleydi; bu satır ne zaman değiştiği bilinmeden açık kalmıştı.
 - [x] Auth hız sınırları okundu, **varsayılanlarında bırakıldı** (13 Eylül):
       e-posta gönderimi saatte 30, doğrulama 30, OTP 30, anonim kullanıcı
-      30, token yenileme 150. Kullanıcı yokken ölçülecek bir yük yok. Faz Q'da
-      (kalkan 2) yeniden bakılmalı.
+      30, token yenileme 150. Kullanıcı yokken ölçülecek bir yük yok. Faz Q
+      (kalkan 2) bunlara dokunmadı; lansmandan önce yeniden bakılmalı.
 - [ ] **Uçtan uca henüz denenmedi:** gerçek bir kutuya sıfırlama maili
       isteyip bağlantının `/sifre-yenile?token_hash=` ile açıldığını ve yeni
       şifreyle girişin çalıştığını görmek.
@@ -4207,7 +4207,7 @@ olduğunu arıyor.
 ### Merge sonrası bakılacak
 
 - [x] İlk `yayinla` koşumu yeşil — `HATA` binding'li ilk gerçek deploy
-      (34604897458, 11 Eylül 2026)
+      (CI koşumu 34604897458, 11 Eylül 2026; Faz Q başlarken bakıldı)
 - [ ] Uçtan uca yazma üretimde **henüz gözlenmedi**: yerelde binding bağlandı
       ve kapı çağrıldı, ama Analytics Engine'e düşen ilk veri noktası ilk
       gerçek hatayla görülecek. O gün nabız kırmızı olmalı ve Workers Logs'ta
@@ -4217,6 +4217,168 @@ olduğunu arıyor.
 
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1872,68 KiB** (bütçe 3 MiB).
 P2d sonundaki 1869,57 KiB'den **+3,11 KiB**.
+
+---
+
+## Faz Q — kalkan 2
+
+**Kapandı:** Oturumsuz `POST /api/randevu` yoluna numara değiştiren bota karşı
+iki veritabanı tavanı ve panelde bir yoğunluk uyarısı. Faz J'de "misafir
+randevusu kalıyor, kalkan ayrı fazda güçlenecek" kararının karşılığı — orada
+sayılan dört adımın üçü yapıldı, biri ölçüye dayanarak reddedildi.
+
+### Neden veritabanı, neden kenar değil
+
+Mevcut üç kat numarayı her istekte değiştiren **yavaş** bir betiği görmüyor:
+Turnstile jeton başına maliyet üretmiyor, IP hız sınırı yaklaşık ve kolo
+başına (Faz L'de üretimde ilk 429 **22. istekte** geldi), açık randevu sınırı
+ve gelmedi kısıtı ise numaraya bağlı. Bu betiği durduracak tek yer yazılan
+satırların kendisi. Şema göçü gerekmedi: `randevu` ve `musteri` tablolarında
+`olusturma_tarihi` zaten vardı.
+
+### İki tavan (`src/lib/randevu-kotasi.ts`)
+
+| Tavan | Değer | Kapattığı delik |
+|---|---|---|
+| Numara başına, son 24 saatte oluşturulan randevu | 5 | Al → iptal et → yeniden al. Açık sınır (3) hiç aşılmadan takvimde gezinmek ve her turda bildirim üretmek |
+| İşletme başına, son 24 saatte çevrim içi randevu alan **yeni** müşteri | 20 | Numara değiştiren betik; her istek yeni bir müşteri |
+
+Sabitler route'tan ayrı bir dosyada, çünkü panel de aynı tavana bakıyor. İki
+yerde iki sabit, panelin "20'ye ulaşırsa" dediği gün kapının 30'da kapanması
+demekti. Açık randevu sınırı (`EN_COK_ACIK_RANDEVU`) da aynı dosyaya taşındı.
+
+### Kararlar
+
+- **Tavan dolunca yeni müşteri REDDEDİLİYOR** (kullanıcı kararı, 13 Eylül
+  2026). Üç seçenek konuşuldu: reddet, yalnızca panel uyarısı, tavandan
+  sonrasını onaya düşür. Onaya düşürmek işe yaramıyor, çünkü `BEKLIYOR` da
+  slotu tutuyor (`EXCLUDE` kısıtının `WHERE`'i) ve takvim yine doluyor.
+  Yalnızca uyarı ise zararı sınırlamıyor. **Bedel bilerek kabul edildi:** bot
+  tavanı doldurduğu gün o işletmeye gelen gerçek yeni müşteri de reddediliyor
+  ve işletmeyi aramaya yönlendiriliyor. Kayıtlı müşteri etkilenmiyor. Tavan bu
+  yüzden cömert (20); hedef kitle çevrim içi yolla günde birkaç yeni müşteri
+  kazanıyor.
+
+- **IP hız sınırı SIKILAŞTIRILMADI** (kullanıcı kararı). Plandaki madde buydu
+  ama iki gerekçe tersini söylüyor: Türkiye'de mobil operatörler CGNAT
+  kullanıyor, yani çok sayıda gerçek müşteri aynı IP'yi paylaşıyor; ve
+  üretimdeki sayaç zaten yaklaşık — 5'i 3 yapmak ölçülen davranışı pek
+  değiştirmez, CGNAT arkasındaki müşteriyi ise gerçekten etkiler.
+
+- **Pencere veritabanı saatiyle** (`now() - interval '24 hours'`), route'un
+  `simdi`siyle değil. Sayılan kolon `defaultNow()` ile Postgres'in saatinden
+  yazılıyor; pencere başka bir saatle ölçülse Worker ile Postgres arasındaki
+  kayma pencereyi kaydırırdı. L3'te kısıt süresinin `now()` ile hesaplanmasının
+  gerekçesiyle aynı.
+
+- **Kayan pencere, takvim günü değil.** Takvim günü işletmenin saat dilimine
+  çevirmeyi gerektirirdi (DEĞİŞMEZ 7) ve gece yarısı sayacı sıfırlayan bir
+  kapı betiğe tam olarak ne zaman döneceğini söylerdi. Müşteri mesajı bu
+  yüzden "bugün" değil "son 24 saatte" diyor; "yarın deneyin" deyip gece
+  yarısında yine reddetmek yanlış bir söz olurdu.
+
+- **İptal edilen randevular günlük sayıma GİRİYOR.** Tavanın var olma sebebi
+  tam olarak al-iptal et döngüsü.
+
+- **`kaynak: ISLETME` hiçbir tavana girmiyor.** İşletmenin panelden eklediği
+  randevu müşterinin kotasını yemiyor; telefonla arayanları deftere geçiren
+  işletme de kendi çevrim içi tavanını doldurmuyor. "Yeni müşteri" bu yüzden
+  "son 24 saatte oluşmuş VE en az bir `kaynak: MUSTERI` randevusu olan müşteri
+  satırı".
+
+- **Yeni müşteri kapısı müşteri satırı YAZILMADAN önce.** Reddedilen istek
+  transaction'ı hatasız bitiriyor; kapı sonra olsaydı commit edilen şey
+  randevusu olmayan bir müşteri kaydı olurdu. Testi var: reddedilen numaranın
+  satırı veritabanında yok.
+
+- **Günlük sınır açık sınırdan ÖNCE.** İkisi birden dolduysa açık sınırın
+  "önce birini iptal edin" mesajı yanlış yol gösterirdi — iptal edilen de
+  sayılıyor.
+
+- **Mesajlar sayı ve sebep taşımıyor.** Halka açık yol oturumsuz; "bu işletme
+  bugün 20 yeni müşteri aldı" hem hacmi dışarı verir hem betiğe kotasını
+  öğretir. Yeni müşteri mesajı işletmenin telefonunu taşıyor — müşterinin
+  yapabileceği tek şey aramak. Testler mesajda sayının geçmediğini arıyor.
+
+- **Sayım SERIALIZABLE değil.** Aynı anda gelen istekler tavanı birkaç kişi
+  aşabilir; açık randevu sınırındaki gerekçeyle kabul edildi.
+
+- **İki taraf aynı sayım fonksiyonu** (`cevrimIciYeniMusteriSay`): yazma kapısı
+  ve panel. Ayrışsalar panel "sınıra üç kişi kaldı" derken kapı çoktan
+  kapanmış olurdu.
+
+- **Panel uyarısı yalnızca `/panel` ana sayfasında** ve eşik tavanın yarısı
+  (10). Tavan dolmadan başlıyor ki işletme tanımadığı kayıtları iptal edip
+  kapının kapanmasını önleyebilsin. Eşiğin altında hiçbir şey çizilmiyor.
+  Düzene konmadı: her panel sayfasına bir sorgu eklerdi ve Next'in dokümanına
+  göre düzen sayfalar arası geçişte yeniden çizilmiyor, yani uyarı zaten
+  tazelenmezdi. Renk amber (`durum-bekliyor`): tasarım sisteminde "bekleyen
+  durum ve uyarı" rengi.
+
+### Kasıtlı ihlalle sınandı
+
+İki mutasyon denendi, ikisi de yakalandı ve geri alındı: kayıtlı müşteri
+muafiyeti kaldırılınca hem kapı hem route testi kırmızı; günlük sayımdan
+`kaynak` filtresi kaldırılınca "işletmenin elle eklediği randevu kotayı
+yemiyor" testi kırmızı.
+
+### Bilerek kapsam dışı
+
+- **İşletmeye özel ayarlanabilir tavan.** Şema göçü gerektirir (`isletme`e
+  iki kolon) ve bugün hiçbir işletme farklı bir değer istemiyor. Gerçek
+  bir işletme 20'ye çarptığında o gün ölçülerek konuşulur.
+- **SMS/e-posta koduyla doğrulama.** Faz J'de reddedilen üçüncü seçenek; kod
+  üretimi, süre aşımı ve temizlik işi gerektiriyor. SMS Faz K'de.
+- **Tavan dolduğunda işletmeye e-posta.** Bildirim altyapısı var ama "tavan
+  doldu" olayı için yeni bir şablon ve bir kez gönderme kuralı gerekiyor; panel
+  uyarısı bugünkü ölçekte yeterli.
+- **Numara başına işletmeler ARASI tavan.** Kiracılar arası sayım DEĞİŞMEZ 1'i
+  delerdi; tavanlar kiracıya özel (IDOR testleri bunu arıyor).
+- **Next'in log satırındaki sorgu parametreleri** (P2e bulgusu) — ayrı iş,
+  hâlâ açık.
+
+### Doğrulama
+
+- `npm run tip` temiz, `npm run lint` hata yok (iki uyarı bu işten önce de
+  vardı, `panel-randevu-girdi.test.ts`)
+- `npm test` — **782 test, 55 dosya** (P2e'ye göre +15): kapı katmanında 13
+  (sınır, iptallerin sayılması, 24 saat penceresi, `kaynak` ayrımı, sahipsiz
+  müşteri satırı, sıra, iki IDOR, panel sayımı ve IDOR'u), route'ta 2 (gerçek
+  tavanlarla 429, mesajda sayı yok, kayıtlı müşteri geçiyor)
+
+### Elle doğrulandı — 13 Eylül 2026 (`next dev`, yerel `randevu_dev`)
+
+Yeni müşteriler SQL ile değil **gerçek `POST /api/randevu`** ile oluşturuldu
+(`isil-guzellik-salonu`, her istek ayrı numara).
+
+- [x] 0 yeni müşteride panelde uyarı yok
+- [x] 10'da eşik metni ("olağan dışı bir yoğunluk", "Son 24 saatte 10 yeni
+      müşteri…"); 20'de tavan metni ("Yeni müşteriler şu anda çevrim içi
+      randevu alamıyor")
+- [x] Kontrast ölçüldü (canvas ile, koyu temada yarı saydam zemin sayfa
+      rengiyle birleştirilerek): açık tema başlık/ikon **5,42:1**, metin
+      **15,4:1**; koyu tema başlık **6,49:1**, metin **13,25:1**. Hepsi AA üstü
+- [x] 390px (aynı kökenden iframe; medya sorguları iframe genişliğine göre
+      çalışıyor): yatay taşma yok, kutu sarıyor
+- [x] **Ölçümün bulduğu hata:** "Müşterileri gör" bağlantısı 20px yükseklikteydi,
+      tasarım sisteminin 44px dokunma hedefinin altında. `min-h-11` ile
+      düzeltildi, yeniden ölçüldü: 98×44
+- [x] Müşteri tarafı, 390px formda: 21. yeni numara formun üstünde "Bu
+      işletmeden şu anda çevrim içi randevu alınamıyor. Randevu için işletmeyi
+      arayabilirsiniz: 0532 123 45 67" gördü; reddedilen numaranın `musteri`
+      satırı **oluşmadı**, sayaç 20'de kaldı
+- [x] Aynı formda kayıtlı bir müşterinin numarası tavan doluyken randevu aldı
+- [x] Doğrulamanın kayıtları (20 müşteri, 21 randevu, 63 kuyruk satırı) sonra
+      yerel veritabanından silindi
+
+Günlük numara tavanının müşteri ekranı tarayıcıda denenmedi: mesaj aynı
+yoldan (sunucunun metni olduğu gibi) gösteriliyor ve metnin kendisi route
+testinde kilitli.
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1873,98 KiB** (bütçe 3 MiB).
+P2e sonundaki 1872,68 KiB'den **+1,30 KiB**.
 
 ## Faz P2 — nabız zamanlayıcısı
 
@@ -4343,5 +4505,6 @@ kendiliğinden koşması. İkisi de merge sonrası.
 
 ### Bundle bütçesi
 
-`cf:kur` + `wrangler deploy --dry-run`: **gzip 1876,54 KiB** (bütçe 3 MiB).
-P2e sonundaki 1872,68 KiB'den **+3,86 KiB**.
+`cf:kur` + `wrangler deploy --dry-run`, Faz Q ile birleştikten sonra: **gzip
+1877,85 KiB** (bütçe 3 MiB). Faz Q sonundaki 1873,98 KiB'den **+3,87 KiB**
+(dal tek başına P2e'nin üstünde de +3,86 ölçülmüştü).
