@@ -91,6 +91,8 @@ async function randevuYaz(
     iptalToken: iptalTokenUret(),
     simdi,
     enCokAcikRandevu: 3,
+    enCokGunlukRandevu: 100,
+    enCokGunlukYeniMusteri: 100,
     otomatikOnay: true,
   });
 

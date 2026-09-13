@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { saatBicimle, tarihUzun } from "@/lib/bicim";
+import { saatBicimle, tarihUzun, telefonBicimle } from "@/lib/bicim";
 import {
   bildirimleriYanittanSonraGonder,
   randevuOlustuKayitlari,
@@ -11,6 +11,11 @@ import { iptalTokenUret } from "@/lib/iptal-token";
 import { slotSec } from "@/lib/musaitlik-sorgu";
 import { checkOrigin } from "@/lib/origin";
 import { randevuAlanlariniDogrula } from "@/lib/randevu-girdi";
+import {
+  EN_COK_ACIK_RANDEVU,
+  EN_COK_GUNLUK_RANDEVU,
+  EN_COK_GUNLUK_YENI_MUSTERI,
+} from "@/lib/randevu-kotasi";
 import { getHalkaAcikDb } from "@/lib/scoped-db";
 import { istekIpsi, turnstileDogrula } from "@/lib/turnstile";
 import { yerelParcalar } from "@/lib/zaman";
@@ -31,16 +36,8 @@ import { yerelParcalar } from "@/lib/zaman";
 
 const ONBELLEKSIZ = { "cache-control": "no-store" };
 
-/// Ayni musterinin ayni isletmede acik tutabilecegi randevu sayisi.
-///
-/// Neden bir sinir var: bu yol oturumsuz, yani numarayi yazan herkes takvime
-/// yazabiliyor. Sinirsiz birakmak, gunu elli randevuyla doldurup hicbirine
-/// gelmeyen kullanimi mumkun kilardi ve isletme bunu ancak gun sonunda fark
-/// ederdi. Neden 3: kucuk isletmede mesru musteri en fazla birkac randevuyu
-/// ayni anda acik tutuyor (kesim + boya + esinin randevusu gibi); dorduncusu
-/// artik olagan degil. Bot korumasi DEGIL - o Faz G2'de Turnstile ve hiz
-/// siniriyla geliyor.
-const EN_COK_ACIK_RANDEVU = 3;
+// Kotalar (acik randevu, gunluk randevu, gunluk yeni musteri) ve gerekceleri
+// `randevu-kotasi.ts`'te: panel de ayni sayilara bakiyor.
 
 /// Kapali ya da hic olmayan isletme AYNI cevabi aliyor: hangi slug'larin
 /// kayitli oldugunu sizdirmanin bir faydasi yok.
@@ -150,8 +147,44 @@ export async function POST(istek: Request) {
     iptalToken,
     simdi,
     enCokAcikRandevu: EN_COK_ACIK_RANDEVU,
+    enCokGunlukRandevu: EN_COK_GUNLUK_RANDEVU,
+    enCokGunlukYeniMusteri: EN_COK_GUNLUK_YENI_MUSTERI,
     otomatikOnay: db.isletme.otomatikOnay,
   });
+
+  if (sonuc.durum === "yeni-musteri-siniri") {
+    // TAVAN DA SEBEP DE SOYLENMIYOR. "Bu isletme bugun 20 yeni musteri aldi"
+    // demek hem isletmenin hacmini disari veriyor hem de numara degistiren
+    // betige ne zaman durdugunu ogretiyor. Musterinin yapabilecegi tek sey
+    // aramak. Numara zaten sayfanin basinda yazili; burada tekrarlaniyor
+    // cunku musteri su an formun sonunda.
+    //
+    // Kayitli musteri bu cevabi hic almiyor (tavan yalnizca yeni numaraya).
+    const telefon = telefonBicimle(db.isletme.telefon);
+    return hata(
+      "Bu işletmeden şu anda çevrim içi randevu alınamıyor. " +
+        (telefon
+          ? `Randevu için işletmeyi arayabilirsiniz: ${telefon}`
+          : "Randevu için işletmeyle doğrudan iletişime geçebilirsiniz."),
+      429,
+    );
+  }
+
+  if (sonuc.durum === "gunluk-sinir") {
+    // Sayi soylenmiyor: mesru musteri bu siniri neredeyse hic gormuyor, gordugu
+    // gun de sayi ona bir sey kazandirmiyor - betige ise kotasini ogretiyor.
+    // Acik randevu mesajindaki "iptal edin" yolu burada BILEREK yok: iptal
+    // edilen randevular da sayiliyor, yani o yol ise yaramazdi.
+    //
+    // "Bugun" degil "son 24 saatte": pencere takvim gunu degil kayan bir
+    // pencere, ve "yarin deneyin" diyip gece yarisinda yine reddetmek musteriye
+    // yanlis bir soz vermek olurdu.
+    return hata(
+      "Bu numarayla son 24 saatte çok sayıda randevu alındı. " +
+        "Yeni bir randevu için daha sonra tekrar deneyin ya da işletmeyi arayın.",
+      429,
+    );
+  }
 
   if (sonuc.durum === "kisitli") {
     // KISITIN SEBEBI SOYLENMIYOR - "randevunuza gelmediginiz icin" cumlesi
