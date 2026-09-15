@@ -4165,6 +4165,9 @@ orta-düşük — ama INVARIANT 5'in lafzına aykırı. **Ayrı iş**, çünkü 
 başka bir konu: ya DB layer'ında Drizzle hatasını parametresiz bir hataya
 çevirmek, ya da Next'in log'unu susturmak. İkisi de ölçülmeden seçilmemeli.
 
+> **Kapandı — 15 Eylül 2026** (`Faz P2 — log'daki query parametreleri`, en
+> sonda): ölçüldü, kaynakta düzeltildi.
+
 ### Bilerek kapsam dışı
 
 - **Next'in log satırındaki parametreler** — yukarıdaki bulgu, ayrı iş.
@@ -4491,9 +4494,13 @@ kendiliğinden koşması. İkisi de merge sonrası.
 
 ### Merge sonrası bakılacak
 
-- [ ] 15 dakika içinde Actions'ta `workflow_dispatch` olaylı ilk Health check run'ı
-- [ ] Bir gün sonra: tetiklenen run'lar arası gerçekten ~30 dakika mı
-- [ ] İlk fallback run'da "zamanlayıcı canlı mı" yeşil
+- [x] 15 dakika içinde Actions'ta `workflow_dispatch` olaylı ilk Health check run'ı
+- [x] Bir gün sonra: tetiklenen run'lar arası gerçekten ~30 dakika mı — 15 Eylül
+      2026'da bakıldı: 05:00–14:00 arasındaki run'lar hep :00/:30'da (en fazla
+      27 saniye kayma), hepsi yeşil. Tek istisna 11:33'teki run (11:30'unki ~3
+      dakika gecikmiş)
+- [x] İlk fallback run'da "zamanlayıcı canlı mı" yeşil — 15 Eylül 11:41'deki
+      `schedule` run'ı başarılı
 
 ### Bilerek kapsam dışı
 
@@ -4561,10 +4568,15 @@ merge sonrası.
 
 ### Merge sonrası bakılacak
 
-- [ ] Deployments → `uretim` altında merge commit'inin kaydı: `success`,
-      açıklamada version id
-- [ ] İki kayıt adımı log'da yeşil. `continue-on-error` bir hatayı yutmuş
-      olmasın
+- [x] Deployments → `uretim` altında merge commit'inin kaydı: `success`,
+      açıklamada version id — 15 Eylül 2026'da bakıldı (`surum 54a53413-… -
+      duman testi yesil`); ardından gelen iki README commit'i de kayıt açmış
+- [ ] **Beklenenden farklı:** merge commit'inin kaydı yeni kayıtlar gelince
+      `inactive`e dönmemiş, durum listesinde hâlâ son durum `success`. Yukarıdaki
+      `auto_inactive` varsayımı tutmamış olabilir; sekmede birden fazla
+      aktif kayıt görünüyorsa sebep bu. Zararsız, bakılmadı
+- [x] İki kayıt adımı log'da yeşil. `continue-on-error` bir hatayı yutmuş
+      olmasın — son run'da (34787649601) iki adım da `success`
 - [ ] "View deployment" link'i siteyi açıyor
 
 ### Bilerek kapsam dışı
@@ -4574,3 +4586,121 @@ merge sonrası.
   version listesi (`docs/yayin.md > Deployments kaydı`).
 - **Local'den elle deploy'un kaydı.**
 - **`uretim` environment'ının ayarları.** Zorunlu inceleyici duruyor ve etkisiz.
+
+---
+
+## Faz P2 — log'daki query parametreleri
+
+**Kapandı:** P2e'nin bulgusu. Next yakalanmamış hatayı kendi log'una basarken
+`DrizzleQueryError`'un mesajındaki query parametrelerini de yazıyordu. Bu da
+e-posta, telefon ya da ham iptal token'ı demek (INVARIANT 5). Üç fazdır "ayrı iş"
+diye bekliyordu. Bununla P2'de açık madde kalmadı.
+
+### Önce ölçüldü — `cf:onizle`, workerd
+
+Geçici bir route ve sayfa (commit edilmedi) üç hata üretti: tip hatası
+(`select $1::uuid`, `22P02`), transaction içinde benzersizlik ihlali (`23505`) ve
+server component'inde tip hatası. Parametre olarak bir işaret değeri verildi,
+log local observability API'sinden okundu.
+
+| | Yamadan önce | Yamadan sonra |
+|---|---|---|
+| Next'in satırı | `Error: Failed query: select $1::uuid` + `params: GIZLI-…` | `Error: Failed query: select $1::uuid` |
+| İşaret değerinin log'da geçme sayısı | 3 hatada 4 kez | **0** |
+| Gate'in satırı | `tur: DrizzleQueryError`, `kod`, `kisit` | aynı |
+
+Aynı ölçümün gösterdiği üç şey kararı belirledi:
+
+- **Sızıntı yalnızca mesajda.** workerd `console.error(hata)` için tek satır
+  basıyor, `ad: mesaj`. `cause` (Postgres'in `invalid input syntax for type
+  uuid: "<girdi>"` mesajı) ve `detail` (`Key (x)=(<değer>) already exists`)
+  basılmıyor, stack de basılmıyor.
+- **Next log'u `onRequestError`'dan ÖNCE basıyor**
+  (`next/dist/server/route-modules/route-module.js > onRequestError`: önce
+  `console.error(err)`, sonra instrumentation). Yani mesajı gate'te temizlemek
+  mümkün değil, satır o anda çoktan yazılmış oluyor.
+- **`instrumentation.ts > register()` workerd'de koşuyor** ve global
+  `console.error` sarmalayıcısı Next'in çağrısını görüyor, route'ta da render'da
+  da. Aşağıdaki reddedilen seçenek bu yüzden gerçekten uygulanabilirdi.
+
+### Karar — kaynakta: `drizzle-orm` yamalı
+
+`patches/drizzle-orm+0.45.2.patch`, `errors.js` ile `errors.cjs`'te
+`DrizzleQueryError` constructor'ının iki satırını değiştiriyor. `postinstall`
+önce `patch-package`'i koşuyor. Parametreyi mesaja koyan yer paketin tamamında
+yalnızca bu constructor (aranarak doğrulandı).
+
+- **Mesajdaki query metni kaldı.** Hangi query'nin düştüğü hata ayıklamada hâlâ
+  okunabiliyor. Metin değer taşımıyor, çünkü Drizzle her değeri `$n` olarak
+  geçiyor. Repo'da `sql.raw` yok.
+- **`params` silinmedi, sayılamaz yapıldı.** postgres.js'in kendi
+  `parameters` alanında yaptığı şeyin aynısı. Nesneyi dolaşan kod (`JSON.stringify`,
+  `Object.keys`, inspect) onu görmüyor. `hata.ts` türü biçimden tanıyor
+  (`query` + `params` alanı, P2e'de `instanceof` ve sınıf adı ölçülüp elenmişti).
+  Alan silinseydi tür sessizce `Error`a dönerdi.
+- **İki biçim de yamalı.** P2e bundle'da sınıfın birden fazla kopyası olduğunu
+  ölçmüştü. Test ESM ve CJS kopyalarını ayrı ayrı sınıyor.
+- **`drizzle-orm` tam sürüme sabitlendi** (`^0.45.2` → `0.45.2`). Yama sürüme
+  bağlı. Bu bağı lockfile zaten kuruyordu, `package.json`'da da görünür oldu.
+  Drizzle yükseltilirken yama yeniden üretilir.
+
+**Reddedilen: log'da susturmak** (`register()`'da `console.error`
+sarmalayıcısı, `hata.ts`'in içinde). Ölçüldü ve çalışıyordu, ama üç sebeple
+seçilmedi:
+
+- Yalnızca `console.error`'u kapsıyor. Değer hata nesnesinde kalıyor ve başka bir
+  yola (bir response body'si, `console.warn`, yarın eklenen bir logger) taşınabiliyor.
+- Global bir monkeypatch. Next'in ya da OpenNext'in `console`'u kendi
+  referansıyla tuttuğu gün sessizce devre dışı kalır ve bunu hiçbir şey fark etmez.
+- Hatayı tanıyıp yeniden yazmak yine bir biçim tahmini. Kaynaktaki düzeltme
+  tahmin gerektirmiyor.
+
+**Reddedilen: iptal token'ını hash'lemek.** Schema migration'ı gerektirir ve yalnızca
+token'ı çözer, e-posta ve telefon kalır. Faz tanımı bunu baştan dışarıda
+bırakmıştı.
+
+### `hata.test.ts`'in ön koşulu kırmızıya döndü — beklendiği gibi
+
+P2e'nin testi ön koşul olarak *"mesaj GERÇEKTEN kişisel veri taşıyor"* diye
+doğruluyordu. Yorumu tam bu günü öngörmüştü (*"Drizzle bir gün bunu
+bırakırsa… burada görünsün"*). Yama bunu kırmızıya çevirdi. Gate'in varlık sebebi
+artık `cause`'da: fixture Postgres'in gerçek 23505 biçimine (`detail` alanında
+değer) çekildi, ön koşul da oraya bakıyor. Gate'in `mesaj taşımıyor` kararı bu
+yüzden değişmedi.
+
+### Kasıtlı ihlalle test edildi
+
+`npx patch-package --reverse` ile yama geri alındı: `drizzle-yamasi.test.ts`'in
+5 testinin **5'i de** kırmızı. Yeniden uygulanınca yeşil. Temiz bir `npm ci`
+yamayı `postinstall`'dan kendiliğinden uyguladı (`drizzle-orm@0.45.2 ✔`).
+
+### Bilerek kapsam dışı
+
+- **Node'da `cause`.** `next dev`/`next start` Node'da koşuyor ve Node'un
+  `console.error`'u hatayı inspect ediyor. Yani `cause`'daki Postgres mesajı ve
+  `detail` orada basılıyor. Bu yalnızca local log, production workerd ve orada
+  yalnızca mesaj satırı çıkıyor (ölçüldü).
+- **Production Workers Logs'un biçimi ölçülmedi.** Local observability'deki
+  satır ölçüldü. Production'da gerçek bir hata henüz görülmedi (P2e'nin açık
+  maddesiyle aynı gün görülecek).
+- **Upstream'e issue/PR.** Drizzle mesajı bilerek böyle tasarlamış olabilir
+  (hata ayıklama kolaylığı). Bizim sınırımız INVARIANT 5, onların değil.
+
+### Doğrulama
+
+- [x] `npm run tip` temiz, `npm run lint` hata yok (iki uyarı bu işten önce de
+      vardı, `panel-randevu-girdi.test.ts`)
+- [x] `npm test` — **794 test, 57 dosya** (+5, `drizzle-yamasi.test.ts`)
+- [x] `cf:onizle` yamadan önce ve sonra, yukarıdaki tablo
+
+### Merge sonrası bakılacak
+
+- [ ] CI'ın `dogrula` job'ı yeşil. `npm ci` yamayı orada da uyguluyor olmalı,
+      uygulamazsa `drizzle-yamasi.test.ts` kırmızı yanar
+- [ ] İlk gerçek production hatasında Workers Logs'taki Next satırında `params:`
+      yok
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1877,82 KiB** (bütçe 3 MiB).
+P2f sonundaki 1877,85 KiB'den **−0,03 KiB**.

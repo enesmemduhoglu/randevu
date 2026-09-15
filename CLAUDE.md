@@ -90,6 +90,13 @@ string'i hicbir `console.*` ya da kullaniciya donen hata body'sinde tasinmaz.
 > Analytics Engine'e de yaziyor ve health check oradan sayiyor - gate'ten gecmeyen hata
 > uyari da uretmez. *(Zorlayan: `degismezler.test.ts`, `console.error` yalnizca
 > `hata.ts`'te.)*
+>
+> **`drizzle-orm` yamali** (Faz P2g, `patches/drizzle-orm+0.45.2.patch`).
+> Next yakalanmamis hatanin mesajini gate'i beklemeden kendi log'una basiyor ve
+> `DrizzleQueryError` mesaji query parametrelerini tasiyordu. Yama onlari
+> mesajdan cikariyor, `postinstall`'daki `patch-package` uyguluyor. Drizzle'i
+> yukseltirken yama yeniden uretilir; `drizzle-orm` bu yuzden tam surume
+> sabitli. *(Zorlayan: `drizzle-yamasi.test.ts` - yama tutmazsa kirmizi.)*
 
 **6. `session.isletmeId` duz string kalir.** Bu sozlesmeyi bozan tip ya da
 erisim pattern'i getirme.

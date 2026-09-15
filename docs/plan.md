@@ -278,7 +278,8 @@ hatayı sarmalıyor ve `hata.code` wrapper'da yok.
 4. **E-posta yalnızca `email.ts > gonder()`, SMS yalnızca `sms.ts > gonder()`**
    *(warden gate'i + `degismezler.test.ts`; repo SDK değil `fetch` kullandığı için gate'in
    aradığı metin hiç oluşmuyor — gerçek zorlama testte)*
-5. **Secret'lar log'a ve hata metinlerine girmez**
+5. **Secret'lar log'a ve hata metinlerine girmez** *(`hata.ts` gate'i +
+   `degismezler.test.ts`; Drizzle hata mesajı için `drizzle-yamasi.test.ts`)*
 6. **`session.isletmeId` düz string kalır**
 7. **Randevu zamanları DB'de `timestamptz` (UTC).** Local saate çevirme yalnızca `zaman.ts`
    üzerinden ve işletmenin `saatDilimi` alanıyla. Server saat dilimine güvenilmez
@@ -333,6 +334,7 @@ karar kaydı `TODOS.md`'de.
 | **P2e** — hata takibi | `src/lib/hata.ts > hataBildir()` tek gate (mesaj taşımıyor), `onRequestError`, Analytics Engine counter'ı, health check'te `scripts/hata-say.ts`. `console.error` yalnızca gate'te |
 | **Q** — kalkan 2 | `randevu-kotasi.ts`: numara başına 24 saatte 5 randevu (iptaller dahil), işletme başına 24 saatte 20 yeni çevrim içi müşteri (dolunca yeni numara reddediliyor), `/panel`de yoğunluk uyarısı. IP sınırı CGNAT yüzünden sıkılaştırılmadı |
 | **P2f** — health check scheduler | GitHub'ın `*/30`'u gerçekte 2–5,5 saatte bir koşuyordu. Saat Cloudflare Cron Trigger'a taşındı (`worker-girisi.ts`, `zamanlayici.ts` → `workflow_dispatch`); kontroller GitHub'da kaldı. Trigger başarısızsa gate'e yazıyor, 6 saatlik fallback run "scheduler canlı mı" diye yokluyor |
+| **P2g** — log'daki query parametreleri | P2e'nin bulgusu kapandı: `drizzle-orm` yamalı (`patches/drizzle-orm+0.45.2.patch`, `postinstall`'da `patch-package`), `DrizzleQueryError` mesajı parametre taşımıyor. Next'in log satırı `Failed query: <sql>` olarak kaldı. Zorlayan `drizzle-yamasi.test.ts` |
 
 ### Sıradakiler
 
@@ -352,12 +354,11 @@ motorundan çekildi). P2'nin ilk PR'ı secret'ların yokluğunda build'i ayağa 
    zaten bildirim gönderiyor. **Kapandı** (P2e): counter Analytics Engine'de, health check
    son bir saatte hata varsa kırmızı.
 
-**P2e'nin bulduğu, açık kalan:** Next yakalanmamış hatayı kendi log'una da
-basıyor ve Drizzle'ın mesajını olduğu gibi yazıyor — query parametreleri dahil
-(`cf:onizle`'de `params: yok,true,1` görüldü). İptal token'ı ham olarak query'ye
-girdiği için bu satır token taşıyabilir. Log hesaba özel ve üç gün tutuluyor,
-ama INVARIANT 5'in lafzına aykırı. Ayrı iş — gerekçe `TODOS.md > Faz P2 — hata
-takibi`.
+**P2e'nin bulduğu da kapandı (P2g).** Next yakalanmamış hatayı kendi log'una
+basarken Drizzle'ın mesajındaki query parametrelerini de yazıyordu. Düzeltme kaynakta
+yapıldı, log'da değil: `drizzle-orm` yamalı ve mesaj artık parametre taşımıyor.
+Gerekçe ve ölçüm `TODOS.md > Faz P2 — log'daki query parametreleri`. **P2'de açık
+madde kalmadı.**
 
 **`scoped-db.ts` bölünmesi P2'den düşürüldü** — ölçülen faydası yok (bundle 0, test
 süresi 0) ve closure variable'ı disiplinini zayıflatıyor. Gerekçe `TODOS.md > Faz P2`.
