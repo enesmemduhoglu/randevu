@@ -1,10 +1,10 @@
 # Tasarım sistemi
 
-Renk, tipografi ve bileşen kuralları. Ses tonu ve metin dili `docs/marka.md`'de.
+Renk, tipografi ve component kuralları. Ses tonu ve metin dili `docs/marka.md`'de.
 Tek kaynak `src/app/globals.css`; bu belge oradaki kararların gerekçesi.
 
-Canlı referans: **`/panel/gelistirici/vitrin`** — bütün token'lar ve bileşen
-durumları tek sayfada. Geliştirici aracı; halka açık bir sayfa değil.
+Canlı referans: **`/panel/gelistirici/vitrin`** — bütün token'lar ve component
+durumları tek sayfada. Geliştirici aracı; public bir sayfa değil.
 
 ## Yön
 
@@ -22,7 +22,7 @@ saatlerce açık duracak, o yüzden sakin kalıyor.
 | Metin | Inter |
 | Köşe | 12px |
 
-## Üç katman
+## Üç layer
 
 ```
 primitive          semantic              component
@@ -30,16 +30,16 @@ primitive          semantic              component
 --renk-...-600 →  --primary        →  --saat-secili-zemin
 ```
 
-**Bileşenler yalnızca semantic katmanı kullanır.** Primitive'e dokunan bir
-bileşen, tema değişimini kırar. Kendi ürettiğimiz bileşenlerin kendine özgü
-değerleri varsa üçüncü katmana yazılır — bileşen dosyası renk kararı vermez.
+**Component'ler yalnızca semantic layer'ı kullanır.** Primitive'e dokunan bir
+component, tema değişimini kırar. Kendi ürettiğimiz component'lerin kendine özgü
+değerleri varsa üçüncü layer'a yazılır — component dosyası renk kararı vermez.
 
 ### Adlandırma: neden yarısı İngilizce
 
-Primitive ve component katmanı Türkçe (`--renk-terracotta-500`,
-`--saat-secili-zemin`). **Semantic katman İngilizce** (`--background`,
+Primitive ve component layer'ı Türkçe (`--renk-terracotta-500`,
+`--saat-secili-zemin`). **Semantic layer İngilizce** (`--background`,
 `--primary`, `--border`) çünkü o isimler shadcn/ui'nin sözleşmesi. Türkçeleştirmek,
-depoya eklenen her bileşeni elle düzenlemek demekti — her yeni bileşende tekrar
+repo'ya eklenen her component'i elle düzenlemek demekti — her yeni component'te tekrar
 eden bir maliyet. Üçüncü taraf arayüzü olduğu gibi bırakıldı.
 
 ### OKLCH neden
@@ -83,7 +83,7 @@ koyulaştırıldı.
 
 **Dolu saat devre dışı ama okunabilir tutuldu.** WCAG devre dışı denetimleri
 muaf sayıyor, ama müşteri hangi saatin kapalı olduğunu okuyacak — okunmazsa
-bileşen işini yapmıyor demektir.
+component işini yapmıyor demektir.
 
 ## Tipografi
 
@@ -92,11 +92,11 @@ yok; mono gerektiğinde sistem yığını kullanılıyor çünkü bundle 3 MiB'l
 sınırına giriyor.
 
 **`latin-ext` subset'i şart.** Türkçe'nin `ğ ı ş İ` karakterleri `latin`
-subset'inde yok; eksik olsaydı bu harfler yedek fonta düşer ve başlıklarda
+subset'inde yok; eksik olsaydı bu harfler fallback fonta düşer ve başlıklarda
 görünür bir karışıklık olurdu. `/panel/gelistirici/vitrin` sayfasındaki örnek
 metinler bu karakterleri bilerek içeriyor.
 
-## Bileşen kuralları
+## Component kuralları
 
 **Dokunma hedefi en az 44×44px, aralarında en az 8px.** Saat seçici mobilde
 parmakla kullanılacak; `--saat-min-yukseklik` bunu taşıyor.
@@ -112,7 +112,7 @@ durum her zaman kötü görünür.
 
 **Etiket her zaman görünür.** Yer tutucu etiketin yerini almaz.
 
-**Form alanı yüksekliği bağlama göre.** shadcn varsayılanı `h-8`; bu ölçü
+**Form alanı yüksekliği context'e göre.** shadcn varsayılanı `h-8`; bu ölçü
 panel içi yoğun arayüz için. Müşterinin ya da işletme sahibinin telefondan
 doldurduğu formlarda (`/giris`, `/kayit`) `h-10` kullanılır — etiketle
 birlikte 44px dokunma hedefine giriyor. Aynı kural buton için de geçerli.
@@ -121,12 +121,12 @@ birlikte 44px dokunma hedefine giriyor. Aynı kural buton için de geçerli.
 
 1. Ham değer gerekiyorsa **primitive**'e ekle (Türkçe ad, OKLCH).
 2. Bir amaca karşılık geliyorsa **semantic**'e takma ad ver.
-3. Tek bir bileşene aitse **component** katmanına yaz.
+3. Tek bir component'e aitse **component** layer'ına yaz.
 4. Tailwind sınıfı üretmesi gerekiyorsa `@theme inline` bloğuna
    `--color-<ad>: var(--<ad>)` satırını **ekle**.
 
 > **Tuzak:** 4. adım atlanırsa `bg-[--token]` yazmak Tailwind v4'te sınıf
-> üretmez ve **hata da vermez** — bileşen sessizce renksiz kalır. Vitrin
+> üretmez ve **hata da vermez** — component sessizce renksiz kalır. Vitrin
 > sayfasında saat seçici tam olarak böyle bozuk çıktı. Token'ı `@theme`'e verip
 > `bg-saat-secili-zemin` gibi gerçek bir sınıf kullan.
 
@@ -134,12 +134,12 @@ birlikte 44px dokunma hedefine giriyor. Aynı kural buton için de geçerli.
 
 Wordmark `src/components/marka/logo.tsx`, işaret `currentColor` kullanıyor —
 rengi kapsayıcı belirliyor. Favicon `src/app/icon.svg` statik; dinamik
-üretilmiyor çünkü `next/og` wasm kullanıyor ve workerd çalışma anında wasm
-derlemeye izin vermiyor.
+üretilmiyor çünkü `next/og` wasm kullanıyor ve workerd runtime'da wasm
+compile etmeye izin vermiyor.
 
 `src/lib/marka.ts` token'ların hex karşılığını tutuyor — yalnızca e-posta
-şablonları için, çünkü e-posta istemcileri `var()` çözmüyor ve `oklch()`
-bilmiyor. Bileşenler orayı kullanmaz.
+şablonları için, çünkü e-posta client'ları `var()` çözmüyor ve `oklch()`
+bilmiyor. Component'ler orayı kullanmaz.
 
 **Marka adı henüz yok.** Ad netleştiğinde `logo.tsx` ve `marka.ts` değişir;
 başka hiçbir yer etkilenmez.

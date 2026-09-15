@@ -1,0 +1,5 @@
+# patch-package yamalari node_modules'taki LF dosyalara uygulaniyor. Windows'ta
+# `core.autocrlf=true` yamayi CRLF ile checkout ediyor; yama yine tutuyor ama
+# dosyada karisik satir sonu birakiyor ve yeniden uretilen yamanin diff'i
+# kirleniyor (olculdu, Faz P2g).
+*.patch text eol=lf

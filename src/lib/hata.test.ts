@@ -11,12 +11,15 @@ afterEach(() => {
 });
 
 /// Drizzle'in gercek sarmalayicisi, postgres.js'in hatasini `cause`'da tasiyor.
-/// Mesaj sorgunun parametrelerini iceriyor - kapinin var olma sebebi bu.
+/// Sarmalayicinin mesaji yamadan beri parametre tasimiyor
+/// (`drizzle-yamasi.test.ts`), ama Postgres'in kendi hatasi degeri `detail`'de
+/// tasiyor - kapinin var olma sebebi artik bu.
 function drizzleBenzersizIhlali(): DrizzleQueryError {
   const pg = Object.assign(new Error("duplicate key value violates unique constraint"), {
     name: "PostgresError",
     code: "23505",
     constraint_name: "kullanici_eposta_benzersiz",
+    detail: "Key (eposta)=(ali@ornek.com) already exists.",
   });
   return new DrizzleQueryError(
     'insert into "kullanici" ("eposta", "telefon") values ($1, $2)',
@@ -35,9 +38,10 @@ function logSatirlari(): { cikan: string[] } {
 
 test("Drizzle hatasi: tur ve Postgres kodu var, sorgu parametreleri yok", async () => {
   const hata = drizzleBenzersizIhlali();
-  // On kosul: mesaj GERCEKTEN kisisel veri tasiyor. Drizzle bir gun bunu
-  // birakirsa test yine gecer ama yanlis bir seyi kanitlamaz - burada gorunsun.
-  expect(hata.message).toContain("ali@ornek.com");
+  // On kosul: hata nesnesi GERCEKTEN kisisel veri tasiyor. Tasimasaydi test
+  // yine gecerdi ama yanlis bir seyi kanitlardi - burada gorunsun. Ilk surumu
+  // mesaja bakiyordu ve Drizzle yamasi (Faz P2) tam bunu kirmiziya cevirdi.
+  expect((hata.cause as Error & { detail?: string }).detail).toContain("ali@ornek.com");
 
   const { cikan } = logSatirlari();
   await hataBildir("kayit", hata);

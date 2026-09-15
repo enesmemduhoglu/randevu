@@ -3,11 +3,14 @@
 //
 // NEDEN TEK KAPI: DEGISMEZ 5 en kolay hata yolunda deliniyor. Bir `catch`
 // blogunda `console.error(hata)` yazmak dogal geliyor, ama bu depoda hata
-// nesnesinin MESAJI kisisel veri tasiyor: Drizzle'in `DrizzleQueryError`'u
-// mesaja sorgunun PARAMETRELERINI ekliyor (`params: ali@ornek.com,0555...`).
-// Suzgec her cagrida yeniden yazilsaydi biri bir gun unuturdu; burada bir kez
-// yazili ve `degismezler.test.ts` `console.error`'un `src` altinda baska bir
-// yerde gecmesini yasakliyor.
+// nesnesi kisisel veri tasiyor. Drizzle'in `DrizzleQueryError`'u mesaja
+// sorgunun PARAMETRELERINI ekliyordu - o yamayla kalkti
+// (`patches/drizzle-orm+0.45.2.patch`) - ama sardigi Postgres hatasi hala
+// degeri tasiyor: `invalid input syntax for type uuid: "<girdi>"` mesajinda,
+// benzersizlik ihlalinde `detail`'de (`Key (telefon)=(0555...)`). Suzgec her
+// cagrida yeniden yazilsaydi biri bir gun unuturdu; burada bir kez yazili ve
+// `degismezler.test.ts` `console.error`'un `src` altinda baska bir yerde
+// gecmesini yasakliyor.
 //
 // NE TASINIYOR: kaynak, hatanin turu, Postgres kodu ve kisit adi, React'in
 // digest'i. MESAJ VE YIGIN TASINMIYOR - desenle temizlemeye calismak yerine hic

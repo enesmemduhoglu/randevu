@@ -1,0 +1,44 @@
+diff --git a/node_modules/drizzle-orm/errors.cjs b/node_modules/drizzle-orm/errors.cjs
+index b593f0d..5651bba 100644
+--- a/node_modules/drizzle-orm/errors.cjs
++++ b/node_modules/drizzle-orm/errors.cjs
+@@ -34,10 +34,14 @@ class DrizzleError extends Error {
+ }
+ class DrizzleQueryError extends Error {
+   constructor(query, params, cause) {
+-    super(`Failed query: ${query}
+-params: ${params}`);
++    // RANDEVU YAMASI (patches/drizzle-orm+0.45.2.patch, DEGISMEZ 5): parametreler
++    // mesaja GIRMIYOR. Next yakalanmamis hatanin mesajini log'a basiyor ve
++    // parametre e-posta, telefon ya da ham iptal jetonu olabiliyor. `params`
++    // sayilamaz alan olarak kaliyor - postgres.js'in `parameters`'i gibi: okunabilir
++    // ama JSON.stringify ve inspect onu gostermiyor.
++    super(`Failed query: ${query}`);
+     this.query = query;
+-    this.params = params;
++    Object.defineProperty(this, "params", { value: params, enumerable: false, writable: true, configurable: true });
+     this.cause = cause;
+     Error.captureStackTrace(this, DrizzleQueryError);
+     if (cause) this.cause = cause;
+diff --git a/node_modules/drizzle-orm/errors.js b/node_modules/drizzle-orm/errors.js
+index 6db8b63..0a16cb9 100644
+--- a/node_modules/drizzle-orm/errors.js
++++ b/node_modules/drizzle-orm/errors.js
+@@ -9,10 +9,14 @@ class DrizzleError extends Error {
+ }
+ class DrizzleQueryError extends Error {
+   constructor(query, params, cause) {
+-    super(`Failed query: ${query}
+-params: ${params}`);
++    // RANDEVU YAMASI (patches/drizzle-orm+0.45.2.patch, DEGISMEZ 5): parametreler
++    // mesaja GIRMIYOR. Next yakalanmamis hatanin mesajini log'a basiyor ve
++    // parametre e-posta, telefon ya da ham iptal jetonu olabiliyor. `params`
++    // sayilamaz alan olarak kaliyor - postgres.js'in `parameters`'i gibi: okunabilir
++    // ama JSON.stringify ve inspect onu gostermiyor.
++    super(`Failed query: ${query}`);
+     this.query = query;
+-    this.params = params;
++    Object.defineProperty(this, "params", { value: params, enumerable: false, writable: true, configurable: true });
+     this.cause = cause;
+     Error.captureStackTrace(this, DrizzleQueryError);
+     if (cause) this.cause = cause;
