@@ -4643,6 +4643,11 @@ yalnızca bu constructor (aranarak doğrulandı).
 - **`drizzle-orm` tam sürüme sabitlendi** (`^0.45.2` → `0.45.2`). Yama sürüme
   bağlı. Bu bağı lockfile zaten kuruyordu, `package.json`'da da görünür oldu.
   Drizzle yükseltilirken yama yeniden üretilir.
+- **`.gitattributes`: `*.patch text eol=lf`.** Bu makinede `core.autocrlf=true`
+  ve yama CRLF ile checkout edilecekti. Ölçüldü: CRLF yama da tutuyor, ama
+  `errors.js`'te karışık satır sonu (`CRLF, LF`) bırakıyor. Bu durumda yeniden
+  üretilen yamanın diff'i bütün dosyayı değişmiş gösterirdi. CI Linux'ta olduğu için
+  orada fark yok.
 
 **Reddedilen: log'da susturmak** (`register()`'da `console.error`
 sarmalayıcısı, `hata.ts`'in içinde). Ölçüldü ve çalışıyordu, ama üç sebeple
