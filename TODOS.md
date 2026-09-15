@@ -1,9 +1,9 @@
-# Karar gunlugu
+# Decision log
 
 Bir tasarim kararini sorgulamadan once buraya bak; is bitirdiginde buraya yaz.
 En degerli satir "bilerek yapilmayan ne var ve neden" satiridir.
 
-Plan: `docs/plan.md`. Degismezler: `CLAUDE.md`.
+Plan: `docs/plan.md`. Invariant'lar: `CLAUDE.md`.
 
 ---
 
@@ -11,46 +11,46 @@ Plan: `docs/plan.md`. Degismezler: `CLAUDE.md`.
 
 **Kapandi:** Next.js 16.3.3 + React 19.2.8 + TypeScript + Tailwind v4 iskelesi,
 Prisma 7.10.0 (CLI + client + adapter-pg), gercek Postgres'e kosan Vitest duzeni,
-`CLAUDE.md` degismezleri, bu gunluk.
+`CLAUDE.md` invariant'lari, bu gunluk.
 
 ### Kararlar
 
-- **Prisma CLI 7.10.0'a sabitlendi.** npm'de `prisma` paketinin `latest` etiketi
-  su an **`8.0.0-rc.12`**, yani bir release candidate; son stabil surum `prev`
+- **Prisma CLI 7.10.0'a sabitlendi.** npm'de `prisma` package'inin `latest` etiketi
+  su an **`8.0.0-rc.12`**, yani bir release candidate; son stabil version `prev`
   etiketinde duruyor. `npm i -D prisma` dogrudan RC kuruyor ve yaninda
   `alchemy` + `workerd` diye buyuk bir agac getiriyor - ustelik client
   `^7.10.0` kaldigi icin CLI/client major uyusmazligi olusuyordu.
   **Yeni bagimlilik eklerken `prisma`yi carete birak, major'u yukseltme.**
 
-- **Faz A'ya minimal `Isletme` modeli girdi.** Plan semayi Faz E'ye koyuyordu,
-  ama modelsiz bir semada migration da test kosumu da dogrulanamiyor. Kiraci
+- **Faz A'ya minimal `Isletme` modeli girdi.** Plan schema'yi Faz E'ye koyuyordu,
+  ama modelsiz bir schema'da migration da test run'i de dogrulanamiyor. Tenant
   koku olan tek model burada duruyor; Faz E onu genisletecek, yeniden
   yazmayacak.
 
-- **`src/lib/db.ts` simdilik tek istemci tutuyor.** Faz B'de Workers yolu
-  eklenince istemci ISTEK BASINA uretilecek (modul seviyesinde tutulan bir
+- **`src/lib/db.ts` simdilik tek client tutuyor.** Faz B'de Workers yolu
+  eklenince client REQUEST BASINA uretilecek (modul seviyesinde tutulan bir
   PrismaClient Hyperdrive ile takilabiliyor - prisma#28193). Dosya ikiye
   bolunmeyecek, `getDb` icinde dallanacak.
 
 - **Testler asla gelistirme veritabanina bakmaz.** `vitest.setup.ts`
-  `DATABASE_URL`i `TEST_DATABASE_URL` ile ezer. Bu satir olmadan bir test kosumu
+  `DATABASE_URL`i `TEST_DATABASE_URL` ile ezer. Bu satir olmadan bir test run'i
   gelistirme verisini silerdi.
 
-- **npm 12'nin allow-scripts kapisi acildi** su paketler icin: `esbuild`,
+- **npm 12'nin allow-scripts gate'i acildi** su package'lar icin: `esbuild`,
   `workerd`, `unrs-resolver`, `msgpackr-extract`, `prisma`, `@prisma/engines`.
-  Hepsi native binary indiren standart arac zinciri paketleri.
+  Hepsi native binary indiren standart arac zinciri package'lari.
 
 ### Bilerek kapsam disi
 
 - Supabase Auth, shadcn/ui, tasarim token'lari, deploy - sirasiyla Faz C ve D.
 - `npm audit`: `deepmerge-ts` uzerinden 3 "high" bulgu var, hepsi tek kok nedene
-  cikiyor ve **Prisma CLI'in config okuyucusuna** ait, calisma zamani istek
+  cikiyor ve **Prisma CLI'in config okuyucusuna** ait, calisma zamani request
   yoluna degil. `npm audit fix --force` bizi 8-RC'ye iterdi; tedavi hastaliktan
   kotu. Prisma 7 stabil hattinda duzelene kadar bilincli olarak birakildi.
 
 ### Elle yapilmasi gerekenler
 
-- [x] Docker Desktop acildi, `randevu-test-pg` konteyneri (port 5455) ayakta.
+- [x] Docker Desktop acildi, `randevu-test-pg` container'i (port 5455) ayakta.
 - [x] `randevu_dev` ve `randevu_test` olusturuldu, ilk migration uygulandi
       (`20260829125614_ilk`).
 
@@ -63,8 +63,8 @@ Prisma 7.10.0 (CLI + client + adapter-pg), gercek Postgres'e kosan Vitest duzeni
 
 ### Bilinen gurultu
 
-- `npm run db:hazirla` calisirken Node bir modul-tipi uyarisi basiyor: paket
-  `type: module` degil ama betik ESM. Zararsiz. Duzeltmenin iki yolu da
+- `npm run db:hazirla` calisirken Node bir modul-tipi uyarisi basiyor: package
+  `type: module` degil ama script ESM. Zararsiz. Duzeltmenin iki yolu da
   (`type: module` eklemek ya da `.mts`'e gecip vitest import'unu bozmak)
   uyarinin maliyetinden buyuk; bilincli olarak birakildi.
 
@@ -72,13 +72,13 @@ Prisma 7.10.0 (CLI + client + adapter-pg), gercek Postgres'e kosan Vitest duzeni
 
 ## Faz B — Cloudflare zemini
 
-**Kapandi (deploy haric):** Supabase projesi, Hyperdrive baglantisi, OpenNext +
-wrangler yapilandirmasi, `/saglik` teshis sayfasi ve **Prisma'dan Drizzle'a
+**Kapandi (deploy haric):** Supabase projesi, Hyperdrive connection'i, OpenNext +
+wrangler config'i, `/saglik` teshis sayfasi ve **Prisma'dan Drizzle'a
 gecis**.
 
 ### Prisma birakildi, Drizzle'a gecildi
 
-Prisma 7'nin sorgu derleyicisi WASM ve workerd calisma aninda WASM derlemeyi
+Prisma 7'nin query compiler'i WASM ve workerd runtime'da WASM compile etmeyi
 yasakliyor: `WebAssembly.Module(): Wasm code generation disallowed by embedder`.
 Denenen ve elenen yollar:
 
@@ -86,42 +86,42 @@ Denenen ve elenen yollar:
   (`wasm?module` statik import'u) ama o client Node'da hic calismiyor - Vite
   `?module` sozdizimini ayristiramiyor, yani testler ve `next dev` kiriliyor.
 - Iki client uretip secimi `package.json > imports` kosullarina birakmak da
-  ise yaramadi: **Next sunucu bundle'ini Node icin uretiyor**, OpenNext o Node
+  ise yaramadi: **Next server bundle'ini Node icin uretiyor**, OpenNext o Node
   ciktisini workerd'e uyarliyor. `workerd` kosulu hic devreye girmiyor ve
-  Turbopack wasm'i base64'e cevirip calisma ani derlemesine dusuruyor.
+  Turbopack wasm'i base64'e cevirip runtime compile'ina dusuruyor.
 - Prisma tarafinda acik ve dogrulanmamis kayit: prisma/prisma#28657. Tek
   onerilen cozum Prisma 6.19'a inmek.
 
 Drizzle saf TypeScript, hic WASM yok. Olculen kazanc: **worker bundle 2734 KiB
--> 1032 KiB (gzip), %62 dusus**; test kosumu 2.8s -> 1.5s. 3 MiB'lik ucretsiz
+-> 1032 KiB (gzip), %62 dusus**; test run'i 2.8s -> 1.5s. 3 MiB'lik ucretsiz
 plan siniri artik rahat.
 
-**Bedeli ve karsiligi:** `warden` degismez kapisi Prisma'nin `db.model.method(`
+**Bedeli ve karsiligi:** `warden` invariant gate Prisma'nin `db.model.method(`
 bicimini ariyordu; Drizzle'in `db.select().from()` bicimini yakalamiyor. Yani
-1. degismez (route'ta ham `db.*` yok) **artik otomatik zorlanmiyor**. Faz D'de
+1. invariant (route'ta ham `db.*` yok) **artik otomatik zorlanmiyor**. Faz D'de
 `scoped-db.ts` gelince ESLint `no-restricted-imports` ile deterministik hale
-getirilecek - route handler'lar `@/lib/db` import edemeyecek. Kapinin diger
+getirilecek - route handler'lar `@/lib/db` import edemeyecek. Gate'in diger
 kurallari (dogrudan `resend.emails.send`, `checkOrigin`) etkilenmedi.
 
 ### Diger kararlar
 
-- **Supabase direct baglanti kullanilamiyor.** `db.<ref>.supabase.co` yalnizca
+- **Supabase direct connection kullanilamiyor.** `db.<ref>.supabase.co` yalnizca
   AAAA (IPv6) kaydi cozuyor; bu makinede IPv6 cikisi yok. Olculdu: session mode
   (5432) ve transaction mode (6543) calisiyor, direct `ENOTFOUND`.
   **Supavisor SESSION MODE** secildi - transaction mode prepared statement
   kirar. Cloudflare'in "direct kullan" tavsiyesi bu senaryoyu kapsamiyor.
-- **Hyperdrive sorgu onbellegi KAPALI** (`--caching-disabled`). Musaitlik
-  sorgusu yazma kararini besliyor; 60 saniye bayat veri dolu bir slotu bos
+- **Hyperdrive query cache'i KAPALI** (`--caching-disabled`). Musaitlik
+  query'si yazma kararini besliyor; 60 saniye bayat veri dolu bir slotu bos
   gosterirdi.
-- **Yerel Postgres 17'ye cekildi** (prod Supabase 17.6). Onceki 16'ydi.
+- **Local Postgres 17'ye cekildi** (prod Supabase 17.6). Onceki 16'ydi.
 - **`?schema=public` kaldirildi.** Prisma'ya ozgu bir parametreydi; postgres.js
-  onu sunucuya baslangic parametresi olarak gonderip `FATAL 42704` aliyordu.
+  onu server'a baslangic parametresi olarak gonderip `FATAL 42704` aliyordu.
 - **`localConnectionString` wrangler.jsonc'ye yazildi.** Bu deger olmadan
   `next build` ve `wrangler dev` Hyperdrive binding'ini cozemeyip patliyor.
-  Gizli degil - yalnizca yerel konteynere bakiyor.
+  Gizli degil - yalnizca local container'a bakiyor.
 - **`@opennextjs/cloudflare@1.20.4` `esbuild`'i bagimliliklarinda tanimlamamis**
   (ne `dependencies` ne `peerDependencies`), hoisting'e guvenmis. npm onu
-  `wrangler/node_modules` altina gomunce paket kendi bagimliligini bulamiyor.
+  `wrangler/node_modules` altina gomunce package kendi bagimliligini bulamiyor.
   Acikca `esbuild` devDependency olarak eklendi - kaldirilirsa build kirilir.
 - **ESLint build ciktilarini yok sayiyor** (`.open-next`, `.wrangler`,
   `cloudflare-env.d.ts`). Yoksa 26 bin sahte bulgu uretiyordu.
@@ -130,7 +130,7 @@ kurallari (dogrudan `resend.emails.send`, `checkOrigin`) etkilenmedi.
 
 ### Bilerek kapsam disi
 
-- **Deploy yapilmadi.** `wrangler deploy` oturum politikasi tarafindan
+- **Deploy yapilmadi.** `wrangler deploy` session politikasi tarafindan
   engellendi; kullanici karari bekliyor. Custom domain
   (`randevu.enesmemduhoglu.tech`) da baglanmadi.
 - Incremental cache (R2/KV) bagli degil: sayfalar agirlikli dinamik.
@@ -140,9 +140,9 @@ kurallari (dogrudan `resend.emails.send`, `checkOrigin`) etkilenmedi.
 - `npm run tip`, `npm run lint` temiz
 - `npm test` - 2 test gecti (gercek Postgres, 1.5s)
 - `npm run cf:kur` basarili, `wrangler deploy --dry-run`: 1032 KiB gzip
-- **`wrangler dev` (yerel workerd) icinde `/saglik`: bagli, PostgreSQL 17, 14 ms**
+- **`wrangler dev` (local workerd) icinde `/saglik`: bagli, PostgreSQL 17, 14 ms**
   - yani Worker kod yolu + Hyperdrive binding calisiyor
-- Drizzle migration'i hem yerel hem PROD Supabase'e uygulandi; prod'da `isletme`
+- Drizzle migration'i hem local hem PROD Supabase'e uygulandi; prod'da `isletme`
   tablosu dogru kolonlarla duruyor
 
 ### Elle yapilmasi gerekenler
@@ -151,7 +151,7 @@ kurallari (dogrudan `resend.emails.send`, `checkOrigin`) etkilenmedi.
       gerekli** - kapatilirsa build EPERM ile duser.
 - [x] `wrangler login` yapildi; hesap `6f4d2de4cf9316fbf3538ddea2867547`.
 - [x] Deploy karari ve custom domain baglantisi - 30 Agustos 2026'da yapildi,
-      ayrinti "Ilk yayin" bolumunde. `wrangler.jsonc` `workers_dev: false` +
+      ayrinti "Ilk deploy" bolumunde. `wrangler.jsonc` `workers_dev: false` +
       custom domain tasiyor.
 - [ ] Supabase access token kullanici tarafindan silindi - yeni bir islem
       gerekirse yenisi lazim. (Kapanmiyor: duran bir kosul, yapilacak is
@@ -159,18 +159,18 @@ kurallari (dogrudan `resend.emails.send`, `checkOrigin`) etkilenmedi.
 
 ---
 
-## Faz C — tasarim dili ve bilesen katmani
+## Faz C — tasarim dili ve component layer'ı
 
-**Kapandi:** marka sesi ve Turkce metin dili, uc katmanli token sistemi,
-shadcn/ui bilesen seti, wordmark ve favicon, bilesen vitrini, tasarim sistemi
+**Kapandi:** marka sesi ve Turkce metin dili, uc layer'lı token sistemi,
+shadcn/ui component seti, wordmark ve favicon, component vitrini, tasarim sistemi
 belgesi.
 
 ### Kararlar
 
-- **Semantic token'lar Ingilizce kaldi.** Primitive ve component katmani Turkce
+- **Semantic token'lar Ingilizce kaldi.** Primitive ve component layer'ı Turkce
   (`--renk-terracotta-500`, `--saat-secili-zemin`) ama `--background`,
-  `--primary`, `--border` shadcn/ui'nin sozlesmesi. Turkcelestirmek, depoya
-  eklenen HER bileseni elle duzenlemek demekti - her yeni bilesende tekrar eden
+  `--primary`, `--border` shadcn/ui'nin sozlesmesi. Turkcelestirmek, repo'ya
+  eklenen HER component'i elle duzenlemek demekti - her yeni component'te tekrar eden
   bir maliyet. Ucuncu taraf arayuzu oldugu gibi birakildi.
 
 - **OKLCH secildi.** Acik ve koyu tema arasinda ton kaymasi olmadan parlaklik
@@ -186,7 +186,7 @@ belgesi.
 - **Terminoloji sozlugu baglayici** (`docs/marka.md`). "Slot", "rezervasyon",
   "kullanici" arayuzden cikti - hedef kitle yazilimci degil.
 
-- **Takvim bileseni bilerek eklenmedi.** Randevu akisinin gun secici ihtiyaci
+- **Takvim component'i bilerek eklenmedi.** Randevu akisinin gun secici ihtiyaci
   Faz F'de netlesecek; hazir takvimi simdiden secmek erken karar olurdu.
 
 ### Vitrinin yakaladigi iki hata
@@ -208,7 +208,7 @@ hata cikardi:
 
 - ~~Vitrin `/vitrin` altinda acikta duruyor.~~ **Faz D'de kapandi:** sayfa
   `/panel/gelistirici/vitrin` altina tasindi. Vitrin bir gelistirici araci,
-  halka acik bir sayfa degil.
+  public bir sayfa degil.
 - Randevu akisinin kendisi (adim adim ekranlar) Faz F-G'de.
 
 ### Dogrulama
@@ -222,41 +222,41 @@ hata cikardi:
 
 ---
 
-## Faz D — kimlik ve kiracı
+## Faz D — kimlik ve tenant
 
-**Kapandı:** şema (kullanıcı, personel), kiracı izolasyon katmanı, IDOR
+**Kapandı:** schema (kullanıcı, personel), tenant izolasyon layer'ı, IDOR
 guardrail'inin eslint kuralıyla geri getirilmesi, CSRF origin kontrolü, kimlik
-katmanı ve proxy, işletme kayıt akışı, giriş/kayıt/kayıt-tamamlama ekranları,
+layer'ı ve proxy, işletme kayıt akışı, giriş/kayıt/kayıt-tamamlama ekranları,
 kimlik API route'ları, panel iskeleti, kök sayfa.
 
 ### Kararlar
 
 - **IDOR guardrail'i geri geldi.** Drizzle'a geçerken kaybettiğimiz warden
-  kapısının yerine eslint `no-restricted-imports`: `src/app` altından
+  gate'inin yerine eslint `no-restricted-imports`: `src/app` altından
   `@/lib/db` import etmek yasak. Kapsam route handler'lardan GENİŞ tutuldu —
-  sunucu bileşenleri de sorgu yapabiliyor ve risk birebir aynı. Kural kasıtlı
+  server component'leri de query yapabiliyor ve risk birebir aynı. Kural kasıtlı
   bir ihlalle doğrulandı.
 
 - **Kimlik Supabase'den, yetki bizden.** `auth()` JWT'den yalnızca `sub`
   alıyor, rol ve `isletmeId`'yi kendi `kullanici` tablomuzdan okuyor. Custom
-  Access Token Hook bilerek kullanılmadı: claim'e yazmak istek başına bir
-  sorgu tasarruf ettirirdi ama rol değişince bayat claim sorunu ve ikinci bir
+  Access Token Hook bilerek kullanılmadı: claim'e yazmak request başına bir
+  query tasarruf ettirirdi ama rol değişince bayat claim sorunu ve ikinci bir
   migration yüzeyi getirirdi.
 
 - **`getClaims()`, `getSession()` değil.** getSession cookie'den geleni
   DOĞRULAMADAN döndürüyor; Supabase kendi dokümanında ona güvenilmemesi
-  gerektiğini yazıyor. getClaims imzayı doğruluyor ve asimetrik anahtarlarda
-  bunu yerelde WebCrypto ile yapıyor — JWKS önbellekli, istek başına ağ turu
+  gerektiğini yazıyor. getClaims imzayı doğruluyor ve asimetrik key'lerde
+  bunu local'de WebCrypto ile yapıyor — JWKS cache'li, request başına network turu
   yok.
 
 - **Next 16'da `middleware.ts` DEĞİL `proxy.ts`.** Export adı da `proxy`.
-  Eğitim verisinden yazılsa yanlış olurdu; `AGENTS.md` uyarısı üzerine paketin
+  Eğitim verisinden yazılsa yanlış olurdu; `AGENTS.md` uyarısı üzerine package'ın
   kendi dokümanı okundu (`node_modules/next/dist/docs`).
 
-- **Proxy YETKİLENDİRME YAPMIYOR.** Yalnızca token yeniliyor (sunucu
-  bileşenleri cookie yazamıyor) ve oturum cookie'si hiç olmayanı ucuzca
+- **Proxy YETKİLENDİRME YAPMIYOR.** Yalnızca token yeniliyor (server
+  component'leri cookie yazamıyor) ve session cookie'si hiç olmayanı ucuzca
   kesiyor. Cookie'nin varlığı kimlik kanıtı DEĞİL; gerçek yetki her zaman
-  sunucuda `auth()` ile — panelde bu karar `src/app/panel/layout.tsx`'te.
+  server'da `auth()` ile — panelde bu karar `src/app/panel/layout.tsx`'te.
 
   > **Faz E'de düzeltildi:** buradaki "OpenNext Node middleware'i
   > desteklemediği için edge'de koşuyor" cümlesi ölçümle değil varsayımla
@@ -266,29 +266,29 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
 
 - **`/api` proxy kapsamının DIŞINDA.** Proxy'nin tek işi cookie yenilemek ve
   route handler'lar bunu kendileri yapabiliyor (`cookies().set` orada
-  çalışıyor, sunucu bileşenlerinin aksine). İkisi aynı yanıta cookie yazarsa
-  hangi `Set-Cookie`'nin sonda kalacağı belirsizleşiyordu — çıkış isteğinde bu,
-  oturumu hiç temizlememek anlamına gelirdi.
+  çalışıyor, server component'lerinin aksine). İkisi aynı response'a cookie yazarsa
+  hangi `Set-Cookie`'nin sonda kalacağı belirsizleşiyordu — çıkış request'inde bu,
+  session'ı hiç temizlememek anlamına gelirdi.
 
 - **Türkçe slug için harf tablosu, NFD değil.** Noktasız i ve noktalı I tek
   kod noktası, ayrılabilir aksanları yok — NFD onları çözemiyor. NFD adımı
   yine de duruyor, Türkçe olmayan aksanlı adlar için.
 
 - **`x-forwarded-proto` okunuyor.** TLS Cloudflare'de sonlanıyor, uygulamaya
-  istek düz http geliyor ama tarayıcının gönderdiği Origin https. Yalnızca
-  `req.url`'e güvenilseydi her meşru mutasyon 403 yerdi.
+  request düz http geliyor ama tarayıcının gönderdiği Origin https. Yalnızca
+  `req.url`'e güvenilseydi her meşru mutation 403 yerdi.
 
-- **Kimlik akışlarının tamamı sunucuda.** Formlar kendi route'larımıza POST
-  atıyor; Supabase çağrısını sunucu yapıyor, cookie'yi de o yazıyor. Bedeli:
+- **Kimlik akışlarının tamamı server'da.** Formlar kendi route'larımıza POST
+  atıyor; Supabase çağrısını server yapıyor, cookie'yi de o yazıyor. Bedeli:
   formlar JS gerektiriyor. Karşılığı: şifre tarayıcıdaki bir SDK'ya hiç
   girmiyor, cookie yazma tek yerde kalıyor ve dört route da `checkOrigin` ile
-  aynı CSRF kapısından geçiyor (server action olsaydı o kapı Next'in kendi
-  kontrolüne devredilirdi). `createBrowserClient` sarmalayıcısı hiç
+  aynı CSRF gate'inden geçiyor (server action olsaydı o gate Next'in kendi
+  kontrolüne devredilirdi). `createBrowserClient` wrapper'ı hiç
   çağrılmadığı için silindi.
 
-- **Route'larda adım sırası sözleşme:** `checkOrigin` → gövde ayrıştırma →
-  girdi doğrulama → *ancak sonra* Supabase/veritabanı. İlk üç adım ağa
-  çıkmadığı için o dilim Postgres'siz ve Supabase'siz sınanabiliyor; testler
+- **Route'larda adım sırası sözleşme:** `checkOrigin` → body ayrıştırma →
+  input doğrulama → *ancak sonra* Supabase/veritabanı. İlk üç adım network'e
+  çıkmadığı için o dilim Postgres'siz ve Supabase'siz test edilebiliyor; testler
   tam olarak bu sıraya dayanıyor ve sıra bozulursa `cookies()` fırlatarak
   düşüyorlar. Kayıtta ayrıca bir ürün gerekçesi var: geçersiz bir işletme
   adıyla açılmış Supabase hesabı geri alınamaz, sahipsiz kalırdı.
@@ -304,10 +304,10 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
   bunu kaçırırdı ve kullanıcı bir daha giriş yapamazdı.
 
 - **Başarısız girişte tek mesaj.** "Böyle bir hesap yok" ile "şifre yanlış"
-  ayrımını yapmak hesap sayımına (enumeration) kapı açar.
+  ayrımını yapmak hesap sayımına (enumeration) gate açar.
 
 - **Supabase hata kodları kendi cümlelerimize eşleniyor** (`src/lib/supabase/
-  hata.ts`). Sağlayıcının metni hiçbir zaman taşınmıyor (değişmez 5), yalnızca
+  hata.ts`). Provider'ın metni hiçbir zaman taşınmıyor (invariant 5), yalnızca
   bilinen KOD eşleniyor. Bu eşleme elle denemeden doğdu: Supabase `.test`
   uzantılı adresi reddetti ve ekranda "bağlantıda bir sorun oldu" yazdı —
   kullanıcıya düzeltebileceği bir şey olduğunu hiç söylemeyen bir mesaj.
@@ -317,26 +317,26 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
   biri masaüstünden de atılmış oluyor. "Tüm cihazlardan çık" ayrı ve açıkça
   seçilen bir işlem olmalı.
 
-- **Route'lar `Response.redirect` dönmüyor.** fetch ile atılan bir istekte 30x
-  yanıtını tarayıcı sessizce izliyor ve istemci nereye gidildiğini
-  öğrenemiyor. Sözleşme: hata `{ hata }`, başarı `{ yon }` — yönlendirmeyi
-  istemci yapıyor ve ardından `router.refresh()` çağırıyor (cookie yeni
-  yazıldı, sunucu bileşenlerinin çıktısı bayat).
+- **Route'lar `Response.redirect` dönmüyor.** fetch ile atılan bir request'te 30x
+  response'unu tarayıcı sessizce izliyor ve client nereye gidildiğini
+  öğrenemiyor. Sözleşme: hata `{ hata }`, başarı `{ yon }` — redirect'i
+  client yapıyor ve ardından `router.refresh()` çağırıyor (cookie yeni
+  yazıldı, server component'lerinin çıktısı bayat).
 
 - **`auth()` ve `authKimligi()` React `cache`'ine alındı.** Panel düzeni ve
-  içindeki sayfa aynı istekte ikisi de oturumu soruyor; sarmadan her biri
-  kendi JWT doğrulamasını ve kendi sorgusunu yapardı. İstek başına önbellek,
-  yani bayat oturum riski yok.
+  içindeki sayfa aynı request'te ikisi de session'ı soruyor; sarmadan her biri
+  kendi JWT doğrulamasını ve kendi query'sini yapardı. Request başına cache,
+  yani bayat session riski yok.
 
 - **`isletmeKaydiOlustur` benzersizlik ihlalini yakalıyor.** Transaction önce
-  "bu authUserId kayıtlı mı" diye bakıyor ama iki istek aynı anda gelirse
+  "bu authUserId kayıtlı mı" diye bakıyor ama iki request aynı anda gelirse
   ikisi de boş görüyor; kesin cevabı `kullanici_auth_user_id_idx` veriyor
-  (değişmez 3). Slug çarpışması bilerek yakalanmıyor: o kadar dar bir pencere
-  için yeniden deneme döngüsü taşımak, hiç koşulmayan — yani sınanmamış — kod
+  (invariant 3). Slug çarpışması bilerek yakalanmıyor: o kadar dar bir pencere
+  için yeniden deneme döngüsü taşımak, hiç koşulmayan — yani test edilmemiş — kod
   demekti.
 
 - **Zod eklenmedi.** Doğrulanan alan sayısı az ve mesajların tamamı Türkçe;
-  kütüphanenin ürettiği metni yine elle yazacaktık. Form katmanı
+  kütüphanenin ürettiği metni yine elle yazacaktık. Form layer'ı
   (react-hook-form + zod) Faz E'de hizmet/personel formlarıyla birlikte gelecek.
 
 - **Olmayan sayfalara link verilmiyor.** Panel menüsünde Takvim, Hizmetler,
@@ -352,18 +352,18 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
   panel içi yoğun arayüz için; bu üç ekran mobilde parmakla kullanılıyor ve
   tasarım sistemi dokunma hedefini en az 44px alıyor.
 
-- **İstemcide ağır doğrulama yok.** Kuralların tek sahibi sunucudaki
+- **Client'ta ağır doğrulama yok.** Kuralların tek sahibi server'daki
   `girdi.ts`. Aynı kuralı iki yerde tutmak, ikisinin zamanla ayrışması ve
-  kullanıcının sunucuda göremediği bir hatayla karşılaşması demekti.
+  kullanıcının server'da göremediği bir hatayla karşılaşması demekti.
 
 ### Bilinen durum
 
 - ~~Supabase'de *Confirm email* hâlâ açık.~~ **Faz F sırasında kapatıldı ve
-  akış uçtan uca doğrulandı** — bkz. "Uçtan uca doğrulama" bölümü. Kod her iki
+  akış end-to-end doğrulandı** — bkz. "End-to-end doğrulama" bölümü. Kod her iki
   duruma da hazır: `data.session` yoksa kullanıcı `/giris`'e mesajla
   yönlendiriliyor.
 - Supabase'de `faz-d-deneme@example.com` için sahipsiz bir hesap kalmış
-  olabilir (istek e-posta gönderimi adımında düştü). Yerel veritabanında
+  olabilir (request e-posta gönderimi adımında düştü). Local veritabanında
   karşılığı yok — kontrol edilip silinebilir.
 
 ### Bilerek kapsam dışı
@@ -371,51 +371,51 @@ kimlik API route'ları, panel iskeleti, kök sayfa.
 - **Şifre sıfırlama akışı yok.** Kayıt ve giriş çalışır durumda; sıfırlama
   gerçek e-posta gönderimi gerektiriyor ve o altyapı Faz I'de kuruluyor.
   Şimdi yazılsa yerleşik SMTP'nin saatte 2 mesaj sınırına çarpardı.
-- **Müşteri rolü için ekran yok.** `MUSTERI` rolü şemada ve `auth()`'ta var,
+- **Müşteri rolü için ekran yok.** `MUSTERI` rolü schema'da ve `auth()`'ta var,
   panele girişi engelleniyor; `/randevularim` Faz J'de.
 - **Kök sayfa geçici.** Gerçek tanıtım sayfası ürün çalışır hale gelince
   yazılacak; bugün anlatılacak bir şey yok ve uydurulmuş bir özellik listesi
   sonradan düzeltilecek bir borç olurdu.
-- **`/saglik` halka açık kaldı.** Vitrin panel altına taşındı ama sağlık
+- **`/saglik` public kaldı.** Vitrin panel altına taşındı ama sağlık
   sayfası dışarıdan izleme için anlamlı ve sızdırdığı tek şey PostgreSQL major
-  sürümü ile gidiş-dönüş süresi; hata metni zaten bastırılıyor.
+  version'ı ile gidiş-dönüş süresi; hata metni zaten bastırılıyor.
 
 ### Doğrulama
 
 - `npm run tip`, `npm run lint` temiz
 - `npm test` — **90 test geçti** (10 dosya, gerçek Postgres)
 - `npm run build` başarılı; 13 route üretiliyor
-- **Elle (`next dev`):** `/`, `/giris`, `/kayit` 200; oturumsuz `/panel` ve
+- **Elle (`next dev`):** `/`, `/giris`, `/kayit` 200; session'sız `/panel` ve
   `/kayit/tamamla` → 307 `/giris?devam=…`; `/api/giris` Origin'siz ve yabancı
   Origin'le 403, doğru Origin'le olmayan hesapta 401 (gerçek Supabase'e
   ulaşarak); kayıtta Supabase hata kodları doğru cümleye eşleniyor
 
 ### Elle yapılması gerekenler (Faz D)
 
-- [x] **Prod'a uygulandı** (30 Ağustos 2026, Faz E göçüyle birlikte). Göç
+- [x] **Prod'a uygulandı** (30 Ağustos 2026, Faz E migration'ıyla birlikte). Migration
       yalnızca EKLEME'ydi (rol enum'u + kullanıcı + personel tabloları); mevcut
       işletme tablosuna dokunmadı. Geri alma: iki `drop table`, bir `drop type`.
 - [x] **Supabase'de *Confirm email* KAPATILDI** (30 Ağustos 2026,
       Management API: `mailer_autoconfirm: true`). Yerleşik SMTP saatte 2 mail
       ile sınırlı; domain + Resend custom SMTP bağlanana kadar (Faz I) kapalı
       kalmalı. Açılırsa kayıt akışı ilk iki denemeden sonra tıkanır.
-- [x] **Uçtan uca elle doğrulama yapıldı** (30 Ağustos 2026). Ayrıntı aşağıda
-      "Uçtan uca doğrulama" bölümünde.
-- [x] Cloudflare'e yayınlarken `NEXT_PUBLIC_SUPABASE_URL` ve
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY` **derleme anında** ortamda olmalı;
-      `NEXT_PUBLIC_` önekli değişkenler `cf:kur` adımında gömülüyor. İlk
-      yayında sağlandı — ama bu bir kerelik iş değil, **her `cf:kur` için
+- [x] **End-to-end elle doğrulama yapıldı** (30 Ağustos 2026). Ayrıntı aşağıda
+      "End-to-end doğrulama" bölümünde.
+- [x] Cloudflare'e deploy ederken `NEXT_PUBLIC_SUPABASE_URL` ve
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY` **build time'da** environment'ta olmalı;
+      `NEXT_PUBLIC_` prefix'li variable'lar `cf:kur` adımında gömülüyor. İlk
+      deploy'da sağlandı — ama bu bir kerelik iş değil, **her `cf:kur` için
       geçerli duran bir kural**. Faz G2'nin
       `NEXT_PUBLIC_TURNSTILE_SITE_KEY`'i de aynı sınıfta.
 - [x] Deploy kararı ve custom domain bağlantısı (Faz B'den devrediyordu) —
-      30 Ağustos 2026, "İlk yayın" bölümü.
+      30 Ağustos 2026, "İlk deploy" bölümü.
 
 ---
 
-## Faz E — şema ve panel CRUD
+## Faz E — schema ve panel CRUD
 
-**Kapandı:** yedi yeni tablo, `EXCLUDE` çakışma kısıtı, hizmet / personel /
-çalışma saatleri / ayarlar ekranları ve route'ları, değişmez tarayıcısı,
+**Kapandı:** yedi yeni tablo, `EXCLUDE` çakışma constraint'i, hizmet / personel /
+çalışma saatleri / ayarlar ekranları ve route'ları, invariant tarayıcısı,
 proxy'nin kaldırılması.
 
 ### Kararlar
@@ -430,11 +430,11 @@ proxy'nin kaldırılması.
 
 - **Öğle arası ayrı bir kavram değil, ikinci bir aralık.** Aynı güne iki satır
   yazılıyor. "Ara başlangıç/bitiş" gibi ayrı alanlar koysaydık, üçüncü bir ara
-  gerektiğinde hem şemayı hem arayüzü hem dönüşümü yeniden yazmak gerekirdi.
+  gerektiğinde hem schema'yı hem arayüzü hem dönüşümü yeniden yazmak gerekirdi.
 
-- **Para kuruş cinsinden tam sayı ve dönüşüm SUNUCUDA.** Ondalık sayıda
+- **Para kuruş cinsinden tam sayı ve dönüşüm SERVER'DA.** Ondalık sayıda
   `0.1 + 0.2` problemi tutara sızardı; `numeric` ise JS tarafında string olarak
-  gelir. İstemci "350,50" için 35050'yi kendisi hesaplasaydı dönüşüm kayan
+  gelir. Client "350,50" için 35050'yi kendisi hesaplasaydı dönüşüm kayan
   noktadan geçerdi (`350.5 * 100 = 35050.000000000004`). Metin üzerinde tam
   sayı aritmetiği bu sınıfı tamamen kapatıyor; `paraBicimle` ↔
   `paraKurusDogrula` gidiş-dönüş testiyle kilitli.
@@ -451,16 +451,16 @@ proxy'nin kaldırılması.
   zorunda; son kişiyi de pasiflemek işletmeyi randevu alınamaz duruma sokar ve
   bu ancak müşteri şikâyet edince fark edilirdi. Sayma ve güncelleme aynı
   transaction'da, satırlar `FOR UPDATE` ile kilitli — olmasa ard arda gelen iki
-  istek ikisini de "son değil" görüp ikisini birden pasifleyebilirdi.
+  request ikisini de "son değil" görüp ikisini birden pasifleyebilirdi.
 
 - **Toplu yazma (önce sil, sonra ekle), satır bazlı API değil.** Haftalık düzen
   ve hizmet eşlemesi kullanıcının kafasında tek bir şey; satır bazlı bir API
-  yarım uygulanmış bir hafta bırakabilirdi. Yabancı bir id geldiğinde isteğin
+  yarım uygulanmış bir hafta bırakabilirdi. Yabancı bir id geldiğinde request'in
   tamamı reddediliyor — sessizce atlamak "kaydettim" deyip yarım küme bırakmak
   olurdu.
 
 - **Saat dilimi ve randevu aralığı kapalı liste**, `Intl.supportedValuesOf`
-  değil: workerd'in ICU derlemesi tam değil ve orada liste eksik dönebiliyor —
+  değil: workerd'in ICU build'i tam değil ve orada liste eksik dönebiliyor —
   kullanıcının kayıtlı saat dilimi bir gün "geçersiz" sayılırdı. Aynı sebeple
   `paraBicimle` de `Intl.NumberFormat` kullanmıyor.
 
@@ -469,12 +469,12 @@ proxy'nin kaldırılması.
   ayrı müşteri kaydı üretir ve geçmiş ikiye bölünürdü.
 
 - **Gün içi çakışan çalışma aralıkları reddediliyor.** Bu kuralın işi Faz F'deki
-  müsaitlik motorunun girdisini korumak: motor çakışan aralıkları çözerken aynı
+  müsaitlik motorunun input'unu korumak: motor çakışan aralıkları çözerken aynı
   slotu iki kez üretir ya da sessizce düşürür. Bitişik aralıklar (13:00 biten ve
   13:00 başlayan) çakışma sayılmıyor — kullanıcının öğleden önce/sonra ayrımını
   görmek istemesi meşru.
 
-### Çakışma kısıtı (DEĞİŞMEZ 8 artık gerçek)
+### Çakışma constraint'i (INVARIANT 8 artık gerçek)
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS btree_gist;
@@ -484,13 +484,13 @@ ALTER TABLE "randevu" ADD CONSTRAINT "randevu_cakisma_yok"
   WHERE ("durum" IN ('BEKLIYOR','ONAYLI'));
 ```
 
-Drizzle `EXCLUDE`'u ifade edemiyor; kısıt migration'a elle yazıldı. İki ayrıntı
+Drizzle `EXCLUDE`'u ifade edemiyor; constraint migration'a elle yazıldı. İki ayrıntı
 kasıtlı: aralık `'[)'` olduğu için bitişik randevular çakışma sayılmıyor
 (10-11 ile 11-12 birlikte alınabiliyor), `WHERE` koşulu iptal ve gelmedi
 durumlarını dışarıda bıraktığı için iptal edilen saat boşalıyor. Sekiz test bu
 davranışların her birini ayrı ayrı kilitliyor.
 
-Göç hem **boş** hem **Faz D verisiyle dolu** bir veritabanında sınandı; ikisinde
+Migration hem **boş** hem **Faz D verisiyle dolu** bir veritabanında test edildi; ikisinde
 de uygulandı ve mevcut veri korundu.
 
 ### Ortaya çıkan iki gerçek hata
@@ -498,11 +498,11 @@ de uygulandı ve mevcut veri korundu.
 1. **Drizzle, Postgres hatasını sarmalıyor.** `DrizzleQueryError`'da `code`
    alanı YOK; o yalnızca en içteki nesnede duruyor. Yani Faz D'de yazılan
    `hata.code === "23505"` kontrolü **hiçbir zaman eşleşmiyordu** — kayıt yarışı
-   sadece yedek mesaj kontrolü sayesinde çalışıyordu. `src/lib/pg-hata.ts`
+   sadece fallback mesaj kontrolü sayesinde çalışıyordu. `src/lib/pg-hata.ts`
    `cause` zincirini geziyor ve testi uydurulmuş bir nesne değil, gerçek bir
    Drizzle hatası kullanıyor.
 
-2. **Test temizliği şema büyüyünce sessizce bozuldu.** Her dosya kendi bildiği
+2. **Test temizliği schema büyüyünce sessizce bozuldu.** Her dosya kendi bildiği
    tabloları siliyordu; `randevu` personele `ON DELETE restrict` ile bağlı
    olduğu için bir dosya randevu bırakınca sonraki dosyanın `delete(personel)`
    çağrısı düşüyordu. Testler tek tek geçerken hep birlikte düşüyorlardı — en
@@ -515,54 +515,54 @@ inmişti (2969.80 KiB gzip). Sebep tek bir dosya çıktı: proxy kaldırılınca
 **1611.40 KiB**'a düştü, yani proxy tek başına **1358 KiB** — bütçenin %44'ü.
 
 Neden bu kadar pahalı: Next 16'da proxy **zorunlu olarak Node.js runtime'ında**
-koşuyor. Paketin kendi dokümanı açık yazıyor: *"Proxy defaults to using the
+koşuyor. Package'ın kendi dokümanı açık yazıyor: *"Proxy defaults to using the
 Node.js runtime. The `runtime` config option is not available in Proxy files.
 Setting the `runtime` config option in Proxy will throw an error."* OpenNext de
-onun için Next sunucu runtime'ının ikinci bir kopyasını paketliyor. Kaçış yolu
+onun için Next server runtime'ının ikinci bir kopyasını paketliyor. Kaçış yolu
 yok; seçim "proxy var ya da yok".
 
 **Faz D'deki not yanlıştı:** "OpenNext Node middleware'i desteklemediği için
 edge'de koşuyor" cümlesi ölçümle değil varsayımla yazılmıştı.
 
 Proxy'nin iki işi vardı ve ikisi de karşılandı:
-1. Token tazeleme → `POST /api/oturum` + `OturumTazeleyici` istemci bileşeni
-   (25 dakikada bir ve sekme öne geldiğinde). Sunucu bileşenleri cookie
+1. Token tazeleme → `POST /api/oturum` + `OturumTazeleyici` client component'i
+   (25 dakikada bir ve sekme öne geldiğinde). Server component'leri cookie
    yazamıyor, route handler'lar yazabiliyor.
-2. Cookie'siz isteği `/panel`den ucuzca çevirme → zaten **kesin bir kontrol
+2. Cookie'siz request'i `/panel`den ucuzca çevirme → zaten **kesin bir kontrol
    değildi** (cookie'nin varlığı kimlik kanıtı değil) ve gerçek karar hep panel
    düzenindeydi.
 
-**Kaybedilen tek şey:** derin bağlantıya dönüş. Önce `/panel/hizmetler`e
-oturumsuz giren kişi girişten sonra oraya dönüyordu, şimdi `/panel`e dönüyor.
-Sunucu bileşeni kendi yolunu güvenilir biçimde okuyamıyor; bedeli 1358 KiB'a
+**Kaybedilen tek şey:** derin link'e dönüş. Önce `/panel/hizmetler`e
+session'sız giren kişi girişten sonra oraya dönüyordu, şimdi `/panel`e dönüyor.
+Server component'i kendi yolunu güvenilir biçimde okuyamıyor; bedeli 1358 KiB'a
 değmez.
 
-### Değişmez tarayıcısı
+### Invariant tarayıcısı
 
-`panelKapisi` üç adımı (checkOrigin → oturum → gövde) tek yere aldı ve bunun
+`panelKapisi` üç adımı (checkOrigin → session → body) tek yere aldı ve bunun
 bir bedeli oldu: `checkOrigin` artık route dosyalarında **görünmüyor**, yani
-warden'ın metin arayan kapısı onu yakalayamıyor. Aynı şey Faz B'de bir kez
-yaşandı (Prisma'dan Drizzle'a geçerken kiracı kapısı sessizce zorlanamaz hale
+warden'ın metin arayan gate'i onu yakalayamıyor. Aynı şey Faz B'de bir kez
+yaşandı (Prisma'dan Drizzle'a geçerken tenant gate'i sessizce zorlanamaz hale
 geldi ve iki faz incelemeye bağlı kaldı).
 
 Tekrarlanmasın diye `src/lib/degismezler.test.ts` eklendi: `src/app` altındaki
-her route dosyasını okuyup mutasyon metodu olan her birinde kapının varlığını
+her route dosyasını okuyup mutation metodu olan her birinde gate'in varlığını
 arıyor, `panelKapisi`nin gerçekten `checkOrigin` çağırdığını doğruluyor ve
 hiçbir dosyanın `@/lib/db` import etmediğini kontrol ediyor. **Kasıtlı bir
-ihlalle sınandı — yakaladı.**
+ihlalle test edildi — yakaladı.**
 
 ### Bilerek kapsam dışı
 
-- **Randevu CRUD'u yok.** Tablo ve kısıt hazır ama randevu yazan tek yol Faz
-  F-G'de gelecek (müsaitlik motoru + halka açık sayfa). Panelden elle randevu
+- **Randevu CRUD'u yok.** Tablo ve constraint hazır ama randevu yazan tek yol Faz
+  F-G'de gelecek (müsaitlik motoru + public sayfa). Panelden elle randevu
   ekleme Faz H'de.
 - **`bildirim_kuyrugu` tablosu boş duruyor.** Faz I'de kullanılacak; şimdi
   oluşturuldu ki o faz migration gerektirmesin.
 - **`kapali` (izin/tatil) tablosunun ekranı yok.** Müsaitlik motoru onu Faz
   F'de okuyacak; ekranı o zaman anlamlı olacak.
-- **Hizmet sırası elle düzenlenemiyor.** Şemada `sira` var ve liste ona göre
+- **Hizmet sırası elle düzenlenemiyor.** Schema'da `sira` var ve liste ona göre
   sıralanıyor; sürükle-bırak arayüzü bu fazın kazancına değmezdi.
-- **Personel hesabı davet etme yok.** `personel.kullaniciId` şemada duruyor ama
+- **Personel hesabı davet etme yok.** `personel.kullaniciId` schema'da duruyor ama
   personeli sisteme davet etme akışı yazılmadı; şu an işletme sahibi herkesi
   kendi adına yönetiyor.
 
@@ -573,21 +573,21 @@ ihlalle sınandı — yakaladı.**
 - `npm run build` başarılı, 23 route
 - `npm run cf:kur` + `wrangler deploy --dry-run`: **1612 KiB gzip** (3 MiB
   sınırının 1460 KiB altında)
-- Göç boş ve dolu veritabanında ayrı ayrı sınandı
-- Elle (`next dev`): `/`, `/giris` 200; oturumsuz `/panel`, `/panel/hizmetler`
+- Migration boş ve dolu veritabanında ayrı ayrı test edildi
+- Elle (`next dev`): `/`, `/giris` 200; session'sız `/panel`, `/panel/hizmetler`
   → 307 `/giris?devam=/panel`; `/kayit/tamamla` → 307 `/giris`;
   `/api/oturum` Origin'siz 403
 
 ### Elle yapılması gerekenler (Faz E)
 
-- [x] **Prod'a uygulandı** (30 Ağustos 2026). Göç yalnızca EKLEME'ydi (yedi
+- [x] **Prod'a uygulandı** (30 Ağustos 2026). Migration yalnızca EKLEME'ydi (yedi
       tablo, dört enum, `btree_gist` uzantısı ve `isletme`ye `DEFAULT` değerli
       kolonlar). Geri alma: yedi `drop table`, dört `drop type`, `isletme`
       kolonlarında `drop column`.
 - [x] **`btree_gist` Supabase'de sorunsuz kuruldu** — yetki hatası çıkmadı,
-      göçün ilk satırı (`CREATE EXTENSION IF NOT EXISTS`) yetti.
-- [x] Faz D'den devreden madde kapandı: Confirm email kapatıldı ve akış uçtan
-      uca doğrulandı.
+      migration'ın ilk satırı (`CREATE EXTENSION IF NOT EXISTS`) yetti.
+- [x] Faz D'den devreden madde kapandı: Confirm email kapatıldı ve akış end-to-end
+      doğrulandı.
 
 ---
 
@@ -597,12 +597,12 @@ ihlalle sınandı — yakaladı.**
 `GET /api/musaitlik`. Ürünün kalbi ve testlerin en yoğun olduğu faz: bu üç
 dosya için **76 test** yazıldı.
 
-### Zaman katmanı (`zaman.ts`)
+### Zaman layer'ı (`zaman.ts`)
 
-**Sunucunun saat dilimine hiçbir yerde güvenilmiyor.** `new Date()` dışında
-hiçbir yerel-zaman API'si kullanılmıyor: Worker'ın dilimi UTC, geliştirici
+**Server'ın saat dilimine hiçbir yerde güvenilmiyor.** `new Date()` dışında
+hiçbir local-zaman API'si kullanılmıyor: Worker'ın dilimi UTC, geliştirici
 makinesininki Europe/Istanbul, testlerinki bir başkası olabilir. Aynı kod üç
-yerde üç farklı sonuç üretirse hata ancak üretimde görünür.
+yerde üç farklı sonuç üretirse hata ancak production'da görünür.
 
 **Kütüphane eklenmedi.** `date-fns-tz` ya da `luxon` Worker bundle'ına yüz
 kilobaytlarca ekliyor ve bütçe 3 MiB (bkz. Faz E). Gereken iki dönüşüm
@@ -623,7 +623,7 @@ Yöntem: geçiş bir günden kısa sürede olup bittiği için hedef günün bir
 dönen adaylardan en erkeni seçiliyor.
 
 **Yakalanan iki tuzak:**
-- ICU bazı sürümlerde `hour12: false` ile gece yarısını **"24"** veriyor.
+- ICU bazı version'larda `hour12: false` ile gece yarısını **"24"** veriyor.
   Düzeltilmezse 00:15 randevusu önceki günün 24:15'i gibi görünürdü.
 - `Date.UTC` taşırma yapıyor: `"2026-02-29"` (2026 artık yıl değil) sessizce
   1 Mart olurdu ve kullanıcı istemediği bir günün saatlerini görürdü. Ayrıştırma
@@ -633,7 +633,7 @@ dönen adaylardan en erkeni seçiliyor.
 
 **Saf fonksiyon** — `simdi` bile dışarıdan veriliyor. İçeride okunsaydı yaz
 saati geçişi, gün sınırı ve minimum bildirim süresi ancak o anları bekleyerek
-sınanabilirdi.
+test edilebilirdi.
 
 - **Slot ızgarası her çalışma aralığının kendi başından başlıyor**, günün
   başından değil. Öğleden sonraki aralık 13:10'da başlıyorsa saatler 13:10,
@@ -645,16 +645,16 @@ sınanabilirdi.
   hesaplansaydı yaz saati geçişini kapsayan randevu 120 dakika sürer ve bir
   sonrakiyle çakışırdı. Testi var: geçişi kapsayan aralıkta her randevu tam 60
   dakika ve ardışık slotlar çakışmıyor.
-- **Çakışma testi yarım açık `[)`** — veritabanındaki `EXCLUDE` kısıtıyla aynı.
-  İkisi ayrışırsa motor "boş" dediği bir slotu kısıt reddeder ve kullanıcı
+- **Çakışma testi yarım açık `[)`** — veritabanındaki `EXCLUDE` constraint'iyle aynı.
+  İkisi ayrışırsa motor "boş" dediği bir slotu constraint reddeder ve kullanıcı
   sebebini anlamaz.
 - **`slotAraligiDk <= 0` boş dönüyor.** Değer kullanıcı ayarından geliyor ve
   döngü sonsuza giderdi.
 
 **Motor bir garanti değil.** İki müşteri aynı saniyede aynı slotu isterse ikisi
-de "boş" görür; kesin cevabı `EXCLUDE` kısıtı veriyor (DEĞİŞMEZ 8).
+de "boş" görür; kesin cevabı `EXCLUDE` constraint'i veriyor (INVARIANT 8).
 
-### Sorgu katmanı (`musaitlik-sorgu.ts`)
+### Query layer'ı (`musaitlik-sorgu.ts`)
 
 Route ile motor arasında ayrı bir dosya, çünkü aynı iş iki yerde gerekecek:
 `GET /api/musaitlik` listeyi gösteriyor, Faz G'deki `POST /api/randevu` ise
@@ -668,33 +668,33 @@ edilen randevunun ayrışması demekti.
 - **Randevu ve izin aralıkları pencereyle KESİŞENLER olarak çekiliyor**,
   "içinde olanlar" olarak değil: gece yarısını aşan bir randevu ya da bir
   haftalık tatil aksi halde görünmezdi. İkisinin de testi var.
-- **Dolu kümesi yalnızca `BEKLIYOR` ve `ONAYLI`** — `EXCLUDE` kısıtının `WHERE`
+- **Dolu kümesi yalnızca `BEKLIYOR` ve `ONAYLI`** — `EXCLUDE` constraint'inin `WHERE`
   koşuluyla aynı. İptal ve gelmedi saati boşaltıyor.
 
 ### `GET /api/musaitlik`
 
-Oturumsuz ve halka açık: müşteri randevu almak için hesap açmıyor. Kiracı
-oturumdan değil `isletme` slug'ından çözülüyor ve `getHalkaAcikDb` filtreyi yine
-kapanış değişkeni olarak tutuyor.
+Session'sız ve public: müşteri randevu almak için hesap açmıyor. Tenant
+session'dan değil `isletme` slug'ından çözülüyor ve `getHalkaAcikDb` filtreyi yine
+closure variable'ı olarak tutuyor.
 
-- **GET olduğu için `checkOrigin` yok** — DEĞİŞMEZ 2 yalnızca mutasyonlar için.
+- **GET olduğu için `checkOrigin` yok** — INVARIANT 2 yalnızca mutation'lar için.
   Kötüye kullanım (başka bir salonun doluluk takvimini kazımak) CSRF ile değil
-  hız sınırıyla engelleniyor; Cloudflare kuralı Faz G'de bu yola konacak.
-- **Yanıt önbelleklenmiyor** (`cache-control: no-store`). Müsaitlik yazma
+  rate limit'le engelleniyor; Cloudflare kuralı Faz G'de bu yola konacak.
+- **Response cache'lenmiyor** (`cache-control: no-store`). Müsaitlik yazma
   kararını besliyor: bir saniye bayat veri, dolu bir slotu boş gösterip
-  müşteriyi 409'a götürür. Hyperdrive'ın sorgu önbelleği de aynı sebeple kapalı.
+  müşteriyi 409'a götürür. Hyperdrive'ın query cache'i de aynı sebeple kapalı.
 - Kapalı ya da hiç olmayan işletme **aynı** cevabı alıyor: hangi slug'ların
   kayıtlı olduğunu sızdırmanın faydası yok.
 
 ### Bilerek kapsam dışı
 
 - **Randevu yazma yok.** `POST /api/randevu` ve iptal akışı Faz G'de.
-- **Çok günlü müsaitlik sorgusu yok.** Uç tek gün veriyor; takvimde "hangi
+- **Çok günlü müsaitlik query'si yok.** Uç tek gün veriyor; takvimde "hangi
   günler dolu" göstergesi gerekirse Faz G'de eklenecek. Şimdi eklemek,
-  kullanılmayan bir sorgu şekli sınamak olurdu.
+  kullanılmayan bir query şekli test etmek olurdu.
 - **`kapali` (izin) ekranı hâlâ yok.** Motor tabloyu okuyor ama işletme henüz
   izin giremiyor; ekran Faz H'de takvimle birlikte anlamlı olacak.
-- **Hız sınırı konmadı.** Cloudflare kuralı Faz G'de, `POST /api/randevu` ile
+- **Rate limit konmadı.** Cloudflare kuralı Faz G'de, `POST /api/randevu` ile
   birlikte.
 
 ### Doğrulama
@@ -702,8 +702,8 @@ kapanış değişkeni olarak tutuyor.
 - `npm run tip`, `npm run lint` temiz
 - `npm test` — **266 test geçti** (21 dosya)
   - `zaman.test.ts` 23, `musaitlik.test.ts` 33, `musaitlik-sorgu.test.ts` 20
-  - sorgu testlerinin beşi halka açık yolun **IDOR** testi
-- **Elle, gerçek veriyle** (`next dev` + tohumlanmış `randevu_dev`): 45 dk'lık
+  - query testlerinin beşi public yolun **IDOR** testi
+- **Elle, gerçek veriyle** (`next dev` + seed'lenmiş `randevu_dev`): 45 dk'lık
   hizmet öğle arasında kesiliyor (son sabah slotu 11:15, öğleden sonra 13:00'te
   başlıyor), son slot 17:15; 120 dk'lık hizmet 18 slot üretiyor; cumartesi
   10:00-16:00; pazar, geçmiş gün ve pencere dışı boş; Ayşe 10:00-10:45 dolu
@@ -713,59 +713,59 @@ kapanış değişkeni olarak tutuyor.
 ### Elle yapılması gerekenler (Faz F)
 
 - [x] Faz D'den devreden madde kapandı: `mailer_autoconfirm: true` yapıldı ve
-      kayıt → panel akışı uçtan uca doğrulandı.
-- [x] `randevu_dev` veritabanına örnek işletme tohumlandı (`isil-guzellik`,
+      kayıt → panel akışı end-to-end doğrulandı.
+- [x] `randevu_dev` veritabanına örnek işletme seed'lendi (`isil-guzellik`,
       iki personel, iki hizmet, haftalık çalışma düzeni, bir randevu). Faz G
       geliştirmesi için duruyor; prod'a gitmiyor.
 
 ---
 
-## Uçtan uca doğrulama — 30 Ağustos 2026
+## End-to-end doğrulama — 30 Ağustos 2026
 
 Faz D'den beri bekleyen engel kalktı: Supabase'de *Confirm email* kapatıldı
 (`mailer_autoconfirm: true`, Management API üzerinden). Ardından Faz D-E-F'nin
 tamamı **çalışan uygulamada, gerçek Supabase ve gerçek Postgres'e karşı**
-sınandı. Aşağıdakilerin hepsi `next dev` üzerinde gözlendi.
+test edildi. Aşağıdakilerin hepsi `next dev` üzerinde gözlendi.
 
 ### Kimlik akışı
 
 | Adım | Sonuç |
 |---|---|
 | Kayıt (yeni e-posta) | `200 {"yon":"/panel"}`, dört `sb-*` cookie'si yazıldı |
-| Oturumla `/panel` | 200 |
+| Session'la `/panel` | 200 |
 | Çıkış | `200 {"yon":"/giris"}`, cookie'ler temizlendi |
 | Çıkış sonrası `/panel` | `307 → /giris?devam=/panel` |
 | Yanlış şifreyle giriş | `401 "E-posta ya da şifre hatalı"` — hangisinin yanlış olduğu **söylenmiyor** |
 | Doğru şifre + `devam=/panel/hizmetler` | `200 {"yon":"/panel/hizmetler"}` |
-| **Açık yönlendirme denemesi** `devam=//kotu.site` | `200 {"yon":"/panel"}` — kapı tuttu |
+| **Açık redirect denemesi** `devam=//kotu.site` | `200 {"yon":"/panel"}` — gate tuttu |
 
 ### Panel
 
-Altı sayfa da oturumla 200 dönüyor: `/panel`, `/panel/hizmetler`,
+Altı sayfa da session'la 200 dönüyor: `/panel`, `/panel/hizmetler`,
 `/panel/personel`, `/panel/calisma-saatleri`, `/panel/ayarlar`,
 `/panel/gelistirici/vitrin`.
 
-Mutasyonlar: hizmet eklendi (`"150,50"` → `fiyatKurus: 15050`, yani para
-ayrıştırması uçtan uca doğru), personel eklendi, ayarlar güncellendi.
+Mutation'lar: hizmet eklendi (`"150,50"` → `fiyatKurus: 15050`, yani para
+ayrıştırması end-to-end doğru), personel eklendi, ayarlar güncellendi.
 
-### IDOR — gerçek oturumla, çapraz kiracı
+### IDOR — gerçek session'la, çapraz tenant
 
-Bir işletmenin oturumuyla **başka** bir işletmenin kayıtlarına üç ayrı saldırı
+Bir işletmenin session'ıyla **başka** bir işletmenin kayıtlarına üç ayrı saldırı
 denendi. Üçü de reddedildi ve kurban kayıtlar veritabanında **değişmedi**:
 
-| Deneme | Yanıt | Kurban kayıt |
+| Deneme | Response | Kurban kayıt |
 |---|---|---|
 | `PATCH /api/hizmetler/<başkasının-id>` | `404 "Hizmet bulunamadı"` | `Saç kesimi, 45 dk, aktif` — değişmedi |
 | `DELETE /api/hizmetler/<başkasının-id>` | `404 "Hizmet bulunamadı"` | aynı |
 | `PUT /api/personel/<başkasının-id>/calisma-saatleri` | `404 "Personel bulunamadı"` | 0 satır eklendi |
 
-404 mesajı bilerek "yetkiniz yok" demiyor: başka kiracıya ait bir kaydı istemek
+404 mesajı bilerek "yetkiniz yok" demiyor: başka tenant'a ait bir kaydı istemek
 ile hiç olmayan bir kaydı istemek çağırana aynı görünmeli, yoksa kaydın varlığı
 sızar.
 
 ### Müsaitlik motoru (Faz F)
 
-Tohumlanmış `randevu_dev` verisiyle (`isil-guzellik`, iki personel, iki hizmet,
+Seed'lenmiş `randevu_dev` verisiyle (`isil-guzellik`, iki personel, iki hizmet,
 hafta içi 09:00-12:00 ve 13:00-18:00, cumartesi 10:00-16:00):
 
 | Senaryo | Sonuç |
@@ -778,33 +778,33 @@ hafta içi 09:00-12:00 ve 13:00-18:00, cumartesi 10:00-16:00):
 | Bilinmeyen slug / hizmet | 404 |
 | Bozuk tarih / eksik parametre | 400 |
 
-Son satır `'[)'` aralık semantiğinin uçtan uca doğru olduğunu gösteriyor: kısıt,
-motor ve sorgu katmanı aynı kuralı uyguluyor.
+Son satır `'[)'` aralık semantiğinin end-to-end doğru olduğunu gösteriyor: constraint,
+motor ve query layer'ı aynı kuralı uyguluyor.
 
 ### Bu doğrulamanın bıraktıkları
 
 - Supabase'de test hesapları kaldı (`deneme-<zaman>@example.com`). Silinmesi
   gerekmiyor ama isteniyorsa Supabase panelinden Authentication → Users.
-- `randevu_dev` içinde iki örnek işletme var (`isil-guzellik` tohumu ve test
+- `randevu_dev` içinde iki örnek işletme var (`isil-guzellik` seed'i ve test
   kaydı). Yalnızca geliştirme veritabanı; prod'a gitmiyor.
 
-### Prod göçü — 30 Ağustos 2026
+### Prod migration'ı — 30 Ağustos 2026
 
 PR #3 ve #4 merge edildikten sonra `npm run db:uygula:prod -- --onayla`
-çalıştırıldı. Öncesinde prod'da yalnızca `isletme` tablosu ve tek bir göç
+çalıştırıldı. Öncesinde prod'da yalnızca `isletme` tablosu ve tek bir migration
 vardı (Faz A); tablo boştu, yani veri riski yoktu.
 
-**Sonuç:** 10 tablo, 5 enum, `btree_gist` uzantısı, 3 göç uygulanmış durumda.
+**Sonuç:** 10 tablo, 5 enum, `btree_gist` uzantısı, 3 migration uygulanmış durumda.
 `isletme`ye eklenen yedi kolonun hepsi `DEFAULT` değerli; mevcut satırlar
 etkilenmedi (zaten yoktu).
 
-`btree_gist` Supabase'de **yetki hatası çıkarmadan** kuruldu — göçün ilk
+`btree_gist` Supabase'de **yetki hatası çıkarmadan** kuruldu — migration'ın ilk
 satırındaki `CREATE EXTENSION IF NOT EXISTS` yetti. Panelden elle açmaya gerek
 kalmadı.
 
-#### Çakışma kısıtı PROD'da sınandı
+#### Çakışma constraint'i PROD'da test edildi
 
-DEĞİŞMEZ 8'in üretimde gerçekten tuttuğu, **geri alınan bir transaction**
+INVARIANT 8'in production'da gerçekten tuttuğu, **geri alınan bir transaction**
 içinde kanıtlandı — prod'a kalıcı hiçbir satır yazılmadı (sonrasında sayıldı:
 0). Her deneme kendi `SAVEPOINT`'inde koştu; ilk denemede bu yapılmamıştı ve
 23P01 hatası transaction'ı iptal edince sonraki komutlar `25P02` alıp anlamsız
@@ -817,38 +817,38 @@ sonuç vermişti.
 | Ters aralık (bitiş < başlangıç) | `23514 randevu_bitis_baslangictan_sonra` |
 | İptal edilenin saatine yeni randevu | Kabul edildi — `WHERE` koşulu doğru |
 
-Yani kısıt, motor ve sorgu katmanı üretimde de aynı kuralı uyguluyor.
+Yani constraint, motor ve query layer'ı production'da da aynı kuralı uyguluyor.
 
 ### workerd doğrulaması — 30 Ağustos 2026
 
 Faz F'nin en büyük **doğrulanmamış** varsayımı kapandı: müsaitlik motorunun
 tamamı `Intl.DateTimeFormat` + IANA saat dilimi verisine dayanıyor ve workerd'in
-ICU derlemesinin tam olduğu **varsayılmıştı, ölçülmemişti**. (Aynı şüpheyle
+ICU build'inin tam olduğu **varsayılmıştı, ölçülmemişti**. (Aynı şüpheyle
 `ayar-girdi.ts`'te saat dilimi listesi kapalı tutulmuştu.)
 
-`npm run cf:onizle` ile gerçek workerd'de sınandı — deploy gerekmedi:
+`npm run cf:onizle` ile gerçek workerd'de test edildi — deploy gerekmedi:
 
 | Senaryo | Beklenen | workerd |
 |---|---|---|
 | `Europe/Istanbul`, salı, 45 dk hizmet | 28 slot, öğle arası kesik, son 17:15 | **birebir aynı** |
-| Berlin kış (+1), pazar 09:00 yerel | `08:00Z` | ✓ |
+| Berlin kış (+1), pazar 09:00 local | `08:00Z` | ✓ |
 | Berlin **ileri geçiş günü** (2027-03-28) | `07:00Z` | ✓ |
 | Berlin yaz (+2) | `07:00Z` | ✓ |
 | Berlin **geri geçiş günü** (2027-10-31) | `08:00Z` | ✓ |
 
 Yani workerd'de **tam IANA yaz saati kuralları var**; motor Node'daki testlerle
-aynı sonucu üretiyor. Zaman katmanını yeniden yazma riski yok.
+aynı sonucu üretiyor. Zaman layer'ını yeniden yazma riski yok.
 
-Aynı koşumda doğrulanan diğerleri:
+Aynı run'da doğrulanan diğerleri:
 - `/saglik`: Hyperdrive → Supavisor → Postgres 17, gidiş-dönüş **17 ms**
-- Oturumsuz `/panel` → 307 `/giris?devam=/panel`
-- Origin'siz POST → 403 (DEĞİŞMEZ 2 üretim çalışma zamanında da tutuyor)
+- Session'sız `/panel` → 307 `/giris?devam=/panel`
+- Origin'siz POST → 403 (INVARIANT 2 production runtime'da da tutuyor)
 - Gerçek Supabase'e giriş → 200, cookie'ler yazıldı, panel doğru veriyle geldi
 - Bundle **1621 KiB gzip** (3 MiB sınırının 1451 KiB altında)
 
 **Sonuç:** deploy'un önünde teknik bir bilinmeyen kalmadı.
 
-### İlk yayın — 30 Ağustos 2026
+### İlk deploy — 30 Ağustos 2026
 
 **Canlı: https://randevu.enesmemduhoglu.tech**
 
@@ -858,60 +858,60 @@ süresi **25 ms**, bundle **1621 KiB gzip**.
 #### workers.dev kapatıldı, tek adres custom domain
 
 `wrangler deploy` ilk denemede hesap ayarına takıldı: bu hesapta workers.dev
-alt alan adı kayıtlı değildi ve wrangler'ın otomatik denediği `randevu` adı
+subdomain kayıtlı değildi ve wrangler'ın otomatik denediği `randevu` adı
 küresel olarak alınmış. İki yol vardı; **custom domain** seçildi.
 
 `wrangler.jsonc`'ye `"workers_dev": false` ve `custom_domain: true` ile
 `randevu.enesmemduhoglu.tech` yazıldı. Cloudflare DNS kaydını ve sertifikayı
-kendisi yönetiyor. **Kök alan adına dokunulmadı** — orada başka bir proje ve
+kendisi yönetiyor. **Root domain'e dokunulmadı** — orada başka bir proje ve
 Email Routing'in MX kayıtları duruyor (`docs/plan.md`).
 
 Tek adres olması ayrıca bilinçli: iki adresten servis edilen bir uygulama
-`checkOrigin` listesini ve paylaşılan bağlantıları ikiye böler.
+`checkOrigin` listesini ve paylaşılan link'leri ikiye böler.
 
 #### Windows tuzağı tekrar çıktı
 
 İlk `cf:yayinla` `.open-next` üzerinde **EPERM** ile düştü. `CLAUDE.md`'de
 yazan tuzak: `wrangler dev` çalışırken dizin kilitli kalıyor. Bu sefer kilidi
-tutan şey `cf:onizle`'nin süreç ağacıydı — port dinleyen süreci öldürmek
+tutan şey `cf:onizle`'nin process ağacıydı — port dinleyen process'i öldürmek
 yetmedi, `taskkill /T` ile ağacın tamamını kapatmak gerekti (wrangler ölen
 workerd'yi yeniden başlatıyor).
 
-#### Üretimde doğrulananlar
+#### Production'da doğrulananlar
 
 | | |
 |---|---|
 | DNS + TLS | geçerli sertifika, kök sayfa 200 |
 | `/saglik` | Hyperdrive → Supavisor → Postgres 17, gidiş-dönüş **228 ms** |
-| Oturumsuz `/panel` | 307 → `/giris?devam=/panel` |
-| Origin'siz POST | **403** — DEĞİŞMEZ 2 üretimde de tutuyor |
+| Session'sız `/panel` | 307 → `/giris?devam=/panel` |
+| Origin'siz POST | **403** — INVARIANT 2 production'da da tutuyor |
 | Kayıt → panel | 200, panel doğru veriyle geldi |
 | Para ayrıştırma | `400,25` → `40025` kuruş |
-| Müsaitlik (oturumsuz) | 26 slot, öğle arası kesik (11:00 → 13:00), son 17:00 |
+| Müsaitlik (session'sız) | 26 slot, öğle arası kesik (11:00 → 13:00), son 17:00 |
 | `Cache-Control` | `no-store` |
 
-Duman testi verisi üretimden **silindi** (`isletme` silinince kiracıya bağlı
-her şey cascade ile gidiyor). Üretim veritabanı yine boş.
+Smoke test verisi production'dan **silindi** (`isletme` silinince tenant'a bağlı
+her şey cascade ile gidiyor). Production veritabanı yine boş.
 
-#### Yayın sonrası kalanlar
+#### Deploy sonrası kalanlar
 
 - [x] Supabase `site_url` → `https://randevu.enesmemduhoglu.tech` yapıldı.
 - [x] `uri_allow_list` → `http://localhost:3000/**`. Faz I'de şifre sıfırlama
-      gelince yerel geliştirmenin de çalışması için; üretim adresi zaten
+      gelince local geliştirmenin de çalışması için; production adresi zaten
       `site_url` üzerinden izinli.
-- [x] PR #6 merge edildi; üretim ve `main` hizalandı.
-- [x] Duman testi auth kullanıcıları silindi. Supabase'de yalnızca
-      `demo@ornek.com` duruyor — yerel tarayıcı testleri için, satırları
+- [x] PR #6 merge edildi; production ve `main` hizalandı.
+- [x] Smoke test auth kullanıcıları silindi. Supabase'de yalnızca
+      `demo@ornek.com` duruyor — local tarayıcı testleri için, satırları
       `randevu_dev`'de.
-- [ ] `/api/musaitlik` üzerinde hız sınırı yok. **Faz G2'ye taşındı** ve orada
+- [ ] `/api/musaitlik` üzerinde rate limit yok. **Faz G2'ye taşındı** ve orada
       Cloudflare WAF kuralı olarak duruyor — kod tarafında değil, bilerek
       (gerekçe: Faz G2 → "Bilerek kapsam dışı").
 
 ---
 
-## Oturum sonu durumu — 30 Ağustos 2026
+## Session sonu durumu — 30 Ağustos 2026
 
-**Canlı:** https://randevu.enesmemduhoglu.tech · **Tek dal:** `main` ·
+**Canlı:** https://randevu.enesmemduhoglu.tech · **Tek branch:** `main` ·
 **270 test** (21 dosya) · bundle **1621 KiB gzip**
 
 | Faz | Durum |
@@ -919,10 +919,10 @@ her şey cascade ile gidiyor). Üretim veritabanı yine boş.
 | A — iskele | kapandı |
 | B — Cloudflare zemini | kapandı (deploy dahil) |
 | C — tasarım dili | kapandı |
-| D — kimlik ve kiracı | kapandı |
-| E — şema ve panel CRUD | kapandı |
+| D — kimlik ve tenant | kapandı |
+| E — schema ve panel CRUD | kapandı |
 | F — müsaitlik motoru | kapandı |
-| **G — halka açık randevu sayfası** | **sıradaki** |
+| **G — public randevu sayfası** | **sıradaki** |
 | H, I, J, K | bekliyor |
 
 ### Ne çalışıyor, ne çalışmıyor
@@ -936,58 +936,58 @@ yok (Faz I).
 
 ### Yakın zamanda kaybedilmesi kolay iki ayrıntı
 
-- **`wrangler.jsonc` üretim yapılandırmasını taşıyor** (`workers_dev: false` +
-  custom domain). Bu dosya bir kez `main`'e girmeden merge edilip dal
-  silindiği için neredeyse kayboluyordu; commit'ler yerelden cherry-pick ile
+- **`wrangler.jsonc` production config'ini taşıyor** (`workers_dev: false` +
+  custom domain). Bu dosya bir kez `main`'e girmeden merge edilip branch
+  silindiği için neredeyse kayboluyordu; commit'ler local'den cherry-pick ile
   kurtarıldı. Deploy'dan önce bu iki alanın yerinde olduğunu doğrula.
-- **`.open-next` Windows'ta kilitleniyor.** `cf:onizle`'nin süreç ağacını
+- **`.open-next` Windows'ta kilitleniyor.** `cf:onizle`'nin process ağacını
   `taskkill /T` ile kapatmak gerekiyor; yalnızca portu dinleyen süreci
   öldürmek yetmiyor, wrangler ölen workerd'yi yeniden başlatıyor.
 
 ### Faz G'ye başlarken
 
-- Motor ve sorgu katmanı hazır. `POST /api/randevu` yazmadan hemen önce
+- Motor ve query layer'ı hazır. `POST /api/randevu` yazmadan hemen önce
   `slotUygunMu()` çağırmalı: müşterinin gördüğü liste ile kabul edilen randevu
   ayrışmamalı.
-- Route oturumsuz olacak: `getHalkaAcikDb(slug)`, `checkOrigin` şart
-  (DEĞİŞMEZ 2), çakışma ihlali `pgHata.cakismaIhlaliMi` ile yakalanıp
-  **409**'a çevrilecek (DEĞİŞMEZ 8).
+- Route session'sız olacak: `getHalkaAcikDb(slug)`, `checkOrigin` şart
+  (INVARIANT 2), çakışma ihlali `pgHata.cakismaIhlaliMi` ile yakalanıp
+  **409**'a çevrilecek (INVARIANT 8).
 - `musteri` telefon üzerinden tekilleniyor; normalizasyon
   `ayar-girdi.ts > telefonDogrula`'da.
-- `randevu.iptalToken` şemada var ve benzersiz. **Tahmin edilemez olmalı ve
+- `randevu.iptalToken` schema'da var ve benzersiz. **Tahmin edilemez olmalı ve
   id'den türetilmemeli.**
-- Hız sınırı ve Turnstile bu fazda; `/api/musaitlik` şu an korumasız.
-- Çalışma saatleri ekranındaki `<input type="time">` işletim sistemi yereline
+- Rate limit ve Turnstile bu fazda; `/api/musaitlik` şu an korumasız.
+- Çalışma saatleri ekranındaki `<input type="time">` işletim sistemi local'ine
   göre AM/PM gösterebiliyor (marka kuralı 24 saat). Karar verilmedi:
   native alan mı, 15 dakikalık açılır liste mi.
 
 ---
 
-## Faz G — halka açık randevu sayfası
+## Faz G — public randevu sayfası
 
-**Dal:** `faz-g/halka-acik-randevu` · **3 commit** (veri katmanı → route'lar →
+**Branch:** `faz-g/halka-acik-randevu` · **3 commit** (veri layer'ı → route'lar →
 arayüz) · **321 test** (23 dosya), bunun **49'u** bu fazın route testleri.
 
-Müşteri artık randevu **alabiliyor**. Oturum sonu notundaki "müşteri hiçbir
+Müşteri artık randevu **alabiliyor**. Session sonu notundaki "müşteri hiçbir
 şekilde randevu ALAMIYOR" satırı kapandı.
 
 ### Ne geldi
 
 | Parça | Ne yapıyor |
 |---|---|
-| `src/lib/iptal-token.ts` | 160 bitlik iptal sırrı, id'den türetilmiyor |
-| `src/lib/randevu-girdi.ts` | gövde doğrulaması, id'ler Postgres'e gitmeden eleniyor |
-| `musaitlik-sorgu.ts > slotSec()` | istenen anı aynı motorla yeniden sınar |
+| `src/lib/iptal-token.ts` | 160 bitlik iptal secret'ı, id'den türetilmiyor |
+| `src/lib/randevu-girdi.ts` | body doğrulaması, id'ler Postgres'e gitmeden eleniyor |
+| `musaitlik-sorgu.ts > slotSec()` | istenen anı aynı motorla yeniden test eder |
 | `scoped-db.ts` | `randevuOlustur`, `randevuTokenIleGetir`, `randevuIptalEt` |
-| `POST /api/randevu` | oturumsuz yazma |
-| `POST /api/randevu/iptal` | koşullu UPDATE ile iptal |
+| `POST /api/randevu` | session'sız yazma |
+| `POST /api/randevu/iptal` | conditional UPDATE ile iptal |
 | `/r/[slug]` | hizmet → personel → gün/saat → bilgiler → onay |
 | `/r/[slug]/randevu/[token]` | müşterinin iptal sayfası |
 
 ### Kararlar
 
 **Müşteri telefonla tekilleniyor, ama mevcut kaydın adı GÜNCELLENMİYOR.** Bu
-yol oturumsuz: numarayı bilen herkes buraya yazabiliyor. Güncelleseydik bir
+yol session'sız: numarayı bilen herkes buraya yazabiliyor. Güncelleseydik bir
 yabancı, işletmenin müşteri kaydındaki adı değiştirebilirdi. İşletme farklı
 bir ad görmek isterse panelden kendi düzeltir.
 
@@ -995,9 +995,9 @@ bir ad görmek isterse panelden kendi düzeltir.
 geriye sahibi olmayan bir müşteri kaydı kalırdı; işletme onu panelde "hiç
 gelmemiş biri" gibi görürdü.
 
-**Personel ve bitiş motordan geliyor, istemciden değil.** Bitişi route'ta
+**Personel ve bitiş motordan geliyor, client'tan değil.** Bitişi route'ta
 yeniden hesaplamak, yaz saati geçişinde motorunkinden farklı bir değer
-üretebilirdi ve çakışma kısıtı o farkı görmezdi.
+üretebilirdi ve çakışma constraint'i o farkı görmezdi.
 
 **`simdi` bir kez okunuyor.** Müsaitlik penceresi ile açık randevu sayımı
 aynı ana bakmalı. İki ayrı `new Date()` bugün bir şey bozmuyor ama iki farklı
@@ -1012,14 +1012,14 @@ id ile başkasının id'si çağırana aynı görünsün.
 takvimi elli randevuyla doldurup hiçbirine gelmeyen kullanımı engelliyor. 3,
 çünkü küçük işletmede meşru müşteri en fazla birkaç randevuyu aynı anda açık
 tutuyor (kesim + boya + eşinin randevusu gibi); dördüncüsü artık olağan değil.
-Sayım transaction içinde ama SERIALIZABLE değil: aynı anda gelen iki istek
+Sayım transaction içinde ama SERIALIZABLE değil: aynı anda gelen iki request
 sınırı bir aşabilir. Kabul edildi — bunun bedeli fazladan bir randevu,
 kilitlemenin bedeli ise her yazımda müşteri satırını kilitlemek.
 
 ### 40P01 — yarışan iki POST testinin ortaya çıkardığı gerçek hata
 
-İki istek **çakışan** aralıkları aynı anda yazınca Postgres 23P01
-üretemiyor: her işlem önce kendi satırını yazıyor, sonra `EXCLUDE` kısıtını
+İki request **çakışan** aralıkları aynı anda yazınca Postgres 23P01
+üretemiyor: her işlem önce kendi satırını yazıyor, sonra `EXCLUDE` constraint'ini
 doğrularken diğerinin işlemini bekliyor. İkisi birbirini bekleyince Postgres
 birini kurban seçip **40P01 (deadlock_detected)** fırlatıyor — yani "çakıştı"
 değil "sırayı çözemedim" diyor.
@@ -1030,31 +1030,31 @@ yazmadan geri alınıyor, yani ikinci deneme kesin bir cevap alıyor — saat
 gerçekten doluysa 23P01 ile "dolu", değilse randevu yazılıyor. Doğrudan 409
 demek, yazılabilecek bir randevuyu reddetmek olurdu.
 
-DEĞİŞMEZ 8'in "uygulama katmanı garanti değildir" cümlesinin pratikteki
-karşılığı bu: motor slotu uygun gördü, kısıt reddetti, müşteri doğru mesajı
+INVARIANT 8'in "uygulama layer'ı garanti değildir" cümlesinin pratikteki
+karşılığı bu: motor slotu uygun gördü, constraint reddetti, müşteri doğru mesajı
 gördü.
 
 ### Bilerek kapsam dışı
 
-- **Turnstile ve hız sınırı — Faz G2.** `/api/randevu` ve `/api/musaitlik`
+- **Turnstile ve rate limit — Faz G2.** `/api/randevu` ve `/api/musaitlik`
   şu an bot korumasız. Açık randevu sınırı bunun yerini **tutmuyor**:
   numarayı değiştiren bir bot sınırı görmeden geçer. Ayrı faz, çünkü
   Cloudflare panelinden site key + secret alınmasını gerektiriyor ve o iş
   koddan bağımsız.
 - **Panelde randevuyu görmek — Faz H.** İşletme şu an gelen randevuyu
-  yalnızca veritabanında görebiliyor. Faz G'nin uçtan uca elle
+  yalnızca veritabanında görebiliyor. Faz G'nin end-to-end elle
   doğrulamasının "panelde göründüğünü gör" adımı bu yüzden Faz H'ye kaldı.
 - **Bildirim yok — Faz I.** Randevu alındığında müşteriye e-posta gitmiyor;
-  iptal linki yalnızca 201 gövdesinde dönüyor. Müşteri o sayfayı kapatırsa
+  iptal linki yalnızca 201 body'sinde dönüyor. Müşteri o sayfayı kapatırsa
   linki kaybediyor.
-- **`npm run build` bu oturumda koşturulmadı.** Tip kontrolü, lint ve 321
+- **`npm run build` bu session'da koşturulmadı.** Tip kontrolü, lint ve 321
   testin tamamı yeşil; prod build merge öncesi koşturulmalı.
 
 ### Elle yapılması gerekenler (Faz G)
 
 - [ ] `npm run build` ve ardından `npm run cf:onizle` ile workerd'de
       `/r/<slug>` akışını gör.
-- [ ] Uçtan uca elle doğrulama: kaydol → hizmet + çalışma saati tanımla →
+- [ ] End-to-end elle doğrulama: kaydol → hizmet + çalışma saati tanımla →
       gizli sekmede `/r/<slug>` → randevu al → iptal linkiyle iptal et.
       **Aynısı mobil genişlikte** — hedef kitle telefondan giriyor.
 - [ ] `design-review` skill'i (plan.md: Faz G ve H sonrası koşturulur).
@@ -1065,22 +1065,22 @@ gördü.
 
 ## Faz G2 — bot koruması
 
-**Dal:** `faz-g2/bot-korumasi` (Faz G'den dallandı, `main`'den değil) ·
+**Branch:** `faz-g2/bot-korumasi` (Faz G'den dallandı, `main`'den değil) ·
 **2 commit** · **341 test** (24 dosya), bunun **20'si** bu fazın.
 
 Faz G'nin kodu bu işi kendi yorumlarında "G2'de gelecek" diye işaretlemişti;
 o satırlar artık gerçek.
 
-### Neden ayrı bir katman gerekliydi
+### Neden ayrı bir layer gerekliydi
 
 Faz G'deki "aynı numarayla en çok 3 açık randevu" sınırı bot korumasının
-yerini **tutmuyor**. Sınır numaraya bağlı; numarayı her istekte değiştiren
-bir betik onu hiç görmeden geçiyor ve takvimi doldurabiliyor. Sınır kötü
-kullanan **müşteriyi** durduruyor, Turnstile **betiği**.
+yerini **tutmuyor**. Sınır numaraya bağlı; numarayı her request'te değiştiren
+bir script onu hiç görmeden geçiyor ve takvimi doldurabiliyor. Sınır kötü
+kullanan **müşteriyi** durduruyor, Turnstile **script'i**.
 
 Turnstile seçildi çünkü hesapta zaten var, ücretsiz ve çoğu ziyaretçiye
 hiçbir şey göstermiyor. Randevu alan kitle telefondan geliyor; resim
-seçtiren bir kapı, engellediğinden fazla meşru müşteri kaybettirirdi.
+seçtiren bir gate, engellediğinden fazla meşru müşteri kaybettirirdi.
 
 ### Kararlar
 
@@ -1088,81 +1088,81 @@ seçtiren bir kapı, engellediğinden fazla meşru müşteri kaybettirirdi.
 yazılmışsa gerçek.** Tanımsızken gerçeğe düşmek, yeni geliştiricinin ilk
 gününde her randevuyu 403'e çevirirdi. "acik"/"true"/"1" de gerçek
 sayılmıyor: yazım hatası olan bir env sessizce bütün randevuları kapatmasın.
-`BILDIRIM_MODU` ile aynı desen.
+`BILDIRIM_MODU` ile aynı pattern.
 
-**Gerçek modda sır yoksa kapı KAPALI.** Yanlış yapılandırılmış bir üretim
-dağıtımının korumasız çalışmasından iyidir: sessizce açık kalan bir kapıyı
-kimse fark etmez, kapalı kapı ilk istekte görünür.
+**Gerçek modda secret yoksa gate KAPALI.** Yanlış yapılandırılmış bir production
+deployment'ının korumasız çalışmasından iyidir: sessizce açık kalan bir gate'i
+kimse fark etmez, kapalı gate ilk request'te görünür.
 
-**Ağ hatasında da kapalı.** Alternatifi, Cloudflare'e ulaşılamadığı her anda
-kapının kendiliğinden açılmasıydı — saldırganın tetikleyebileceği bir durumu,
+**Network hatasında da kapalı.** Alternatifi, Cloudflare'e ulaşılamadığı her anda
+gate'in kendiliğinden açılmasıydı — saldırganın tetikleyebileceği bir durumu,
 korumanın kapanma koşulu yapmak olurdu.
 
 **Üç sebep (eksik / geçersiz / ulaşılamadı) kullanıcıya aynı metni
-gösteriyor.** "Sunucu Cloudflare'e ulaşamadı" demek meşru müşteriye yardım
-etmiyor, botun ise hangi dalda olduğunu öğretiyor. Yapılabilecek tek şey her
+gösteriyor.** "Server Cloudflare'e ulaşamadı" demek meşru müşteriye yardım
+etmiyor, botun ise hangi branch'te olduğunu öğretiyor. Yapılabilecek tek şey her
 durumda aynı: yenile, tekrar dene.
 
-**Kapı slug çözümünden ÖNCE.** Geçemeyen istek veritabanına tek sorgu bile
-açtırmıyor — bir betiğin saniyede yüzlerce istek atması Postgres'e değil
-Cloudflare'e maliyet yazıyor. Testi de bu: olmayan slug + jetonsuz istek 404
+**Gate slug çözümünden ÖNCE.** Geçemeyen request veritabanına tek query bile
+açtırmıyor — bir script'in saniyede yüzlerce request atması Postgres'e değil
+Cloudflare'e maliyet yazıyor. Testi de bu: olmayan slug + token'sız request 404
 değil **403** alıyor.
 
 **IP `CF-Connecting-IP`'den okunuyor, `X-Forwarded-For` bilerek
-okunmuyor** — ikincisini istemci serbestçe yazıyor ve jetonu IP'ye bağlama
+okunmuyor** — ikincisini client serbestçe yazıyor ve token'ı IP'ye bağlama
 güvencesini sahte bir değerle yok ederdi.
 
-**Widget örtük (implicit) render.** Jetonu forma `cf-turnstile-response`
+**Widget örtük (implicit) render.** Token'ı forma `cf-turnstile-response`
 adıyla kendisi yazıyor. Açık render daha fazla denetim verirdi ama script'in
 yüklenmesini beklemek, iki kez çalışmamasını sağlamak ve React yeniden
 çiziminde widget'i temizlemek bize düşerdi — üç ayrı hata kaynağı,
 ihtiyacımız olmayan bir esneklik karşılığında.
 
-**Hatadan sonra widget sıfırlanıyor.** Jeton tek kullanımlık: 403 ya da 409
-sonrası müşteri "tekrar dene" dediğinde aynı harcanmış jetonu gönderirdi ve
+**Hatadan sonra widget sıfırlanıyor.** Token tek kullanımlık: 403 ya da 409
+sonrası müşteri "tekrar dene" dediğinde aynı harcanmış token'ı gönderirdi ve
 ikinci deneme, sebebi görünmeden her zaman başarısız olurdu.
 
-**İki taraf aynı koşulda açılıp kapanıyor.** Anahtar tanımsızsa widget hiç
-çizilmiyor ve sunucu `sahte` moda düşüyor — yerelde randevu almak için
+**İki taraf aynı koşulda açılıp kapanıyor.** Key tanımsızsa widget hiç
+çizilmiyor ve server `sahte` moda düşüyor — local'de randevu almak için
 Cloudflare hesabı gerekmiyor.
 
 ### Bilerek kapsam dışı
 
-- **Hız sınırı koda girmedi, Cloudflare kuralı olarak kalıyor.** `plan.md`
+- **Rate limit koda girmedi, Cloudflare kuralı olarak kalıyor.** `plan.md`
   zaten böyle tarif ediyordu. Worker'ın `ratelimit` binding'iyle kod
-  tarafında yapmak mümkün ama `wrangler.jsonc` üretim yapılandırmasını
-  taşıyor ve bu oturumda `cf:onizle` ile **ölçülemedi**; ölçülmemiş bir
-  runtime varsayımını o dosyaya sokmak bu depoda daha önce üç kez yanlış
+  tarafında yapmak mümkün ama `wrangler.jsonc` production config'ini
+  taşıyor ve bu session'da `cf:onizle` ile **ölçülemedi**; ölçülmemiş bir
+  runtime varsayımını o dosyaya sokmak bu repo'da daha önce üç kez yanlış
   çıktı. Elle yapılacaklar listesinde.
 - **Panel ve kimlik yollarında Turnstile yok.** `/api/giris` ve `/api/kayit`
-  de halka açık, ama oturum açma denemesinin kendi geri bildirimi var ve
+  de public, ama session açma denemesinin kendi geri bildirimi var ve
   kayıt e-posta doğrulamasına bağlanacak (Faz I). Ayrı bir karar olarak
   kalsın.
-- **`npm run build` ve `cf:onizle` bu oturumda koşturulmadı.**
+- **`npm run build` ve `cf:onizle` bu session'da koşturulmadı.**
 
 ### Elle yapılması gerekenler (Faz G2)
 
 - [ ] Cloudflare paneli → Turnstile → yeni site (`randevu.enesmemduhoglu.tech`).
       Widget türü **Managed**. Çıkan iki değer:
-      - site key → `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. **Derleme anında**
-        gömülüyor, yani `npm run cf:kur` adımında ortamda olmalı.
+      - site key → `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. **Build time'da**
+        gömülüyor, yani `npm run cf:kur` adımında environment'ta olmalı.
       - secret → `npx wrangler secret put TURNSTILE_SECRET`. `.env`'e
         yazılmıyor.
-- [ ] Üretimde `TURNSTILE_MODU=gercek`. Bu satır girilene kadar kod yayında
-      olsa bile kapı **açık** — koda bakıp "koruma var" demek yetmiyor.
+- [ ] Production'da `TURNSTILE_MODU=gercek`. Bu satır girilene kadar kod canlıda
+      olsa bile gate **açık** — koda bakıp "koruma var" demek yetmiyor.
 - [ ] Cloudflare paneli → Security → WAF → **Rate limiting rules**. Ücretsiz
       planda tek kural hakkı var; `/api/randevu` ve `/api/musaitlik`
-      yollarını tek ifadede eşleştir, sayaç karakteristiği **IP**. Süre ve
+      yollarını tek ifadede eşleştir, counter karakteristiği **IP**. Süre ve
       eşik seçenekleri plana göre değişiyor, panelde görünen listeden en kısa
       pencere seçilsin.
-- [ ] `cf:onizle` ile workerd'de gerçek modu ölç: sır `wrangler secret`
+- [ ] `cf:onizle` ile workerd'de gerçek modu ölç: secret `wrangler secret`
       üzerinden geldiği için `process.env`'de **görünmüyor**, binding
-      dalının gerçekten çalıştığı ölçülmeden varsayılmasın.
+      branch'inin gerçekten çalıştığı ölçülmeden varsayılmasın.
 
       **Ölçerken `.env` değil `.dev.vars`.** workerd'de kod
       `getCloudflareContext().env`'i okuyor ve wrangler orayı `.dev.vars`'tan
       dolduruyor; `.env`'e yazılan `TURNSTILE_SECRET` `cf:onizle`'de
-      görünmez ve kapı "sır yok" dalına düşüp her randevuyu 403 yapar —
+      görünmez ve gate "secret yok" branch'ine düşüp her randevuyu 403 yapar —
       yani koda değil yanlış dosyaya bakmış olursun. `.env`'deki satır
       yalnızca `next dev` içindir.
 
@@ -1170,7 +1170,7 @@ Cloudflare hesabı gerekmiyor.
 
 ## Faz H — panel takvimi
 
-**Dal:** `faz-h/panel-takvimi` · **406 test** (28 dosya), bunun **65'i** bu
+**Branch:** `faz-h/panel-takvimi` · **406 test** (28 dosya), bunun **65'i** bu
 fazın. `npm run tip`, `npm run lint`, `npm test` ve **`npm run build`** yeşil.
 
 Faz G'den beri açık duran engel kapandı: işletme sahibi gelen randevuyu artık
@@ -1188,7 +1188,7 @@ diff'ini okunamaz yapardı.
 ### Kararlar
 
 **Geçiş kuralı tek dosyada: `src/lib/randevu-durum.ts`.** Arayüz hangi
-düğmeleri göstereceğini `GECISLER`'den, veritabanı koşullu UPDATE'in
+düğmeleri göstereceğini `GECISLER`'den, veritabanı conditional UPDATE'in
 `where`'ini `kaynakDurumlar()`'dan alıyor ve ikincisi birincisinden
 **türetiliyor**. İki liste elle yazılsaydı birine eklenen geçiş diğerinde
 unutulabilirdi ve hata "düğme görünüyor ama basınca hep 409 dönüyor" şeklinde,
@@ -1200,8 +1200,8 @@ bir route "IPTAL → ONAYLI"yı kendi başına mümkün kılabilirdi ve kural ik
 yaşardı.
 
 **Üç durum terminal: IPTAL, TAMAMLANDI, GELMEDI.** Bu bir ürün tercihi değil,
-kısıt. İptali geri açmak slotu yeniden doldurmak demek ve o slot bu arada
-başkasına verilmiş olabilir — `EXCLUDE` kısıtı 23P01 ile reddeder. Doğru
+constraint. İptali geri açmak slotu yeniden doldurmak demek ve o slot bu arada
+başkasına verilmiş olabilir — `EXCLUDE` constraint'i 23P01 ile reddeder. Doğru
 davranış önce müsaitlik motoruna sormak, gerekirse yeni saat önermek; yani
 "elle randevu ekleme" işi. Faz H2'ye bırakıldı, şimdilik geri alma yolu "yeni
 randevu aç".
@@ -1216,16 +1216,16 @@ kapalıyken işletme onaylamayı unutuyor ama müşteri yine geliyor. Önce
 başlamıyor) ne başladığı günde (orada bitmiyor). `musaitlik-sorgu.ts` zaten
 aynı kabulü yapıyordu; ikisinin ayrışması, takvimde görünmeyen bir randevunun
 slotu doldurması demekti. Sınırlar `[)`: tam `ust`'te başlayan ve tam `alt`'ta
-biten kayıt dışarıda, `EXCLUDE` kısıtının `'[)'` aralığıyla aynı kabul.
+biten kayıt dışarıda, `EXCLUDE` constraint'inin `'[)'` aralığıyla aynı kabul.
 
 **Liste TÜM durumları döndürüyor, IPTAL dahil.** İşletme iptali görmek istiyor
 ("müşteri gelmedi mi, iptal mi etti"); hangisinin gösterileceği arayüzün
 filtresi, verinin işi değil.
 
-**Yol adı `/api/randevular` (çoğul), `/api/randevu` değil.** Halka açık ve
-oturumsuz olan yollar tekil kalıyor. Ayrımı adreste tutmak, bir gün bu iki
-sınıfın yanlışlıkla aynı kapıyı paylaşmasını zorlaştırıyor — panel yolunu
-`/api/randevu/[id]/durum` yazsaydık oturumsuz bir yolun altına oturumlu bir yol
+**Yol adı `/api/randevular` (çoğul), `/api/randevu` değil.** Public ve
+session'sız olan yollar tekil kalıyor. Ayrımı adreste tutmak, bir gün bu iki
+sınıfın yanlışlıkla aynı gate'i paylaşmasını zorlaştırıyor — panel yolunu
+`/api/randevu/[id]/durum` yazsaydık session'sız bir yolun altına session'lı bir yol
 aşılamış olurduk.
 
 **409 açıklaması randevunun MEVCUT durumunu söylüyor, istenen hedefi değil.**
@@ -1235,10 +1235,10 @@ kullandığı için. 409'dan sonra çekmece bilerek **açık** kalıyor ve
 `router.refresh()` çağrılıyor: mesaj okunsun, düğmeler gerçek duruma göre
 yeniden çizilsin.
 
-**Takvim durumu URL'de, bileşende değil.** `?gorunum=&tarih=&personel=`.
+**Takvim durumu URL'de, component'te değil.** `?gorunum=&tarih=&personel=`.
 `useState` daha az kod olurdu; URL üç somut şey kazandırıyor: adres
 paylaşılabiliyor, yer imine konabiliyor ve tarayıcının geri tuşu çalışıyor (ay
-görünümünden bir güne inip geri dönmek refleks). Veri zaten sunucudan geldiği
+görünümünden bir güne inip geri dönmek refleks). Veri zaten server'dan geldiği
 için ayrıca fetch de yazılmıyor. Gezinme `<Link>` ile — orta tıkla yeni sekme
 ve adres kopyalama `onClick`+`push` ile kaybolurdu; `router.push` yalnızca
 personel açılır listesinde, çünkü onun verecek bir `href`'i yok.
@@ -1261,7 +1261,7 @@ gösteriyor: "3 randevu" günün dolu mu boş mu olduğunu söylüyor ama 09:00'
 takvime taşıdı. Veritabanındaki `haftaninGunu` 0 = Pazar olarak kalıyor.
 
 **Gün/ay adları `ortak.tsx`'ten `bicim.ts`'e taşındı.** `ortak.tsx` "use
-client"; panel takviminin **sunucu** bileşeni aynı ay adını yazmak için oradan
+client"; panel takviminin **server** component'i aynı ay adını yazmak için oradan
 import edemiyordu. İki kopya tutmak, bir gün birinde "Agustos" diğerinde
 "Ağustos" yazması demekti. `ortak.tsx` isimleri yeniden dışa açıyor, çağrı
 yerleri değişmedi.
@@ -1276,7 +1276,7 @@ taşımıyor, yani geçmiş randevularda fiyat değişimi geriye dönük görün
 Kabul edildi: panel bunu tahsilat kaydı olarak değil "bu randevu ne kadarlık"
 bilgisi olarak gösteriyor ve gerçek tahsilat planda hiç yok.
 
-**Şema göçü YOK.** Faz E'nin şeması takvimi olduğu gibi taşıyor;
+**Schema migration'ı YOK.** Faz E'nin schema'sı takvimi olduğu gibi taşıyor;
 `randevu_isletme_baslangic_idx` zaten "bu işletmenin şu tarih aralığındaki
 randevuları" için konmuştu.
 
@@ -1286,24 +1286,24 @@ randevuları" için konmuştu.
   panel tarafına bağlamayı gerektiriyor ve `musaitlik-sorgu.ts` şu an
   `getHalkaAcikDb`'ye kilitli: `getScopedDb`'de `kapaliAraliklariListele`,
   `doluRandevulariListele` ve `hizmetiVerenPersoneller` **yok**. İki yol var —
-  sorgu katmanını yapısal bir arayüze gevşetmek, ya da eksik üç metodu
+  query layer'ını yapısal bir arayüze gevşetmek, ya da eksik üç metodu
   `getScopedDb`'ye eklemek. Karar Faz H2'nin ilk işi.
 - **Kapalı aralıklar (izin/tatil) takvimde görünmüyor.** `kapali` tablosu
   duruyor ama takvim yalnızca randevu çiziyor; işletme izin günlerini panelde
   göremiyor. Ayrı iş, çünkü kendi CRUD ekranı da yok.
 - **Randevunun saatini/personelini panelden değiştirme yok.** `EXCLUDE`
-  kısıtına çarpacağı için müsaitlik kontrolü gerektiriyor — elle eklemeyle aynı
+  constraint'ine çarpacağı için müsaitlik kontrolü gerektiriyor — elle eklemeyle aynı
   aile, aynı faz.
-- **Route'un mutlu yol / 401 / IDOR testleri route dosyasında değil.** Depodaki
-  kalıp: vitest'in node ortamında `cookies()` bağlamı yok, o yüzden route
+- **Route'un happy path / 401 / IDOR testleri route dosyasında değil.** Repo'daki
+  kalıp: vitest'in node environment'ında `cookies()` context'i yok, o yüzden route
   testleri yalnızca CSRF dilimini sınıyor; iş mantığı `scoped-db-randevu.test.ts`'te
-  (17 test, IDOR ve koşullu UPDATE dahil).
-- **`cf:onizle` bu oturumda koşturulmadı.** `npm run build` koştu ve temiz,
+  (17 test, IDOR ve conditional UPDATE dahil).
+- **`cf:onizle` bu session'da koşturulmadı.** `npm run build` koştu ve temiz,
   ama workerd tarafı yine ölçülmedi.
 
 ### Elle yapılması gerekenler (Faz H)
 
-- [ ] Uçtan uca: kaydol → hizmet + çalışma saati → gizli sekmede `/r/<slug>` →
+- [ ] End-to-end: kaydol → hizmet + çalışma saati → gizli sekmede `/r/<slug>` →
       randevu al → **panelde `/panel/takvim`'de göründüğünü gör** → onayla →
       iptal linkiyle iptal et → panelde iptal göründüğünü gör.
       **Aynısı mobil genişlikte.**
@@ -1319,22 +1319,22 @@ randevuları" için konmuştu.
 
 ---
 
-## Oturum sonu durumu — 31 Ağustos 2026
+## Session sonu durumu — 31 Ağustos 2026
 
-**Canlı:** https://randevu.enesmemduhoglu.tech (G öncesi sürüm) ·
-**Tek dal:** `main` · **341 test** (24 dosya)
+**Canlı:** https://randevu.enesmemduhoglu.tech (G öncesi version) ·
+**Tek branch:** `main` · **341 test** (24 dosya)
 
-Bu oturumda Faz G ve G2 kapandı: PR #7 ve #8 merge edildi, dalları silindi.
+Bu session'da Faz G ve G2 kapandı: PR #7 ve #8 merge edildi, branch'leri silindi.
 
 | Faz | Durum |
 |---|---|
 | A — iskele | kapandı |
 | B — Cloudflare zemini | kapandı |
 | C — tasarım dili | kapandı |
-| D — kimlik ve kiracı | kapandı |
-| E — şema ve panel CRUD | kapandı |
+| D — kimlik ve tenant | kapandı |
+| E — schema ve panel CRUD | kapandı |
 | F — müsaitlik motoru | kapandı |
-| G — halka açık randevu sayfası | **kapandı** (PR #7) |
+| G — public randevu sayfası | **kapandı** (PR #7) |
 | G2 — bot koruması | **kapandı** (PR #8) |
 | **H — panel takvimi** | **sıradaki** |
 | I, J, K | bekliyor |
@@ -1349,33 +1349,33 @@ iptal linki.
 **Çalışmıyor:** işletme sahibi randevuyu panelde göremiyor (Faz H). Bildirim
 ve şifre sıfırlama yok (Faz I).
 
-**Yayında değil:** `main` G ve G2'yi taşıyor ama prod'a deploy edilmedi.
-Canlıdaki sürüm hâlâ Faz G öncesi — yani `/r/<slug>` üretimde 404.
+**Canlıda değil:** `main` G ve G2'yi taşıyor ama prod'a deploy edilmedi.
+Canlıdaki version hâlâ Faz G öncesi — yani `/r/<slug>` production'da 404.
 
-### Bu oturumda ölçülmeyenler
+### Bu session'da ölçülmeyenler
 
 Dürüstçe: `npm run build` ve `cf:onizle` **hiç koşmadı**. Tip kontrolü, lint
 ve 341 testin tamamı yeşil, ama workerd tarafı ölçülmedi. Turnstile'ın
-Cloudflare binding dalı da bu yüzden ölçülmemiş durumda.
+Cloudflare binding branch'i de bu yüzden ölçülmemiş durumda.
 
 ### En kolay kaybedilecek üç ayrıntı
 
-- **Turnstile kodu yayında olsa bile `TURNSTILE_MODU=gercek` girilene kadar
-  kapı AÇIK.** Koda bakıp "koruma var" demek yetmiyor.
-- **`cf:onizle`'de sır `.dev.vars`'tan okunuyor, `.env`'den değil.** Yanlış
-  dosyaya yazılan sır sessizce "sır yok" dalına düşürür.
-- **`NEXT_PUBLIC_` önekli her değişken derleme anında gömülüyor.** Site
-  anahtarı `cf:kur` adımında ortamda olmalı; sonradan tanımlamak işe
+- **Turnstile kodu canlıda olsa bile `TURNSTILE_MODU=gercek` girilene kadar
+  gate AÇIK.** Koda bakıp "koruma var" demek yetmiyor.
+- **`cf:onizle`'de secret `.dev.vars`'tan okunuyor, `.env`'den değil.** Yanlış
+  dosyaya yazılan secret sessizce "secret yok" branch'ine düşürür.
+- **`NEXT_PUBLIC_` prefix'li her variable build time'da gömülüyor.** Site
+  key'i `cf:kur` adımında environment'ta olmalı; sonradan tanımlamak işe
   yaramaz.
 
 ### Faz H'ye başlarken
 
-Veri katmanı büyük ölçüde hazır: `scoped-db.ts` randevu yazma ve iptal
+Veri layer'ı büyük ölçüde hazır: `scoped-db.ts` randevu yazma ve iptal
 metotlarını taşıyor, `randevuTokenIleGetir` join'leri (hizmet, personel,
 müşteri) panelin de ihtiyaç duyacağı şekli gösteriyor.
 
-Durum değiştirme **koşullu UPDATE** olacak (DEĞİŞMEZ 3) — iptalde kullanılan
-desen birebir geçerli. Elle randevu ekleme aynı `EXCLUDE` kısıtına çarpacak,
+Durum değiştirme **conditional UPDATE** olacak (INVARIANT 3) — iptalde kullanılan
+pattern birebir geçerli. Elle randevu ekleme aynı `EXCLUDE` constraint'ine çarpacak,
 yani 40P01 yeniden deneme mantığı orada da gerekli; `randevuOlustur`
 paylaşılabilir.
 
@@ -1384,43 +1384,43 @@ paylaşılabilir.
 ## Altyapı — CI/CD
 
 **Kapandı:** GitHub Actions ile doğrulama (`tip` → `lint` → `test` → `cf:kur`),
-main'e merge sonrası onay kapılı Cloudflare yayını ve elle tetiklenen prod göç
-iş akışı. Kullanım ve gereken sırlar: `docs/yayin.md`.
+main'e merge sonrası approval gate'li Cloudflare deploy'u ve elle tetiklenen prod migration
+workflow. Kullanım ve gereken secret'lar: `docs/yayin.md`.
 
-**Harfsiz dal (`altyapi/ci-cd`).** Plandaki I, J, K harfleri bildirim
+**Harfsiz branch (`altyapi/ci-cd`).** Plandaki I, J, K harfleri bildirim
 altyapısı, müşteri hesabı ve SMS'e ayrılmış durumda; sıradaki fazın harfini
 çalmak plan ile günlüğü kalıcı olarak ayırırdı. `duzeltme/...` dallarında
 kullanılan kalıp izlendi.
 
 ### Kararlar
 
-- **Doğrulama ve yayın aynı dosyada (`ci.yml`), göç ayrı (`goc.yml`).**
-  Doğrulama ile yayın ayrı dosyalara bölünseydi ikisi de `on: push` ile aynı
-  anda başlardı ve yayın, testlerin yeşil olduğunu bilemezdi — `needs:` dosya
-  sınırını geçmiyor. Göç ise farklı bir tetikleyiciye sahip, orada böyle bir
+- **Doğrulama ve deploy aynı dosyada (`ci.yml`), migration ayrı (`goc.yml`).**
+  Doğrulama ile deploy ayrı dosyalara bölünseydi ikisi de `on: push` ile aynı
+  anda başlardı ve deploy, testlerin yeşil olduğunu bilemezdi — `needs:` dosya
+  sınırını geçmiyor. Migration ise farklı bir trigger'a sahip, orada böyle bir
   bağ yok.
 
-- **Yayın onay kapılı, otomatik değil.** `uretim` GitHub Environment'ında
-  zorunlu inceleyici var: iş kuyruğa girer ve "Approve" bekler. Gerekçe
+- **Deploy approval gate'li, otomatik değil.** `uretim` GitHub Environment'ında
+  zorunlu inceleyici var: iş queue'ya girer ve "Approve" bekler. Gerekçe
   günlükte zaten yazılıydı — main uzun süre G ve G2'yi taşıyıp bilerek
-  yayınlanmamıştı. Ayrıca `NEXT_PUBLIC_*` değerleri derlemeye gömülü olduğu
-  için geri alma yeniden derleme demek, yani ucuz değil.
+  deploy edilmemişti. Ayrıca `NEXT_PUBLIC_*` değerleri build'e gömülü olduğu
+  için geri alma yeniden build demek, yani ucuz değil.
 
-- **Prod göçü hatta değil, ayrı ve elle.** Drizzle migration'larının otomatik
-  geri alma yolu yok. Kodu geri almak eski sürümü yeniden deploy etmek, şemayı
+- **Prod migration'ı hatta değil, ayrı ve elle.** Drizzle migration'larının otomatik
+  geri alma yolu yok. Kodu geri almak eski version'ı yeniden deploy etmek, schema'yı
   geri almak elle SQL yazmak demek — aynı boruya konmamaları bu yüzden. İki
-  kapı var: onay kutusuna `uygula` yazmak (koşum kaydında niyet izi bırakır) ve
-  `uretim` ortam onayı (tetiği çekenin yetkisini doğrular).
+  gate var: onay kutusuna `uygula` yazmak (run kaydında niyet izi bırakır) ve
+  `uretim` environment onayı (trigger'ı çekenin yetkisini doğrular).
 
 - **CI `npm run build` değil `npm run cf:kur` koşuyor.** `cf:kur` önce
   `next build` çalıştırıyor, yani onun kapsadığı her şeyi kapsıyor; üstüne
-  OpenNext'in worker paketini de üretiyor. Günlükte üst üste üç oturum
-  "workerd tarafı ölçülmedi" notu düşülmüştü — paketleme hatası artık yayın
+  OpenNext'in worker bundle'ını da üretiyor. Günlükte üst üste üç session
+  "workerd tarafı ölçülmedi" notu düşülmüştü — paketleme hatası artık deploy
   anında değil PR'da çıkıyor.
 
 - **Postgres servisi 5455 portuna eşlendi.** GitHub'ın varsayılanı 5432'ydi;
-  yerel konteynerle aynı portu kullanmak, bağlantı dizesinin
-  `.env.example`'daki satırın birebir aynısı olmasını sağlıyor. İki ortam
+  local container'la aynı portu kullanmak, connection string'in
+  `.env.example`'daki satırın birebir aynısı olmasını sağlıyor. İki environment
   arasında gidip gelirken "burada port kaçtı" sorusu hiç doğmuyor.
 
 - **CI'da `DATABASE_URL` bilerek tanımsız.** `vitest.setup.ts` onu zaten
@@ -1432,88 +1432,88 @@ kullanılan kalıp izlendi.
   `vitest.global-setup.ts` `.ts` dosyalarını doğrudan çalıştırıyor (node'un tip
   soyma desteği).
 
-- **`tip` komutu artık `next typegen && tsc --noEmit`.** Hattın ilk koşumunda
+- **`tip` komutu artık `next typegen && tsc --noEmit`.** Pipeline'ın ilk run'ında
   çıkan gerçek bir bulgu: `tsc` tek başına `RouteContext`'i bulamıyor, çünkü o
   tip Next'in ürettiği `.next/types/**` altında duruyor ve `.gitignore`'da.
-  Yerelde yıllardır geçiyordu, çünkü `.next` eski build'lerden artakalıyordu —
+  Local'de yıllardır geçiyordu, çünkü `.next` eski build'lerden artakalıyordu —
   yani **temiz bir klonda `npm run tip` bugüne kadar kırıktı** ve bunu kimse
   görmemişti. Düzeltme CI adımına değil komutun kendisine konuldu; CI'a özel
-  bir `typegen` adımı, yerel footgun'u yerinde bırakırdı. Maliyet ~2.7 saniye.
+  bir `typegen` adımı, local footgun'u yerinde bırakırdı. Maliyet ~2.7 saniye.
 
 - **CI'ın build adımı sahte `NEXT_PUBLIC_SUPABASE_*` değerleriyle koşuyor.**
-  Hattın ikinci bulgusu: `/giris` build anında prerender ediliyor ve
-  `supabaseSunucu()` çağırıyor, değişkenler yoksa `ayarlar()` fırlatıp build'i
-  düşürüyor. Yani "build ortam değişkeni istemez" varsayımı yanlıştı — bu da
-  ölçümle çıktı, muhakemeyle değil. Sahte değer güvenli, çünkü hiçbir ağ
-  çağrısı yapılmıyor: oturum cookie'si olmadan `getClaims()` token bulamayıp
+  Pipeline'ın ikinci bulgusu: `/giris` build anında prerender ediliyor ve
+  `supabaseSunucu()` çağırıyor, variable'lar yoksa `ayarlar()` fırlatıp build'i
+  düşürüyor. Yani "build env variable istemez" varsayımı yanlıştı — bu da
+  ölçümle çıktı, muhakemeyle değil. Sahte değer güvenli, çünkü hiçbir network
+  çağrısı yapılmıyor: session cookie'si olmadan `getClaims()` token bulamayıp
   hemen dönüyor ve `cookies()` çağrısı sayfayı zaten dinamiğe düşürüyor.
   **Bedeli:** bu adım "değerler doğru mu" sorusunu yanıtlamıyor, yalnızca
-  "kod derleniyor ve paketleniyor mu" sorusunu yanıtlıyor.
+  "kod build ediliyor ve bundle'lanıyor mu" sorusunu yanıtlıyor.
 
 - **`NEXT_PUBLIC_*` değerleri secret değil repository variable.** Tanımı gereği
-  halka açıklar — tarayıcıya gitmek üzere üretildiler ve kiracı izolasyonu
-  onlara değil `scoped-db` katmanına dayanıyor. Secret olarak saklamak yanlış
-  bir güvenlik hissi verirdi. Yayın işinin ilk adımı varlıklarını kontrol edip
+  halka açıklar — tarayıcıya gitmek üzere üretildiler ve tenant izolasyonu
+  onlara değil `scoped-db` layer'ına dayanıyor. Secret olarak saklamak yanlış
+  bir güvenlik hissi verirdi. Deploy job'ının ilk adımı varlıklarını kontrol edip
   eksikse duruyor: eksik bir `NEXT_PUBLIC_*` build'i **düşürmüyor**,
   `undefined` gömülüyor ve hata canlıda giriş ekranında çıkıyor.
 
 ### Bilerek kapsam dışı
 
-- **Dal koruması (branch protection) kurulmadı.** `dogrula` işini main'e merge
+- **Branch koruması (branch protection) kurulmadı.** `dogrula` job'ını main'e merge
   için zorunlu kılmak repo ayarı, kod değişikliği değil; PR'ın diff'ine
   girmediği için ayrı ve görünür bir adım olarak bırakıldı.
 
-- **Uçtan uca / tarayıcı testi yok.** Hat yalnızca depodaki mevcut doğrulama
+- **End-to-end / tarayıcı testi yok.** Pipeline yalnızca repo'daki mevcut doğrulama
   setini koşuyor. Playwright eklemek kendi başına bir iş ve `cf:onizle`
-  üzerinde koşan bir smoke testi ancak yayın adresi kararlıyken anlamlı.
+  üzerinde koşan bir smoke testi ancak deploy adresi kararlıyken anlamlı.
 
-- **Yayın sonrası duman testi (canlı adrese istek) yok.** `/saglik` sayfası bu
+- **Deploy sonrası smoke test (canlı adrese request) yok.** `/saglik` sayfası bu
   iş için hazır duruyor ama deploy'un DNS'e yayılma süresi belirsiz; sabit bir
   bekleme koymak yanlış negatif üretirdi.
 
-- **Otomatik geri alma yok.** Yanlış giden bir yayında yol: önceki commit'i
-  main'e al ve yayını yeniden onayla. Cloudflare panelindeki "Rollback" da
-  çalışır ama o, deponun taşıdığı sürümle canlıdaki sürümü ayırır.
+- **Otomatik geri alma yok.** Yanlış giden bir deploy'da yol: önceki commit'i
+  main'e al ve deploy'u yeniden onayla. Cloudflare panelindeki "Rollback" da
+  çalışır ama o, repo'nun taşıdığı version'la canlıdaki version'ı ayırır.
 
 - **`wrangler.jsonc`'ye `vars` bloğu eklenmedi.** `TURNSTILE_MODU` ve
-  `BILDIRIM_MODU` üretimde hâlâ tanımsız — yani Turnstile kapısı açık. Bu
-  hattın değil, ayrı bir kararın konusu.
+  `BILDIRIM_MODU` production'da hâlâ tanımsız — yani Turnstile gate'i açık. Bu
+  pipeline'ın değil, ayrı bir kararın konusu.
 
 ### Elle yapılması gerekenler (CI/CD)
 
 - [x] `uretim` GitHub Environment'ı kuruldu: required reviewer + deployment
       branch policy `main`. İkincisi asıl olarak `goc`'u koruyor —
-      `workflow_dispatch` herhangi bir daldan tetiklenebiliyor.
+      `workflow_dispatch` herhangi bir branch'ten tetiklenebiliyor.
 - [x] Secret'lar: `CLOUDFLARE_ACCOUNT_ID`, `SUPABASE_DB_URL` girildi
       (değerler `.env`'den ve `wrangler whoami`'den alındı).
 - [x] Variable'lar: `NEXT_PUBLIC_SUPABASE_URL`,
       `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL` girildi.
-- [ ] **`CLOUDFLARE_API_TOKEN` eksik — yayını bloke eden tek şey.** Yerelde
-      yok: `wrangler` OAuth ile giriş yapmış ve o jeton kısa ömürlü, CI'da
+- [ ] **`CLOUDFLARE_API_TOKEN` eksik — deploy'u bloke eden tek şey.** Local'de
+      yok: `wrangler` OAuth ile giriş yapmış ve o token kısa ömürlü, CI'da
       kullanılamaz. Cloudflare panelinden *Edit Cloudflare Workers* şablonuyla
       üretilip `gh secret set CLOUDFLARE_API_TOKEN` ile girilmeli. Şablonun
       Hyperdrive iznini kapsamaması olası; deploy yetki hatası verirse
       **Hyperdrive: Edit** eklenir.
 - [ ] `NEXT_PUBLIC_TURNSTILE_SITE_KEY` girilmedi, çünkü **widget hiç
-      oluşturulmamış** (Faz G2'nin açık maddesi, bkz. yukarısı). Yayını
-      durdurmuyor: `yayinla`nın kontrol adımı bu değişkeni aramıyor ve
-      `TURNSTILE_MODU` üretimde zaten tanımsız, yani kapı bugünkü davranışıyla
+      oluşturulmamış** (Faz G2'nin açık maddesi, bkz. yukarısı). Deploy'u
+      durdurmuyor: `yayinla`nın kontrol adımı bu variable'ı aramıyor ve
+      `TURNSTILE_MODU` production'da zaten tanımsız, yani gate bugünkü davranışıyla
       açık kalıyor.
-- [ ] İlk yayından sonra canlıda `/saglik` ve `/r/<slug>` sayfalarını gözle
-      doğrula — üretimdeki sürüm hâlâ Faz G öncesi, yani `/r/<slug>` şu an 404.
+- [ ] İlk deploy'dan sonra canlıda `/saglik` ve `/r/<slug>` sayfalarını gözle
+      doğrula — production'daki version hâlâ Faz G öncesi, yani `/r/<slug>` şu an 404.
 
 ---
 
 ## Faz L — kalkan
 
-Dizin (pazaryeri) açılmadan önce halka açık yolların savunması. Sıra bilinçli:
+Dizin (marketplace) açılmadan önce public yolların savunması. Sıra bilinçli:
 dizin her işletmeyi keşfedilebilir yapıp saldırı yüzeyini bir anda büyütüyor.
 
-### Doğurduğu bulgu: Turnstile üretimde sessizce kapalıydı
+### Doğurduğu bulgu: Turnstile production'da sessizce kapalıydı
 
 `turnstile.ts` yalnızca `"gercek"` yazan değeri gerçek sayıyor, başka her değer
-— ve tanımsızlık — kapıyı açıyor. `wrangler.jsonc`'de `vars` bloğu **hiç
-yoktu**, yani üretimde `TURNSTILE_MODU` tanımsızdı ve bot kapısı Faz G2'den
+— ve tanımsızlık — gate'i açıyor. `wrangler.jsonc`'de `vars` bloğu **hiç
+yoktu**, yani production'da `TURNSTILE_MODU` tanımsızdı ve bot gate'i Faz G2'den
 beri koşulsuz geçiriyordu.
 
 Kod doğruydu. Eksik olan bir satır değil, bir satırın **yokluğuydu** — ve
@@ -1525,10 +1525,10 @@ eksik olan bilgi değil, kapatan bir değişiklikti.
 - `wrangler.jsonc > vars > TURNSTILE_MODU: "gercek"`.
 - `wrangler.jsonc > ratelimits`: `RANDEVU_SINIRI` (5/dk, yazma) ve
   `MUSAITLIK_SINIRI` (60/dk, okuma). Panel WAF kuralı **değil** — bu dosya
-  PR'da inceleniyor ve `wrangler dev` ile yerelde de koşuyor.
+  PR'da inceleniyor ve `wrangler dev` ile local'de de koşuyor.
 - `src/lib/hiz-siniri.ts` — sınırlayıcının tek çıkış noktası.
-- `degismezler.test.ts`: **yapılandırma da sınanıyor.** İki binding'in ve
-  `TURNSTILE_MODU="gercek"` satırının varlığı test koşumunda aranıyor; ayrıca
+- `degismezler.test.ts`: **config de test ediliyor.** İki binding'in ve
+  `TURNSTILE_MODU="gercek"` satırının varlığı test run'ında aranıyor; ayrıca
   wrangler'daki binding adıyla koddaki union üyesinin ayrışmadığı doğrulanıyor.
 - `ci.yml`'e "turnstile iki yakası tutarlı mı" adımı (aşağıda).
 
@@ -1540,76 +1540,76 @@ Varsayılmadı, ölçüldü (bkz. "ölçmeden runtime varsayımı yapma"):
 |---|---|
 | `env.TURNSTILE_MODU` | `"gercek"` olarak bağlandı |
 | `env.RANDEVU_SINIRI` / `MUSAITLIK_SINIRI` | ikisi de bağlandı |
-| Jetonsuz `POST /api/randevu` | **403** (önce kapıdan geçiyordu) |
+| Token'sız `POST /api/randevu` | **403** (önce gate'ten geçiyordu) |
 | Yabancı Origin | 403 (CSRF bozulmadı) |
 | `CF-Connecting-IP` ile 8 POST | 1–5 → 403, 6–8 → **429** |
-| Başlıksız 8 POST *(ilk sürüm)* | hepsi 403 — **sınır hiç ateşlemedi** |
+| Başlıksız 8 POST *(ilk version)* | hepsi 403 — **sınır hiç ateşlemedi** |
 
-Son satır bir tasarım hatasını açığa çıkardı: `istekIpsi()` yerel workerd'de
-`null` dönüyordu ve kod "anahtar yoksa geçir" diyordu. Üretimde Cloudflare o
+Son satır bir tasarım hatasını açığa çıkardı: `istekIpsi()` local workerd'de
+`null` dönüyordu ve kod "key yoksa geçir" diyordu. Production'da Cloudflare o
 başlığı hep koyuyor, yani kod "çalışıyordu" — ama bu tam olarak Turnstile'ı
 aylarca sessizce açık bırakan şeklin ta kendisiydi, yalnızca başka bir
-değişkende. Düzeltildi: binding varken anahtarsız istekler **tek kovaya**
-düşüyor, geçmiyor. Yeniden ölçüldü, başlıksız istekler de 6'dan sonra 429.
+variable'da. Düzeltildi: binding varken key'siz request'ler **tek kovaya**
+düşüyor, geçmiyor. Yeniden ölçüldü, başlıksız request'ler de 6'dan sonra 429.
 
 ### Bilerek kapsam dışı
 
-- **"Gelmedi" kısıtı (L3)**: şema göçü gerektiriyor, ayrı risk sınıfı —
+- **"Gelmedi" kısıtı (L3)**: schema migration'ı gerektiriyor, ayrı risk sınıfı —
   `/goc` ile ayrı faz.
 - **SMS OTP (L2)**: `src/lib/sms.ts` henüz yok (Faz K'nin dosyası); adaptörü
   öne çekmek bu PR'ı iki konuya bölerdi.
-- **Uygulama içi IP sayacı**: kenarda duran bir kural Postgres'e hiç sorgu
-  açtırmıyor, uygulama sayacı ise her istekte bir yazma demekti.
+- **Uygulama içi IP counter'ı**: kenarda duran bir kural Postgres'e hiç query
+  açtırmıyor, uygulama counter'ı ise her request'te bir yazma demekti.
 
 ### ELLE YAPILMASI GEREKEN — bu PR merge edilmeden önce
 
 Turnstile'ın iki yakası **birlikte açılıp birlikte kapanacak** şekilde
-tasarlanmış: `turnstile-alani.tsx:38` site anahtarı yoksa widget'ı hiç
+tasarlanmış: `turnstile-alani.tsx:38` site key'i yoksa widget'ı hiç
 çizmiyor. Bugüne kadar ikisi de kapalıydı ve simetri sessizce doğruydu. Modu
-açmak o simetriyi bozuyor — sunucu jeton istiyor, istemci üretemiyor.
+açmak o simetriyi bozuyor — server token istiyor, client üretemiyor.
 
 1. Cloudflare → Turnstile → widget oluştur (`randevu.enesmemduhoglu.tech`).
-2. Site anahtarını `NEXT_PUBLIC_TURNSTILE_SITE_KEY` repository **variable**
-   olarak gir (derleme anında gömülüyor, çalışma anında geç kalır).
+2. Site key'ini `NEXT_PUBLIC_TURNSTILE_SITE_KEY` repository **variable**
+   olarak gir (build time'da gömülüyor, runtime'da geç kalır).
 3. `wrangler secret put TURNSTILE_SECRET`.
 
-Bu üçü yapılmadan yayın hattı **düşer**: `yayinla` işine eklenen "turnstile iki
-yakası tutarlı mı" adımı, `TURNSTILE_MODU=gercek` iken site anahtarı boşsa
-derlemeyi reddediyor. Bilerek: sessizce açık bir kapıyı kimse fark etmiyor,
-düşen bir yayın ilk denemede görülüyor.
+Bu üçü yapılmadan deploy pipeline **düşer**: `yayinla` job'ına eklenen "turnstile iki
+yakası tutarlı mı" adımı, `TURNSTILE_MODU=gercek` iken site key'i boşsa
+build'i reddediyor. Bilerek: sessizce açık bir gate'i kimse fark etmiyor,
+düşen bir deploy ilk denemede görülüyor.
 
-**Durum (aynı oturumda tamamlandı):** widget oluşturuldu, `TURNSTILE_SECRET`
+**Durum (aynı session'da tamamlandı):** widget oluşturuldu, `TURNSTILE_SECRET`
 `wrangler secret put` ile Worker'a girildi (`wrangler secret list` ile
-doğrulandı), site anahtarı `gh variable set` ile repository variable oldu.
-Derlenmiş istemci paketinde site anahtarı görüldü — yani widget artık çiziliyor.
+doğrulandı), site key'i `gh variable set` ile repository variable oldu.
+Compile edilmiş client bundle'ında site key'i görüldü — yani widget artık çiziliyor.
 
-### Yayın sonrası ölçüm: hız sınırı yereldekinden çok daha gevşek
+### Deploy sonrası ölçüm: rate limit local'dekinden çok daha gevşek
 
 Deploy sonrası canlıda ölçüldü (5/dk sınırı, `POST /api/randevu`):
 
-| Ortam | İlk 429 |
+| Environment | İlk 429 |
 |---|---|
-| Yerel workerd | 6. istek |
-| **Üretim** | **22. istek**, sonrası kesintili (429, 403, 429) |
+| Local workerd | 6. request |
+| **Production** | **22. request**, sonrası kesintili (429, 403, 429) |
 
 Kod doğru, binding bağlı (deploy logunda `env.RANDEVU_SINIRI (5 requests/60s)`).
-Fark Cloudflare'in belgelendirdiği davranış: sayaç her isolate'in yerel
-önbelleğinde ve kolo başına — *"permissive, eventually consistent... not an
+Fark Cloudflare'in belgelendirdiği davranış: counter her isolate'in local
+cache'inde ve kolo başına — *"permissive, eventually consistent... not an
 accurate accounting system"*.
 
-**Kabul edildi:** bu kapı kısa patlamayı durdurmuyor, sürekli seli yavaşlatıyor.
-Korkulan tehdit (takvimi dolduran betik) dakikalarca istek atmak zorunda, yani
-kapsanıyor. Kesin kota gerekirse KV/Durable Object gerekir, bedeli her istekte
+**Kabul edildi:** bu gate kısa patlamayı durdurmuyor, sürekli seli yavaşlatıyor.
+Korkulan tehdit (takvimi dolduran script) dakikalarca request atmak zorunda, yani
+kapsanıyor. Kesin kota gerekirse KV/Durable Object gerekir, bedeli her request'te
 bir yazma.
 
-**Ders:** yerel `cf:onizle` ölçümü bu binding için üretimi temsil etmiyor.
-"Yerelde 6. istekte tetikledi" demek, üretim hakkında yanlış güven veriyordu.
+**Ders:** local `cf:onizle` ölçümü bu binding için production'ı temsil etmiyor.
+"Local'de 6. request'te tetikledi" demek, production hakkında yanlış güven veriyordu.
 
 ### Tuzak: `vars` eklemek tip kontrolünü kırdı, ama yalnızca CI'da
 
-PR #13 yerelde dört kapıdan da geçtikten sonra CI'da `tip` adımında düştü.
+PR #13 local'de dört gate'ten de geçtikten sonra CI'da `tip` adımında düştü.
 Sebep: `cloudflare-env.d.ts` **üretilen** bir dosya ve `.gitignore`'da.
-Yerelde en son `npm install` sırasında üretilmişti, yani `vars` bloğu eklenmeden
+Local'de en son `npm install` sırasında üretilmişti, yani `vars` bloğu eklenmeden
 önceki haliyle duruyordu. CI ise `npm ci` → `postinstall` → `wrangler types`
 zinciriyle onu yeniden üretti ve yeni tipler geldi.
 
@@ -1621,37 +1621,37 @@ tip hatası, `delete process.env.TURNSTILE_MODU` de öyle (TS2790).
 Çözüm iki parça:
 
 - `--strict-vars=false` (`cf:tip` ve `postinstall`) → `vars` değerleri `string`
-  olarak üretiliyor. Literal tip burada **yanlış bir söz**: `vars` bir derleme
-  sabiti değil, çalışma zamanı yapılandırması ve `.dev.vars` ile `process.env`
+  olarak üretiliyor. Literal tip burada **yanlış bir söz**: `vars` bir build
+  sabiti değil, runtime config'i ve `.dev.vars` ile `process.env`
   onu meşru şekilde eziyor.
 - `src/lib/test-ortam.ts > ortamiSil()` → `delete` için gereken cast tek bir
-  yerde. Tip aslında doğruydu (üretimde o değişken hep var); testin taklit
-  ettiği şey üretim değil, değişkenin hiç tanımlı olmadığı yerel/vitest ortamı.
+  yerde. Tip aslında doğruydu (production'da o variable hep var); testin taklit
+  ettiği şey production değil, variable'ın hiç tanımlı olmadığı yerel/vitest environment'ı.
 
-**Ders:** üretilen ve gitignore'da olan bir dosya, yereli CI'dan sessizce
+**Ders:** üretilen ve gitignore'da olan bir dosya, local'i CI'dan sessizce
 ayırabiliyor. `wrangler.jsonc` değiştiren bir işten sonra `npm run cf:tip`
 koşturmadan "tip temiz" demek yanlış güven veriyor.
 
-### Yan bulgu: yerel `cf:yayinla` sırrı pakete gömüyor
+### Yan bulgu: local `cf:yayinla` secret'ı bundle'a gömüyor
 
 Ölçüldü: `.env` varken `next build` onu `.open-next/server-functions/default/.env`
-içine kopyalıyor, yani `TURNSTILE_SECRET` Worker paketinin **içinde** yayınlanır.
-İstemci paketine (`assets/`) girmiyor — halka açık sızıntı değil — ama betiği
+içine kopyalıyor, yani `TURNSTILE_SECRET` Worker bundle'ının **içinde** deploy edilir.
+Client bundle'ına (`assets/`) girmiyor — public leak değil — ama script'i
 okuyabilen görüyor ve `wrangler secret` ile döndürmek etkisiz kalıyor.
 
-CI temiz checkout'ta koştuğu için `yayinla` işi bu sorunu yaşamıyor; risk
-yalnızca `docs/yayin.md`'de belgelenen **acil yerel yayın** yolunda. Oraya uyarı
-düşüldü. Kalıcı çözüm (`.env`'i build'den dışlamak ya da sırrı yalnızca binding'den
+CI temiz checkout'ta koştuğu için `yayinla` job'ı bu sorunu yaşamıyor; risk
+yalnızca `docs/yayin.md`'de belgelenen **acil local deploy** yolunda. Oraya uyarı
+düşüldü. Kalıcı çözüm (`.env`'i build'den dışlamak ya da secret'ı yalnızca binding'den
 okumak) ayrı ve küçük bir iş — bu fazın konusu değil, bilerek ertelendi.
 ## Faz L3 — "gelmedi" kısıtı
 
 **428 test** (29 dosya), bunun **17'si** bu işin. `npm run tip`, `npm run lint`,
-`npm test` ve `npm run cf:tip` yeşil. Göç: `drizzle/0003_gelmedi-kisiti.sql`
+`npm test` ve `npm run cf:tip` yeşil. Migration: `drizzle/0003_gelmedi-kisiti.sql`
 (iki `ADD COLUMN`, ikisi de eklemeli).
 
-> Dal önce **Faz L'den önceki** main'den çıkmıştı: worktree açılırken yerel
+> Branch önce **Faz L'den önceki** main'den çıkmıştı: worktree açılırken local
 > `origin/main` referansı bayattı. O haliyle merge edilseydi Faz L'nin tamamını
-> (`hiz-siniri.ts`, `wrangler.jsonc`'deki `vars` ve `ratelimits`, CI kapısı)
+> (`hiz-siniri.ts`, `wrangler.jsonc`'deki `vars` ve `ratelimits`, CI gate'i)
 > geri alırdı — diff bunu "silme" olarak gösteriyordu. `origin/main` üzerine
 > rebase edildi; L3'ün kendi değişiklikleri zaten tamamen eklemeliydi, yalnızca
 > bu dosya çakıştı. Yukarıdaki sayılar rebase SONRASI ölçüm.
@@ -1668,16 +1668,16 @@ affetmek istediği müşteriyi affedemezdi — geçmişi silmesi gerekirdi. Tek 
 `randevuKisitiBitis` alanı hem okuması ucuz hem de panelden elle sıfırlanmaya
 açık (o ekran henüz yok, aşağıda).
 
-**Kiracıya özel olması ücretsiz geldi.** `musteri` zaten kiracı başına ayrı bir
+**Tenant'a özel olması ücretsiz geldi.** `musteri` zaten tenant başına ayrı bir
 satır (`musteri_isletme_telefon_idx`), yani aynı telefon numarası iki salonda
 iki ayrı kayıt. Bir salonda gelmemek diğerinden randevu almayı engellemiyor ve
 bunu iki ayrı IDOR testi arıyor: biri yazma yolunda (başka işletmenin
 randevusunu GELMEDI yapmak müşterisini kısıtlamıyor), biri okuma yolunda (A'daki
 kısıt B'nin sayfasında görünmüyor).
 
-**Kısıtı yazan UPDATE, durumu değiştiren koşullu UPDATE ile AYNI
+**Kısıtı yazan UPDATE, durumu değiştiren conditional UPDATE ile AYNI
 transaction'da.** Kısıt randevunun gerçekten GELMEDI'ye geçmesinin sonucu; iki
-ayrı istekte yapılsaydı yarışı kaybeden ikinci sekme de cezayı bir kez daha
+ayrı request'te yapılsaydı yarışı kaybeden ikinci sekme de cezayı bir kez daha
 uzatırdı. Testi var: zaten GELMEDI olan randevuda ikinci çağrı 0 satır etkiliyor
 ve kısıt milisaniyesine kadar aynı kalıyor.
 
@@ -1687,7 +1687,7 @@ kısaltamıyor. `GREATEST(coalesce(mevcut, now()), now() + gün)`: var olan bir
 kısıt KISALTILMIYOR — işletme ayarı 100 günden 30'a indirdiğinde ikinci bir
 "gelmedi" cezayı azaltmış olurdu.
 
-**Süre parametre değil, kapanış değişkeni.** `randevuDurumunuDegistir` ayarı
+**Süre parametre değil, closure variable'ı.** `randevuDurumunuDegistir` ayarı
 kendisi okuyor, `randevuOlustur` da `sahip.gelmediKisitiGun`'ü kapanıştan
 alıyor — `otomatikOnay` gibi çağıran taraftan GELMİYOR. Gerekçe: route bir gün
 ayarı geçmeyi unutsa koruma sessizce kalkardı ve hiçbir test bunu göstermezdi,
@@ -1697,9 +1697,9 @@ ayarı geçmeyi unutsa koruma sessizce kalkardı ve hiçbir test bunu göstermez
 işletme mevcut kısıtların da kalkmasını bekliyor. Alanları temizlemek yerine
 okumada yok saymak, ayarı tekrar açınca geçmişin geri gelmesi demek — "yanlışlıkla
 kapattım" durumunda doğru davranış bu. 0 iken GELMEDI işaretlemek yine de
-çalışıyor: 0 "kaydı tutma" değil, "müşteriyi kapıya koyma".
+çalışıyor: 0 "kaydı tutma" değil, "müşteriyi gate'e koyma".
 
-**429 mesajı kısıtın SEBEBİNİ söylemiyor.** `POST /api/randevu` oturumsuz: bir
+**429 mesajı kısıtın SEBEBİNİ söylemiyor.** `POST /api/randevu` session'sız: bir
 telefon numarası yazıp cevaba bakan herkes o kişinin bu işletmeye gelmediğini
 öğrenirdi. Kısıtın VARLIĞINI gizlemek mümkün değil — meşru müşteriye ne zaman
 tekrar deneyeceğini söylemek zorundayız — ama sebebini gizlemenin maliyeti yok:
@@ -1708,7 +1708,7 @@ Test metinde "gelmedi" kelimesinin geçmediğini de doğruluyor.
 
 **Sınır `>`, yani bitiş anında kısıt bitmiş sayılıyor.** Eşitliği kısıtlı
 saymak, "3 Mart 12:00'ye kadar" denen cezayı belirsiz biçimde uzatırdı. Tarih
-işletmenin saat diliminde yazılıyor (DEĞİŞMEZ 7); sunucununkine göre yazılsaydı
+işletmenin saat diliminde yazılıyor (INVARIANT 7); server'ınkine göre yazılsaydı
 gece yarısına yakın bitişler bir gün kaymış görünürdü.
 
 ### Bilerek kapsam dışı
@@ -1725,29 +1725,29 @@ gece yarısına yakın bitişler bir gün kaymış görünürdü.
 - **Kısıt süresi tek bir sayı; tekrar edene daha uzun ceza yok.** Kademeli ceza
   ("ikinci kez gelmediyse iki katı") kaç kez gelmediğini saymayı gerektiriyor —
   yani yukarıda bilerek reddedilen türetilmiş modeli. Değerse ayrı bir karar.
-- **Prod'a göç UYGULANMADI.** Göç yalnızca ekleme (`isletme.gelmedi_kisiti_gun`
+- **Prod'a migration UYGULANMADI.** Migration yalnızca ekleme (`isletme.gelmedi_kisiti_gun`
   DEFAULT 30, `musteri.randevu_kisiti_bitis` nullable); geri alma iki
-  `drop column`. `docs/yayin.md`'deki elle iş akışıyla uygulanacak.
+  `drop column`. `docs/yayin.md`'deki elle workflow'la uygulanacak.
 
 ### Doğrulama
 
-- `npm run db:goc` + `npm run db:uygula` — yerel `randevu_dev`'e uygulandı
+- `npm run db:goc` + `npm run db:uygula` — local `randevu_dev`'e uygulandı
 - `npm run cf:tip`, `npm run tip`, `npm run lint` temiz
-- `npm test` — **423 test geçti** (28 dosya), üst üste üç koşumda
+- `npm test` — **423 test geçti** (28 dosya), üst üste üç run'da
 - Yeni testler: `scoped-db-randevu.test.ts` +11 (kısıtın yazılması ve
   okunması, iki IDOR, `GREATEST`, ayar 0, tam sınır), `randevu.test.ts` +3
-  (uçtan uca 429 + mesajın tarih taşıması + sebebin sızmaması),
+  (end-to-end 429 + mesajın tarih taşıması + sebebin sızmaması),
   `ayar-girdi.test.ts` +2
 
 ### Elle yapılması gerekenler (Faz L3)
 
-- [x] **Prod göçü uygulandı** (2 Eylül 2026). Ama SIRA TERSTİ ve bu bir olay
-      oldu: PR #16 merge edilip **deploy edildikten sonra** göç uygulandı.
-      Arada üretimdeki kod, veritabanında olmayan iki kolonu `select`
+- [x] **Prod migration'ı uygulandı** (2 Eylül 2026). Ama SIRA TERSTİ ve bu bir olay
+      oldu: PR #16 merge edilip **deploy edildikten sonra** migration uygulandı.
+      Arada production'daki kod, veritabanında olmayan iki kolonu `select`
       ediyordu — Drizzle açık kolon listesi ürettiği için `isletme` ve
-      `musteri` okuyan her sorgu `column does not exist` ile düşüyordu.
+      `musteri` okuyan her query `column does not exist` ile düşüyordu.
       Ayrıntı ve alınan ders: aşağıda "Sıra bozulunca" bölümünde.
-- [ ] Uçtan uca: randevu al → panelde "Gelmedi" işaretle → aynı numarayla
+- [ ] End-to-end: randevu al → panelde "Gelmedi" işaretle → aynı numarayla
       tekrar randevu almayı dene, tarihli 429 mesajını gör → ayarı 0 yapıp
       tekrar dene, geçtiğini gör.
 - [ ] Ayarlar ekranındaki yeni alanı mobil genişlikte gözle doğrula.
@@ -1756,8 +1756,8 @@ gece yarısına yakın bitişler bir gün kaymış görünürdü.
 
 ## Sıra bozulunca — 2 Eylül 2026
 
-Faz L3'ün göçü prod'a **deploy'dan sonra** uygulandı. `docs/yayin.md` sırayı
-zaten yazıyordu (önce göç, sonra deploy); eksik olan bilgi değil, sırayı
+Faz L3'ün migration'ı prod'a **deploy'dan sonra** uygulandı. `docs/yayin.md` sırayı
+zaten yazıyordu (önce migration, sonra deploy); eksik olan bilgi değil, sırayı
 **zorlayan** bir şeydi.
 
 ### Neden sessiz kaldı
@@ -1766,8 +1766,8 @@ Deploy sonrası bakılan iki şey de yeşildi:
 
 | Kontrol | Sonuç | Neden yanıltıcı |
 |---|---|---|
-| `/` | 200 | Kök sayfa hiç sorgu yapmıyor |
-| `/saglik` | 200 | Yalnızca `select version()` koşuyor — şemaya bakmıyor |
+| `/` | 200 | Kök sayfa hiç query yapmıyor |
+| `/saglik` | 200 | Yalnızca `select version()` koşuyor — schema'ya bakmıyor |
 | Supabase `list_migrations` | `[]` | O tablo Supabase CLI'ın (`supabase_migrations`); Drizzle kendi günlüğünü `drizzle.__drizzle_migrations`'ta tutuyor |
 
 Gerçek durum ancak `information_schema.columns` sorgulanınca göründü:
@@ -1775,47 +1775,47 @@ Gerçek durum ancak `information_schema.columns` sorgulanınca göründü:
 
 **Drizzle bu hatayı yumuşatmıyor, sertleştiriyor.** `select()` açık kolon
 listesi üretiyor; yani eksik bir kolon "o alan `undefined` gelir" değil,
-`isletme` ya da `musteri` okuyan **her sorgunun** düşmesi demek —
+`isletme` ya da `musteri` okuyan **her query'nin** düşmesi demek —
 `scoped-db.ts`'te beş çağrı noktası. Yani panelin ve randevu sayfasının
 tamamı. Sessiz bozulma değil, görünmeyen bir tam durma.
 
 ### Alınan ders
 
-`/saglik`'in 200 dönmesi bir şema kanıtı **değil**. Bir yayının sağlıklı
+`/saglik`'in 200 dönmesi bir schema kanıtı **değil**. Bir deploy'un sağlıklı
 olduğunu söyleyen kontrol, uygulamanın gerçekten okuduğu bir tabloya
 dokunmalı; `select version()` yalnızca "Postgres ayakta" diyor.
 
 ### Bilerek yapılmayan
 
-- **Göçü Supabase MCP `apply_migration` ile uygulamak.** Uygulardı ama
+- **Migration'ı Supabase MCP `apply_migration` ile uygulamak.** Uygulardı ama
   `drizzle.__drizzle_migrations`'a satır yazmazdı; bir sonraki
   `db:uygula:prod` 0003'ü yeniden koşup "column already exists" ile düşerdi.
   Doğru araç `scripts/prod-goc.ts`.
-- **Göçü dal üzerindeyken koşmak.** `prod-goc.ts` `./drizzle` klasörünün
+- **Migration'ı branch üzerindeyken koşmak.** `prod-goc.ts` `./drizzle` klasörünün
   TAMAMINI uyguluyor; `faz-m/dizin` üzerindeyken koşulsaydı henüz merge
   edilmemiş `0004_dizin.sql` de prod'a giderdi. Önce `origin/main`'e detach
-  edildi, sonra dala dönüldü.
-- **Deploy öncesi şema kontrolü betiği.** Prod'daki son migration hash'iyle
+  edildi, sonra branch'e dönüldü.
+- **Deploy öncesi schema kontrolü script'i.** Prod'daki son migration hash'iyle
   `drizzle/meta/_journal.json`'ı karşılaştırıp uyuşmazlıkta deploy'u durduran
   bir adım doğru çözüm ve kullanıcıya önerildi; henüz yazılmadı.
 
 ---
 
-## Faz M — pazaryeri dizini
+## Faz M — marketplace dizini
 
-**Kapandı:** şema ve kapalı listeler, kiracı-üstü okuma katmanı, panelde dizin
-profili ve yayına çıkma anahtarı, halka açık `/dizin` sayfası.
+**Kapandı:** schema ve kapalı listeler, cross-tenant okuma layer'ı, panelde dizin
+profili ve yayına çıkma anahtarı, public `/dizin` sayfası.
 
 **456 test** (31 dosya). `npm run tip`, `npm run lint`, `npm test`,
 `npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1634 KiB
-gzip** (3 MiB sınırının 1400 KiB altında). Göç: `drizzle/0004_dizin.sql`.
+gzip** (3 MiB sınırının 1400 KiB altında). Migration: `drizzle/0004_dizin.sql`.
 
-### Değişmez 1 burada esniyor — ve karşılığı
+### Invariant 1 burada esniyor — ve karşılığı
 
-Bu deponun merkezi değişmezi "her sorgu bir kiracıya kapsanır".
-`getScopedDb(oturum)` ve `getHalkaAcikDb(slug)` kiracıyı bir **kapanış
-değişkeninde** tutuyor, yani çağıran taraf onu veremiyor. Bir dizin ise tanımı
-gereği kiracı-üstü: amacı bütün işletmeleri listelemek.
+Bu repo'nun merkezi invariant'ı "her query bir tenant'a kapsanır".
+`getScopedDb(oturum)` ve `getHalkaAcikDb(slug)` tenant'ı bir **kapanış
+variable'ında** tutuyor, yani çağıran taraf onu veremiyor. Bir dizin ise tanımı
+gereği cross-tenant: amacı bütün işletmeleri listelemek.
 
 Kapsama olmadığı için karşılığı, sızabilecek yüzeyin daraltılması
 (`src/lib/dizin.ts`):
@@ -1826,7 +1826,7 @@ Kapsama olmadığı için karşılığı, sızabilecek yüzeyin daraltılması
    satırı dönmüyor — kart "4 hizmet, 300 ₺'den başlıyor" diyor, işletmenin
    fiyat listesini dizine kopyalamıyor.
 3. Dönen tip (`DizinKarti`) **elle yazılmış ve kapalı**. `$inferSelect`
-   kullanılmadı: şemaya yarın eklenen bir kolon buradan sessizce sızmasın.
+   kullanılmadı: schema'ya yarın eklenen bir kolon buradan sessizce sızmasın.
 4. Çağıran taraf tablo ya da kolon adı **veremiyor**; il ve kategori kapalı
    listeye karşı doğrulanıyor.
 5. Salt okunur. Bu dosyaya asla yazma metodu eklenmeyecek.
@@ -1839,7 +1839,7 @@ anlatmak için anıyor; ham metin taransaydı test kendi gerekçesinin yazılmas
 cezalandırırdı.
 
 Gerekçe geçmişten: aynı şey Faz B'de bir kez yaşandı (Prisma'dan Drizzle'a
-geçerken kiracı kapısı sessizce zorlanamaz hale geldi ve iki faz incelemeye
+geçerken tenant gate'i sessizce zorlanamaz hale geldi ve iki faz incelemeye
 bağlı kaldı).
 
 ### Kararlar
@@ -1853,32 +1853,32 @@ bağlı kaldı).
 
 - **`yayindaAyarla` ayrı bir metot, `ayarlariGuncelle`nin alanı değil.** Yayına
   çıkış ön koşullu (il, kategori, en az bir hizmet, personel, çalışma saati);
-  aynı sette gelseydi bir istek `{ ad: "…", yayinda: true }` gönderip kontrolü
+  aynı sette gelseydi bir request `{ ad: "…", yayinda: true }` gönderip kontrolü
   atlayabilirdi — alan yazılır, koşul bakılmazdı. **Kapatmak koşulsuz:**
   işletme kendini her an dizinden çekebilmeli.
 
 - **Eksikler sayılarak dönüyor, tek bir "olmadı" ile değil.** Neyi
   tamamlaması gerektiğini söylemeyen bir ret, ayarlar ekranında tıkanmış
-  kullanıcı demek. Route ham anahtar döndürüyor (`il`, `hizmet`, …), cümleyi
-  arayüz kuruyor: her eksiğin yanında gidilecek bir ekran var ve o bağlantı
+  kullanıcı demek. Route ham key döndürüyor (`il`, `hizmet`, …), cümleyi
+  arayüz kuruyor: her eksiğin yanında gidilecek bir ekran var ve o link
   route'ta bilinmiyor.
 
-- **Eksik profil 409, 400 değil.** İstek biçimsel olarak doğru, kaydın bugünkü
-  durumuyla çatışıyor. 400 deseydik istemci gövdesini düzeltmeye çalışırdı;
-  düzeltilmesi gereken gövde değil işletme profili.
+- **Eksik profil 409, 400 değil.** Request biçimsel olarak doğru, kaydın bugünkü
+  durumuyla çatışıyor. 400 deseydik client body'sini düzeltmeye çalışırdı;
+  düzeltilmesi gereken body değil işletme profili.
 
 - **il/kategori `pgEnum` ya da ayrı tablo DEĞİL**, düz `text` + kapalı TS
   listesi — `ayar-girdi.ts > SAAT_DILIMLERI` emsali. Bunlar durum makinesi
   değil referans alanı. `pgEnum` olsalardı her yeni kategori bir `ALTER TYPE
-  … ADD VALUE` göçü (ve o değerin aynı transaction'da kullanılamaması tuzağı)
-  isterdi. Ayrı tablo olsalardı her dizin sorgusuna bir join eklerdi.
+  … ADD VALUE` migration'ı (ve o değerin aynı transaction'da kullanılamaması tuzağı)
+  isterdi. Ayrı tablo olsalardı her dizin query'sine bir join eklerdi.
   **Bedeli:** DB geçersiz bir değeri engellemiyor. Kabul edildi, çünkü bu
   alanlar tek bir yoldan yazılıyor (panel ayarları) ve o yol doğrulamadan
   geçiyor.
 
 - **İlçe serbest metin ve FİLTRE DEĞİL.** ~1000 ilçenin il eşlemesini doğru
   tutmak ayrı bir veri yatırımı; ilçe yalnızca kartta görünen bir etiket ve
-  yanlış yazılmış bir ilçe hiçbir sorgunun sonucunu bozmuyor. Filtre olsaydı
+  yanlış yazılmış bir ilçe hiçbir query'nin sonucunu bozmuyor. Filtre olsaydı
   normalize etmek zorunlu olurdu. Ayarlar ekranı bunu kullanıcıya da söylüyor
   ("Kartınızda görünür; aramayı etkilemez") — söylenmeseydi listede bulunmak
   için doldurması gerektiğini sanırdı.
@@ -1894,14 +1894,14 @@ bağlı kaldı).
 
 - **Sıralama ada göre ve bu GEÇİCİ.** Gerçek sıralama (yakınlık, doluluk, puan)
   bir ürün kararı ve henüz verilmedi; rastgele ya da id sırası ise aynı
-  sorgunun iki çağrısında farklı sıra üretip sayfalamayı bozardı.
+  query'nin iki çağrısında farklı sıra üretip sayfalamayı bozardı.
 
 - **Sayfa üst sınırı 200.** Derin `OFFSET` Postgres'te pahalılaşıyor ve dizinde
   binlerce sayfa gezmenin meşru bir kullanımı yok; sınır kazıyıcının maliyetini
   de sabitliyor. Arayüz aynı sınırda duruyor — durmasaydı "Sonraki" sessizce
   aynı sayfayı getirirdi.
 
-- **Filtre düz bir GET formu, istemci bileşeni değil.** Bu sayfa ürünü hiç
+- **Filtre düz bir GET formu, client component'i değil.** Bu sayfa ürünü hiç
   tanımayan bir müşteriye açılan ilk ekran ve tek işi bir işletme bulmak;
   JavaScript'e bağlamak yavaş bağlantıda boş bir sayfa ve çalışmayan bir arama
   kutusu demek. GET formunda gönderim URL'e giriyor, sonuç paylaşılabiliyor ve
@@ -1919,7 +1919,7 @@ bağlı kaldı).
   yaramadığını söylüyor.
 
 - **`/dizin` `force-dynamic` ama gerekçesi `/r/[slug]`inkinden FARKLI.** Orada
-  önbelleksizlik şart: sayfa bir yazma kararını besliyor ve bayat bir hizmet
+  cache'sizlik şart: sayfa bir yazma kararını besliyor ve bayat bir hizmet
   listesi müşteriyi hiç alınamayacak bir slota götürür. Dizin yalnızca bir
   liste; yine de dinamik, çünkü bir dakikalık bayat liste dizinden yeni çıkmış
   bir işletmeyi göstermeye devam ederdi.
@@ -1941,15 +1941,15 @@ da kesme işareti içeren adlarda ham metin eşleşmesi hâlâ daha iyi sonuç
 veriyor.
 
 `slugUret` kendi dosyasına taşındı (`src/lib/slug.ts`). `kayit.ts`'te bırakıp
-oradan import etmek, kiracı-üstü dizine bir veritabanı modülünü bağımlılık
+oradan import etmek, cross-tenant dizine bir veritabanı modülünü bağımlılık
 yapardı.
 
 **Bu hata elle doğrulamada çıktı, testte değil** — mevcut arama testi
 `"berber"` ve `"NISAN"` gibi ASCII adlar kullanıyordu ve ikisi de geçiyordu.
 
 **2. İl listesi `localeCompare(…, "tr")` ile sıralanamıyor.** 81 il panelde
-plaka sırasında gösterilemez, ama liste hem sunucuda (workerd) hem tarayıcıda
-**aynı** sırayı üretmek zorunda ve workerd'in ICU derlemesi tam değil — iki
+plaka sırasında gösterilemez, ama liste hem server'da (workerd) hem tarayıcıda
+**aynı** sırayı üretmek zorunda ve workerd'in ICU build'i tam değil — iki
 taraf farklı sıralarsa React hidrasyonda uyuşmazlık görüyor. Elle yazılmış harf
 tablosu (`trKarsilastir`), `SAAT_DILIMLERI` ve `paraBicimle`nin emsalini
 izliyor.
@@ -1959,32 +1959,32 @@ izliyor.
 - **Sıralama seçeneği yok** (ada göre sabit). Gerçek sıralama sinyali
   (yakınlık, doluluk, puan) ürün kararı; puan için değerlendirme sistemi, konum
   için koordinat gerekiyor ve ikisi de bu fazda yok.
-- **Harita ve konum araması yok.** İşletmenin koordinatı şemada yok; adres
+- **Harita ve konum araması yok.** İşletmenin koordinatı schema'da yok; adres
   serbest metin. Coğrafi arama ayrı bir veri yatırımı (geocoding + PostGIS).
 - **Dizin sayfası `robots`/`sitemap` ile beslenmiyor.** Arama motoru
   görünürlüğü ayrı bir konu ve bugün dizinde üç işletme var; boş bir dizini
   indekslettirmenin faydası yok.
-- **Hız sınırı konmadı.** `/dizin` bir okuma yolu ve `/api/musaitlik`in aksine
+- **Rate limit konmadı.** `/dizin` bir okuma yolu ve `/api/musaitlik`in aksine
   ucuz; kazıyıcının maliyeti sayfa üst sınırıyla zaten sabitlenmiş durumda.
   Trafik geldiğinde Faz L'nin `hiz-siniri.ts`'i bu yola da bağlanabilir.
 - **Kategori listesi küçük başladı** (dokuz kalem). Doldurulamayacak kadar çok
-  boş kategoriyle açılan bir dizin boş görünür; talep geldikçe büyür ve göç
+  boş kategoriyle açılan bir dizin boş görünür; talep geldikçe büyür ve migration
   gerektirmiyor.
-- **İşletmenin dizindeki görünümünü önizlemesi yok.** Kart, kayıtlı alanlardan
-  kuruluyor ve ayarlar ekranı hepsini gösteriyor; ayrı bir önizleme ekranı bu
+- **İşletmenin dizindeki görünümünü preview'u yok.** Kart, kayıtlı alanlardan
+  kuruluyor ve ayarlar ekranı hepsini gösteriyor; ayrı bir preview ekranı bu
   fazın kazancına değmezdi.
 
 ### Doğrulama
 
 - `npm run tip`, `npm run lint` temiz
 - `npm test` — **456 test geçti** (31 dosya, gerçek Postgres)
-  - `dizin.test.ts` 16 (görünürlük kapısı, filtreler, toplama, Türkçe arama)
+  - `dizin.test.ts` 16 (görünürlük gate'i, filtreler, toplama, Türkçe arama)
   - `degismezler.test.ts` +4 (dizin.ts'in şeklini zorlayan tarama)
   - `ayar-girdi.test.ts` +5 (dizin alanları ve il sıralaması)
   - `dizin.test.ts` (route) 3 — CSRF dilimi
 - `npm run build` başarılı, 34 route
 - `cf:kur` + `wrangler deploy --dry-run`: **1634.49 KiB gzip**
-- **Elle (`next dev`, tohumlanmış `randevu_dev`):** `/dizin` 200 ve yalnızca
+- **Elle (`next dev`, seed'lenmiş `randevu_dev`):** `/dizin` 200 ve yalnızca
   `yayinda=true` olan üç işletmeyi listeliyor (dördüncüsü yayında değil ve
   görünmüyor); `?il=İstanbul` ikiye, `?kategori=Berber` bire iniyor;
   `?il=Paris` (listede olmayan değer) filtreyi düşürüp tam listeyi veriyor;
@@ -1994,7 +1994,7 @@ izliyor.
 
 ### Elle yapılması gerekenler (Faz M)
 
-- [x] **Prod göçü uygulandı — bu sefer DEPLOY'DAN ÖNCE** (2 Eylül 2026 19:22
+- [x] **Prod migration'ı uygulandı — bu sefer DEPLOY'DAN ÖNCE** (2 Eylül 2026 19:22
       UTC, `npm run db:uygula:prod -- --onayla`). Doğrulandı: dört kolon
       yerinde (`yayinda` NOT NULL DEFAULT false), `isletme_dizin_idx` ve
       `isletme_yayin_alanlari_tam` mevcut, journal 5 satır, iki mevcut işletme
@@ -2002,105 +2002,105 @@ izliyor.
       görünmüyorlar. Canlıdaki (henüz eski) kod etkilenmedi: `/`, `/r/berber`,
       `/r/demo-guzellik-salonu` 200.
 
-      > **`goc` iş akışı bu göç için KULLANILAMADI** ve bu bir yapılandırma
-      > çelişkisi: `goc`, `uretim` ortamına bağlı ve o ortamın deployment
-      > branch policy'si yalnızca `main`'e izin veriyor. Ama iş akışının kendi
-      > başlığı "önce bu iş akışını koştur, sonra merge et" diyor — yani göç
+      > **`goc` workflow bu migration için KULLANILAMADI** ve bu bir config
+      > çelişkisi: `goc`, `uretim` environment'ına bağlı ve o environment'ın deployment
+      > branch policy'si yalnızca `main`'e izin veriyor. Ama workflow'un kendi
+      > başlığı "önce bu workflow'u koştur, sonra merge et" diyor — yani migration
       > henüz `main`'de olmayan bir dosyayı uygulamak zorunda. İki kural aynı
       > anda sağlanamıyor.
       >
-      > Bu sefer `docs/yayin.md`'nin ikinci yolu (yerelden `db:uygula:prod`)
+      > Bu sefer `docs/yayin.md`'nin ikinci yolu (local'den `db:uygula:prod`)
       > kullanıldı; L3'ün elle listesi de ikisini eşdeğer sayıyordu. **Kalıcı
-      > çözüm aynı gün verildi:** aşağıdaki "Onay kapıları kaldırıldı"
+      > çözüm aynı gün verildi:** aşağıdaki "Approval gate'ler kaldırıldı"
       > bölümü.
-- [ ] Uçtan uca: ayarlarda il + kategori doldur → "Dizine ekle" → `/dizin`'de
+- [ ] End-to-end: ayarlarda il + kategori doldur → "Dizine ekle" → `/dizin`'de
       kartı gör → "Dizinden çıkar" → kartın kaybolduğunu ama `/r/<slug>`in
       hâlâ çalıştığını gör.
 - [ ] Eksik profille "Dizine ekle" → 409 ve eksikler listesi ekranda görünüyor
-      mu, bağlantılar doğru ekrana gidiyor mu.
+      mu, link'ler doğru ekrana gidiyor mu.
 - [ ] `/dizin` ve ayarlardaki yeni bölümü **mobil genişlikte** ve **koyu
-      temada** gözle doğrula. Bu oturumda tarayıcı eklentisi bağlanamadığı için
+      temada** gözle doğrula. Bu session'da tarayıcı plugin'i bağlanamadığı için
       görsel doğrulama yapılmadı; kontroller HTTP üzerinden yapıldı.
 
-### Bilinen yerel gürültü
+### Bilinen local gürültü
 
 `randevu_dev`'deki `agdas-berber` kaydının adı bozuk kodlanmış
 (`Çağdaş Berber` yerine tek bayt hatalı bir dize) ve slug'ı `agdas-berber`.
-Önceki bir oturumun elle tohumundan kalma; kod hatası değil. `cagdas` araması
+Önceki bir session'ın elle seed'inden kalma; kod hatası değil. `cagdas` araması
 bu yüzden bu kaydı bulmuyor, `agdas` buluyor.
 
 ---
 
-## Onay kapıları kaldırıldı — 2 Eylül 2026
+## Approval gate'ler kaldırıldı — 2 Eylül 2026
 
-**Merge eden yayınlamış olur.** `yayinla` işi artık beklemiyor, `goc` işi de
-herhangi bir daldan onaysız koşuyor. Kullanıcı kararı: *"pr'ı merge ettikten
+**Merge eden deploy etmiş olur.** `yayinla` job'ı artık beklemiyor, `goc` job'ı de
+herhangi bir branch'ten onaysız koşuyor. Kullanıcı kararı: *"pr'ı merge ettikten
 sonra otomatik deploy gerçekleşsin, zaten bir sorun olduğunda önceki deploya
 dönebiliriz."*
 
-### Kaldırılan kapının dayandığı varsayım yanlıştı
+### Kaldırılan gate'in dayandığı varsayım yanlıştı
 
-`docs/yayin.md` onay kapısını şöyle gerekçelendiriyordu: *"`NEXT_PUBLIC_*`
-değerleri derlemeye gömülü olduğu için geri alma 'yeniden derleme' demek — yani
+`docs/yayin.md` approval gate'i şöyle gerekçelendiriyordu: *"`NEXT_PUBLIC_*`
+değerleri build'e gömülü olduğu için geri alma 'yeniden build' demek — yani
 ucuz değil."*
 
-Ölçüldü, varsayılmadı: `npx wrangler versions list` üç ayrı sürümü listeliyor
+Ölçüldü, varsayılmadı: `npx wrangler versions list` üç ayrı version'ı listeliyor
 ve `wrangler rollback` bunlardan birine dönüyor. Yani **geri alma yeniden
-derleme değil**, saklanmış bir sürüme geçiş. Cümle Faz B'de yazıldığında
-Cloudflare'in sürüm geçmişi bu depoda hiç denenmemişti.
+build değil**, saklanmış bir version'a geçiş. Cümle Faz B'de yazıldığında
+Cloudflare'in version geçmişi bu repo'da hiç denenmemişti.
 
-### İki kapı, iki farklı sebep
+### İki gate, iki farklı sebep
 
-| Kapı | Neden kaldırıldı |
+| Gate | Neden kaldırıldı |
 |---|---|
 | `yayinla` → `environment: uretim` | Dayandığı varsayım yanlıştı (üstte). Rollback ucuz. |
 | `goc` → `environment: uretim` | **Çelişkiliydi ve uygulanamazdı** (altta). |
 
-`goc`'un ortam bağı bir hataydı: `uretim` ortamının branch policy'si yalnızca
-`main`'e izin veriyor, ama iş akışının kendi başlığı *"önce bu iş akışını
-koştur, sonra merge et"* diyor — yani göç, tanımı gereği henüz `main`'de
+`goc`'un environment bağı bir hataydı: `uretim` environment'ının branch policy'si yalnızca
+`main`'e izin veriyor, ama workflow'un kendi başlığı *"önce bu workflow'u
+koştur, sonra merge et"* diyor — yani migration, tanımı gereği henüz `main`'de
 **olmayan** bir dosyayı uygulamak zorunda. İki kural aynı anda sağlanamıyordu.
 
-Faz M'de görüldü: `0004_dizin.sql` yalnızca dalda duruyordu ve iş akışı onu
-uygulayamadı. L3'te fark edilmemişti, çünkü o göç yanlışlıkla merge *sonrası*
+Faz M'de görüldü: `0004_dizin.sql` yalnızca branch'te duruyordu ve workflow onu
+uygulayamadı. L3'te fark edilmemişti, çünkü o migration yanlışlıkla merge *sonrası*
 koşulmuştu — **hatanın kendisi çelişkiyi gizlemişti**.
 
-### Kapı dosyadan kaldırıldı, ortam ayarından değil
+### Gate dosyadan kaldırıldı, environment ayarından değil
 
-`uretim` ortamı GitHub'da hâlâ duruyor; ona başvuran bir iş kalmadığı için
+`uretim` environment'ı GitHub'da hâlâ duruyor; ona başvuran bir iş kalmadığı için
 hiçbir şeyi etkilemiyor. `environment:` satırları `ci.yml` ve `goc.yml`'dan
 silindi.
 
-Gerekçe: kapı görünmez bir depo ayarında değil, PR'da **incelenen** bir dosyada
-dursun. Aynı gerekçeyle hız sınırları da WAF kuralı değil `wrangler.jsonc`'de
+Gerekçe: gate görünmez bir repo ayarında değil, PR'da **incelenen** bir dosyada
+dursun. Aynı gerekçeyle rate limit'ler de WAF kuralı değil `wrangler.jsonc`'de
 (Faz L) — ve Faz L'nin bulgusu tam da buydu: `wrangler.jsonc`'de `vars` bloğunun
-**yokluğu** kod incelemesinde görünmüyordu ve bot kapısı aylarca sessizce
+**yokluğu** kod incelemesinde görünmüyordu ve bot gate'i aylarca sessizce
 açıktı. Bir ayarın varlığı ya da yokluğu, ancak baktığın dosyada duruyorsa
 okunabilir.
 
-Yan fayda: ortam secret'ı hiç kullanılmıyordu (`CLOUDFLARE_API_TOKEN`,
+Yan fayda: environment secret'ı hiç kullanılmıyordu (`CLOUDFLARE_API_TOKEN`,
 `CLOUDFLARE_ACCOUNT_ID`, `SUPABASE_DB_URL` üçü de **repository** secret'ı), yani
-bağı kaldırmak hiçbir sırrı kırmadı. Kontrol edildi, denenmedi.
+bağı kaldırmak hiçbir secret'ı kırmadı. Kontrol edildi, denenmedi.
 
 ### Kaybedilen ve bilerek kabul edilen
 
 - **Kazayla merge edilen bir PR artık doğrudan canlıya çıkıyor.** Karşılığı
   rollback'in ucuz olması. Asıl koruma zaten `dogrula` işiydi: tip, lint, 456
   test ve `cf:kur` yeşil olmadan `yayinla` hiç başlamıyor.
-- **GitHub'ın Deployments sekmesindeki ortam geçmişi** artık dolmuyor. Yayın
-  geçmişinin gerçek kaynağı zaten Cloudflare'in sürüm listesi.
+- **GitHub'ın Deployments sekmesindeki environment geçmişi** artık dolmuyor. Deploy
+  geçmişinin gerçek kaynağı zaten Cloudflare'in version listesi.
 
-### Değişmeyen: şema hâlâ tek yön
+### Değişmeyen: schema hâlâ tek yön
 
 Rollback'in ucuzluğu **yalnızca kod için** geçerli. `scripts/prod-goc.ts` ileri
-gider, geri gitmez; bir yayını geri almak şemayı geri almıyor. Bu yüzden:
+gider, geri gitmez; bir deploy'u geri almak schema'yı geri almıyor. Bu yüzden:
 
-- `goc` hâlâ ayrı bir iş akışı ve hâlâ `"uygula"` yazılmasını istiyor. O kapı
-  kaldırılmadı: koşum kaydında "bunu isteyerek yaptım" izi bırakıyor.
-- Geri alınması gerekebilecek bir göç yazarken **geri alma SQL'i PR
+- `goc` hâlâ ayrı bir workflow ve hâlâ `"uygula"` yazılmasını istiyor. O gate
+  kaldırılmadı: run kaydında "bunu isteyerek yaptım" izi bırakıyor.
+- Geri alınması gerekebilecek bir migration yazarken **geri alma SQL'i PR
   açıklamasına elle yazılmaya devam ediyor**.
-- Sıra artık "önce göç, sonra **merge**" — "sonra yayın" değil. Merge anı yayın
-  anı olduğu için aradaki pencere kapandı; göç merge'den önce koşmazsa kolon
+- Sıra artık "önce migration, sonra **merge**" — "sonra deploy" değil. Merge anı deploy
+  anı olduğu için aradaki pencere kapandı; migration merge'den önce koşmazsa kolon
   yokken kod canlıya çıkar.
 
 ---
@@ -2117,28 +2117,28 @@ kapsam.
 
 ### 1. `scoped-db.ts` 1065 satır
 
-DEĞİŞMEZ 1 gereği kiracıya bağlı her sorgu buradan geçiyor — dosyanın büyümesi
+INVARIANT 1 gereği tenant'a bağlı her query buradan geçiyor — dosyanın büyümesi
 tasarımın sonucu, hatası değil. Ama 1065 satır okunabilirlik sınırını geçti.
 
 **Bölme ekseni tablo değil, KULLANIM olmalı.** Test dosyaları
 (`scoped-db-randevu.test.ts`, `scoped-db-hizmet.test.ts`) bu ayrımı zaten
 yapmış; kaynak onları takip etsin.
 
-> **Bölerken dikkat:** `getScopedDb`'nin kapanış değişkeni (`isletmeId`) tek
-> yerde kalmalı. Her parça kendi bağlantısını kurarsa değişmez zorlanamaz hale
-> gelir — Faz B'de Prisma'dan Drizzle'a geçerken aynı kapı bir kez sessizce
+> **Bölerken dikkat:** `getScopedDb`'nin closure variable'ı (`isletmeId`) tek
+> yerde kalmalı. Her parça kendi connection'ını kurarsa invariant zorlanamaz hale
+> gelir — Faz B'de Prisma'dan Drizzle'a geçerken aynı gate bir kez sessizce
 > kaybolmuştu ve iki faz boyunca yalnızca incelemeye bağlı kaldı. ESLint
 > `no-restricted-imports` muaf listesi ve `degismezler.test.ts` de
 > güncellenmeli.
 
-### 2. `/panel/gelistirici/vitrin` üretimde açık
+### 2. `/panel/gelistirici/vitrin` production'da açık
 
-264 satırlık bileşen vitrini (Faz C'de tasarım doğrulaması için yazıldı) canlıda
-erişilebilir. Sızıntı değil — oturum arkasında ve kiracı verisi göstermiyor —
-ama üretim yüzeyinde geliştirici aracı durmamalı ve bundle'a giriyor.
+264 satırlık component vitrini (Faz C'de tasarım doğrulaması için yazıldı) canlıda
+erişilebilir. Leak değil — session arkasında ve tenant verisi göstermiyor —
+ama production yüzeyinde geliştirici aracı durmamalı ve bundle'a giriyor.
 
-Karar: **silme, env bayrağıyla kapat.** Vitrin tasarım değişikliğinde hâlâ işe
-yarıyor; yerelde açık, üretimde 404 olsun.
+Karar: **silme, env flag'iyle kapat.** Vitrin tasarım değişikliğinde hâlâ işe
+yarıyor; local'de açık, production'da 404 olsun.
 
 ### 3. Uyarı ve hata takibi yok
 
@@ -2147,28 +2147,28 @@ yarıyor; yerelde açık, üretimde 404 olsun.
 > var**, yani Workers Logs açık ve geçmiş Cloudflare panelinden sorgulanabiliyor.
 > Eksik olan log değil, **loga bakan bir şey**.
 
-Üretimde bir hata olsa kimse haberdar olmuyor: log düşüyor ama uyarı çıkmıyor ve
+Production'da bir hata olsa kimse haberdar olmuyor: log düşüyor ama uyarı çıkmıyor ve
 kimse panele bakmıyor. `/saglik` de bu boşluğu kapatmıyor — L3'te gerçek bir
-şema sorununu **yakalamadığı** görüldü, çünkü yalnızca `select version()`
+schema sorununu **yakalamadığı** görüldü, çünkü yalnızca `select version()`
 koşuyor.
 
 En az gereken: yakalanmamış istisnaların bir kanala düşmesi (hata takibi ya da
-Workers Analytics Engine üstüne bir uyarı), `/saglik`'in şemayı gerçekten
+Workers Analytics Engine üstüne bir uyarı), `/saglik`'in schema'yı gerçekten
 kontrol etmesi.
 
-> **DEĞİŞMEZ 5 burada kritik.** Hata takibine giden yükte token, anahtar ve
-> bağlantı dizesi olmayacak. Üçüncü parti bir servise gönderiyorsak süzgeç tek
-> bir kapıdan geçmeli — `email.ts > gonder()` deseninin aynısı.
+> **INVARIANT 5 burada kritik.** Hata takibine giden yükte token, key ve
+> connection string olmayacak. Üçüncü parti bir servise gönderiyorsak filter tek
+> bir gate'ten geçmeli — `email.ts > gonder()` pattern'ının aynısı.
 
 ### 4. `robots.txt` ve `sitemap.xml` yok
 
 Faz M'de bilerek ertelendi: *"bugün dizinde üç işletme var, boş bir dizini
-indekslettirmenin faydası yok."* **Ürün yönü pazaryerine döndüğü için bu gerekçe
+indekslettirmenin faydası yok."* **Ürün yönü marketplace'e döndüğü için bu gerekçe
 artık geçerli değil** — dizinin Google'da bulunması ürünün kendisi.
 
 Gereken: `app/robots.ts` ve `app/sitemap.ts`, `/r/<slug>` sayfalarının sitemap'e
 girmesi, ve `/dizin`'in **filtre parametrelerinin indekslenmemesi** — faceted
-navigation yinelenen içerik üretiyor ve pazaryeri SEO'sunda en sık görülen
+navigation yinelenen içerik üretiyor ve marketplace SEO'sunda en sık görülen
 başarısızlık sebebi bu.
 
 ---
@@ -2184,7 +2184,7 @@ işletme tanıtımı `/isletmeler-icin`'e taşınır.
 Kök sayfa işletmeye konuşuyordu — *"Hizmetlerinizi tanımlayın, çalışma
 saatlerinizi belirleyin"* — ve müşteri yolu sayfanın dibinde tek satır gri
 metindi. Faz M dizini ekledi ama **ön kapıyı çevirmedi**; dizin ürüne bir
-eklenti olarak geldi, ürünün kendisi olarak değil.
+plugin olarak geldi, ürünün kendisi olarak değil.
 
 Kullanıcının cümlesi: *"kullanıcı bu siteyi sadece birinin instasından görüpte
 kullanmasın. herhangi bir işini halletmek için randevu almak istediğinde bu
@@ -2193,9 +2193,9 @@ siteye girsin."*
 ### Araştırmadan gelen üç bulgu
 
 1. **Hepsi arzla başladı.** Booksy tek bir topluluğa (berberler) odaklanıp
-   abonelikli SaaS olarak büyüdü — "bir pazaryeri değil ve randevu başına para
+   abonelikli SaaS olarak büyüdü — "bir marketplace değil ve randevu başına para
    almıyor". Fresha işletmelere **bedava yazılım** verip arzı topladı, tüketici
-   pazaryerini sonra ekledi. Sektörün ortak reçetesi: önce arzı tohumla,
+   marketplace'i sonra ekledi. Sektörün ortak reçetesi: önce arzı seed'le,
    tek-oyunculu modda çalışan bir ürün yap, coğrafi olarak yoğunlaş.
 2. **Ama "arz-önce" ile "işletme odaklı arayüz" aynı şey değil.** Booksy bugün
    tamamen tüketici yüzlü. Yani tüketici yüzlü siteyi şimdi kurmakla, büyümeyi
@@ -2205,16 +2205,16 @@ siteye girsin."*
    hepsi "randevu programı/yazılımı" diyor. Tüketiciye konuşan tek örnek
    Online Güzellik.
 
-Para modelinde de ortak desen var: Fresha %20, Booksy %30 (opsiyonel Boost),
-Treatwell %35 — hepsi **yalnızca pazaryerinden gelen YENİ müşterinin ilk
-randevusunda**, ve **üçü de dönen müşteriden hiçbir şey almıyor**. Pazaryeri
+Para modelinde de ortak pattern var: Fresha %20, Booksy %30 (opsiyonel Boost),
+Treatwell %35 — hepsi **yalnızca marketplace'ten gelen YENİ müşterinin ilk
+randevusunda**, ve **üçü de dönen müşteriden hiçbir şey almıyor**. Marketplace
 keşfi paraya çeviriyor, kullanımı değil.
 
 ### Reddedilen alternatif
 
-**Saf SaaS'ta kalmak** (benim ilk önerimdi). Gerekçesi geçerliydi: pazaryeri bir
+**Saf SaaS'ta kalmak** (benim ilk önerimdi). Gerekçesi geçerliydi: marketplace bir
 özellik değil arz problemi, ve prod'da bugün **2 işletme, 0'ı yayında, 1 randevu
-(bizim testimiz)** var. Boş bir pazaryeri ana sayfası bugünkünden kötüdür.
+(bizim testimiz)** var. Boş bir marketplace ana sayfası bugünkünden kötüdür.
 
 Reddedildi çünkü bulgu 2 ikisini uzlaştırıyor: ön kapıyı tüketiciye çevirmek,
 büyüme stratejisini değiştirmeyi gerektirmiyor. Kabul edilen bedel: dizin
@@ -2245,10 +2245,10 @@ Yalnızca ürün kimliği yüzünden değil. Plan üç ayrı yerden bayattı:
 
 - **Teknoloji:** mimari bölümü, kod örneği, veri modeli ve riskler tablosu
   **Prisma** anlatıyordu. Faz B'de Drizzle'a geçilmişti; `package.json`'da
-  Prisma yok. Bağlantı da "Direct connection" diyordu, oysa Supavisor session
+  Prisma yok. Connection da "Direct connection" diyordu, oysa Supavisor session
   mode kullanılıyor (direct IPv6-only ve erişilemiyor).
 - **Fazlar:** K'de bitiyordu. L, L3 ve M plan dışı kalmıştı.
-- **Değişmezler:** 11 madde vardı, ama kod ve test **DEĞİŞMEZ 12**'yi kullanıyordu
+- **Invariant'lar:** 11 madde vardı, ama kod ve test **INVARIANT 12**'yi kullanıyordu
   (`degismezler.test.ts:119`, `slug.ts:8`). Test zorluyor, sözleşme bilmiyordu —
   `CLAUDE.md`'ye eklendi.
 
@@ -2260,25 +2260,25 @@ Yeni faz sırası: ~~**N** (ön kapı)~~ → ~~**I** (bildirim)~~ →
 
 ## Faz N — ön kapı
 
-**Kapandı:** halka açık sayfaların ortak üst barı ve alt bilgisi, kök sayfanın
+**Kapandı:** public sayfaların ortak üst barı ve alt bilgisi, kök sayfanın
 müşteriye çevrilmesi (arama + dokuz kategori kutucuğu + şehir bölümleri),
 işletme içeriğinin `/isletmeler-icin`'e taşınması, `/randevularim` yer tutucusu,
 metadata'nın müşteri diline geçmesi.
 
 **459 test** (31 dosya). `npm run tip`, `npm run lint`, `npm test`,
 `npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1635.64 KiB
-gzip** (önceki 1634.49 — +1.15 KiB). **Göç yok.**
+gzip** (önceki 1634.49 — +1.15 KiB). **Migration yok.**
 
 ### Kararlar
 
 - **`enCok` kısabiliyor ama BÜYÜTEMİYOR.** Şehir bölümü altı kart istiyor; üst
   sınır yine `SAYFA_BOYUTU`. Olmasaydı `enCok: 10000` yazan bir çağrı sayfalama
-  sınırının etrafından dolaşıp tek istekte bütün dizini çekerdi. `toplam`
-  kırpılmadan dönüyor: "N işletmenin tümü" bağlantısı gösterilenden fazlası olup
-  olmadığını o sayıdan biliyor; kırpılsaydı bağlantı hiç görünmez ve kalan
+  sınırının etrafından dolaşıp tek request'te bütün dizini çekerdi. `toplam`
+  kırpılmadan dönüyor: "N işletmenin tümü" link'i gösterilenden fazlası olup
+  olmadığını o sayıdan biliyor; kırpılsaydı link hiç görünmez ve kalan
   işletmelere gidilemezdi.
 
-- **`VITRIN_ILLERI` kapalı listede ve testle bağlı.** Dizin sorgusu geçersiz bir
+- **`VITRIN_ILLERI` kapalı listede ve testle bağlı.** Dizin query'si geçersiz bir
   il değerini **sessizce yok sayıyor** (Faz M kararı) — yani yanlış yazılmış bir
   şehir, ana sayfada o başlık altında bütün dizini listelerdi. Test her değerin
   `ILLER`de olduğunu zorluyor.
@@ -2307,13 +2307,13 @@ gzip** (önceki 1634.49 — +1.15 KiB). **Göç yok.**
   (`arama={false}`: kök sayfa, `/dizin`). Aynı ekranda iki arama alanı,
   kullanıcının hangisinin ne aradığını bilmemesi demek.
 
-- **Öneri listesi (autocomplete) yok.** Her tuşa basışta sunucuya soran bir kutu
-  hem ana sayfayı istemci bileşenine çevirirdi hem de bugün önerecek bir şey yok.
+- **Öneri listesi (autocomplete) yok.** Her tuşa basışta server'a soran bir kutu
+  hem ana sayfayı client component'ine çevirirdi hem de bugün önerecek bir şey yok.
   Dizin dolunca değer kazanır.
 
 - **`/randevularim` liste göstermiyor** ve bu bilinçli: liste müşteri hesabı
-  istiyor (Faz J), bugün randevunun kimliğini token taşıyor — sunucunun elinde
-  "bu ziyaretçinin randevuları" diye bir küme yok. Bağlantıyı üst bardan
+  istiyor (Faz J), bugün randevunun kimliğini token taşıyor — server'ın elinde
+  "bu ziyaretçinin randevuları" diye bir küme yok. Link'i üst bardan
   çıkarmak yerine sayfa bugünkü cevabı veriyor; kullanıcı önce o başlığı arıyor.
 
 - **"İşletme misiniz?" mobilde üst barda gizli, alt bilgide açık.** Dar ekranda
@@ -2321,12 +2321,12 @@ gzip** (önceki 1634.49 — +1.15 KiB). **Göç yok.**
 
 ### Ortaya çıkan gerçek hata
 
-**Tailwind'de `hidden` sessizce eziliyordu.** Paylaşılan bağlantı sınıfı
+**Tailwind'de `hidden` sessizce eziliyordu.** Paylaşılan link sınıfı
 `inline-flex` içeriyordu ve `` `${BAGLANTI} hidden sm:inline-flex` `` yazıldığında
 Tailwind aynı özelliği yazan iki utility arasında **kaynak sırasına değil
 üretilen CSS sırasına** bakıyor: `hidden` uygulanmıyordu. 390px genişlikte
 ölçüldü — "İşletme misiniz?" mobilde de görünüyor ve barı iki satıra çıkarıyordu.
-Çözüm: display sınıfı paylaşılan dizeden çıkarıldı, her bağlantı kendi yazıyor.
+Çözüm: display sınıfı paylaşılan dizeden çıkarıldı, her link kendi yazıyor.
 
 **Tarayıcıdan görüldü, testte değil.** Faz M'deki Türkçe arama hatasıyla aynı
 sınıf: yalnızca gözle bakılınca çıkan bir kusur.
@@ -2337,11 +2337,11 @@ sınıf: yalnızca gözle bakılınca çıkan bir kusur.
 - **Sıralama sinyali yok.** Şehir bölümleri de ada göre sıralı; gerçek sıralama
   (yakınlık, doluluk, puan) hâlâ verilmemiş bir ürün kararı.
 - **Müşteri hesabı yok** (Faz J). `/randevularim` onun yer tutucusu.
-- **Harita, konum ve "yakınımdakiler" yok.** İşletmenin koordinatı şemada yok.
-- **Ana sayfada hız sınırı yok.** `/dizin` ile aynı gerekçe: okuma yolu ucuz ve
+- **Harita, konum ve "yakınımdakiler" yok.** İşletmenin koordinatı schema'da yok.
+- **Ana sayfada rate limit yok.** `/dizin` ile aynı gerekçe: okuma yolu ucuz ve
   kart sayısı sabitlenmiş. Faz L'nin `hiz-siniri.ts`'i trafik geldiğinde bağlanır.
 - **Alt bilgi kısa** (hakkımızda/gizlilik/iletişim yok): o sayfalar yazılmadı ve
-  olmayan sayfaya bağlantı vermek kullanıcıyı 404'e götürmek olurdu.
+  olmayan sayfaya link vermek kullanıcıyı 404'e götürmek olurdu.
 
 ### Doğrulama
 
@@ -2350,7 +2350,7 @@ sınıf: yalnızca gözle bakılınca çıkan bir kusur.
   +3 (`enCok` kırpması, üst sınır, vitrin illerinin geçerliliği)
 - `npm run build` başarılı, 36 route (`/isletmeler-icin` ve `/randevularim`
   statik üretiliyor — ikisi de veritabanına dokunmuyor)
-- **Elle (`next dev`, tohumlanmış `randevu_dev`, tarayıcı eklentisi):**
+- **Elle (`next dev`, seed'lenmiş `randevu_dev`, tarayıcı plugin'i):**
   `/`, `/dizin`, `/isletmeler-icin`, `/randevularim` 200; ana sayfada yalnızca
   İstanbul bölümü çiziliyor (Bursa'da yayında işletme yok — boş bölüm
   gösterilmiyor); hero'dan `isil` araması `/dizin?arama=isil`e gidip iki kaydı
@@ -2358,16 +2358,16 @@ sınıf: yalnızca gözle bakılınca çıkan bir kusur.
 
 ### Elle yapılması gerekenler (Faz N)
 
-- [ ] Üretimde `/` artık dizine bakıyor ve prod'da **yayında işletme yok** —
+- [ ] Production'da `/` artık dizine bakıyor ve prod'da **yayında işletme yok** —
       yani canlıda boş durum görünecek. Beklenen; demo işletmeyi dizine
       çıkarmak isteniyorsa panelden "Dizine ekle".
 - [ ] Prod'da `Bursa` bölümü ancak o ilde yayında bir işletme olunca çıkar.
 
 ### Not: tasarım zinciri
 
-`/design` çağrıldı; yönlendirme tablosu bu iş için `ui-styling` alt-skill'ine
+`/design` çağrıldı; redirect tablosu bu iş için `ui-styling` alt-skill'ine
 gidiyor ve o skill `skillOverrides`'ta **model çağrısına kapalı**. Yerleşim ve
-UX kararları `ui-ux-pro-max` (product/ux alanları) ve deponun kendi
+UX kararları `ui-ux-pro-max` (product/ux alanları) ve repo'nun kendi
 `docs/tasarim-sistemi.md`'siyle verildi; yeni palet ya da tipografi
 üretilmedi — mevcut token'lar kullanıldı.
 
@@ -2376,50 +2376,50 @@ UX kararları `ui-ux-pro-max` (product/ux alanları) ve deponun kendi
 ## Faz I — bildirim altyapısı
 
 **Kapandı:** `email.ts > gonder()` adaptörü, `bildirim-sablon.ts` (altı şablon),
-`bildirim.ts` (hangi olayda ne kuyruğa girer, kuyruk nasıl boşalır), kuyruk
+`bildirim.ts` (hangi olayda ne queue'ya girer, queue nasıl boşalır), queue
 metotlarının `scoped-db.ts`'e eklenmesi, üç route'un bağlanması ve
 `/panel/gelistirici/bildirimler` ekranı.
 
 **489 test** (34 dosya). `npm run tip`, `npm run lint`, `npm test`,
 `npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1664.74 KiB
-gzip** (önceki 1635.64 — +29.1 KiB). **Göç yok** — `bildirim_kuyrugu` tablosu
-Faz E'de tam da bu faz göç istemesin diye kurulmuştu.
+gzip** (önceki 1635.64 — +29.1 KiB). **Migration yok** — `bildirim_kuyrugu` tablosu
+Faz E'de tam da bu faz migration istemesin diye kurulmuştu.
 
 ### Kararlar
 
 - **Resend SDK'sı EKLENMEDİ, düz `fetch` var.** Kullanılan yüzey tek bir POST
-  ve bu depo sert bir bundle sınırıyla yaşıyor (3 MiB gzip). Yan etkisi:
-  DEĞİŞMEZ 4'ü zorlayan warden kapısı `resend.emails.send` metnini arıyor ve o
-  metin artık hiç oluşmuyor — yani kapı bir şey görmüyor. Gerçek zorlama
+  ve bu repo sert bir bundle sınırıyla yaşıyor (3 MiB gzip). Yan etkisi:
+  INVARIANT 4'ü zorlayan warden gate'i `resend.emails.send` metnini arıyor ve o
+  metin artık hiç oluşmuyor — yani gate bir şey görmüyor. Gerçek zorlama
   `degismezler.test.ts`'e taşındı: `api.resend.com` yalnızca `email.ts`'te
   geçebiliyor. **Aynı hikâyenin üçüncü tekrarı** (Faz B'de Prisma→Drizzle,
-  Faz E'de `panelKapisi`): kapının göremediği kural testle geri geliyor.
+  Faz E'de `panelKapisi`): gate'in göremediği kural testle geri geliyor.
 
-- **Anahtar yoksa gönderim SAHTEYE DÜŞMÜYOR.** `BILDIRIM_MODU=gercek` ama
-  `RESEND_API_KEY` yoksa kuyruğa `anahtar-yok` hatası yazılıyor. Sahteye
-  düşseydi üretimde hiçbir mail gitmez ve kuyruk "gönderildi" derdi — Faz L'de
+- **Key yoksa gönderim SAHTEYE DÜŞMÜYOR.** `BILDIRIM_MODU=gercek` ama
+  `RESEND_API_KEY` yoksa queue'ya `anahtar-yok` hatası yazılıyor. Sahteye
+  düşseydi production'da hiçbir mail gitmez ve queue "gönderildi" derdi — Faz L'de
   Turnstile'ın aylarca sessizce kapalı kalmasıyla birebir aynı hata sınıfı.
   `wrangler.jsonc > vars` içindeki `"gercek"` de teste bağlandı.
 
-- **Önce üstlen, sonra gönder.** `bildirimiUstlen` koşullu UPDATE ile satırı
+- **Önce üstlen, sonra gönder.** `bildirimiUstlen` conditional UPDATE ile satırı
   `BEKLIYOR` → `GONDERILDI` yapıyor; 0 satır dönerse gönderim atlanıyor.
   Alternatif ("gönder, sonra işaretle") aynı mesajı iki kez gönderebilirdi —
-  Faz K'nin cron'u istek içi boşaltmayla yarışacak. **Bedeli bilinerek
+  Faz K'nin cron'u request içi boşaltmayla yarışacak. **Bedeli bilinerek
   seçildi:** işaretledikten sonra Worker ölürse mesaj gönderilmeden
   "gönderildi" kalır. Müşteriye aynı onayı iki kez yollamak, kaybolan bir onay
   mailinden daha görünür ve daha güven kırıcı.
 
-- **Gönderim yanıttan SONRA (`after`).** Müşteriyi "randevunuz alındı"
+- **Gönderim response'tan SONRA (`after`).** Müşteriyi "randevunuz alındı"
   ekranına götürmeden önce Resend'in cevabını beklemek, iyi günde yüzlerce ms
-  eklerdi. **Ölçüldü, varsayılmadı:** derlenmiş worker'da (`.open-next/
+  eklerdi. **Ölçüldü, varsayılmadı:** compile edilmiş worker'da (`.open-next/
   server-functions/default/handler.mjs`) OpenNext'in `provideNextAfterProvider`
   fonksiyonu `Symbol.for("@next/request-context")`e `waitUntil` bağlıyor — yani
-  `after` workerd'de gerçekten yanıttan sonra koşuyor.
+  `after` workerd'de gerçekten response'tan sonra koşuyor.
 
-- **Kuyruğa yazma yanıt ÖNCESİNDE, tek INSERT.** Satırın var olması garanti
+- **Queue'ya yazma response ÖNCESİNDE, tek INSERT.** Satırın var olması garanti
   olsun ki `after` hiç koşmasa bile Faz K'nin cron'u mesajı bulabilsin.
 
-- **Kuyruk yazma hatası YUTULUYOR.** Randevu (ya da iptal, ya da onay) zaten
+- **Queue yazma hatası YUTULUYOR.** Randevu (ya da iptal, ya da onay) zaten
   yazıldı. Bildirim yüzünden 500 dönmek, müşteriye "olmadı" deyip takvimde
   duran bir randevu bırakmak olurdu — müşteri tekrar dener, bu kez "saat dolu"
   alır ve nedenini anlamaz.
@@ -2429,11 +2429,11 @@ Faz E'de tam da bu faz göç istemesin diye kurulmuştu.
   göre değişiyor ve adı kullanıcı yazıyor. Faz N'de şehir başlıkları için
   verilen kararın aynısı; tire eki gereksiz kılıyor.
 
-- **Şablon metni GÖNDERİM ANINDA üretiliyor, kuyrukta saklanmıyor.**
+- **Şablon metni GÖNDERİM ANINDA üretiliyor, queue'da saklanmıyor.**
   Hatırlatma yazılmasıyla gönderilmesi arasında ~24 saat var; metin donmuş
   olsaydı arada personeli değişen bir randevu için yanlış isim taşıyan bir
   hatırlatma giderdi. Bunun bedeli: alıcı adresi de kolon olarak tutulmuyor,
-  şablon kimliğinin önekinden (`MUSTERI_` / `ISLETME_`) seçiliyor.
+  şablon kimliğinin prefix'inden (`MUSTERI_` / `ISLETME_`) seçiliyor.
 
 - **Adresi olmayan mesaj sessizce düşürülmüyor, `adres-yok` hatası yazılıyor.**
   Randevu formunda e-posta zorunlu değil (telefon var, SMS Faz K'de) — yani bu
@@ -2444,7 +2444,7 @@ Faz E'de tam da bu faz göç istemesin diye kurulmuştu.
   Sıra ters olsaydı az önce yazılan mesajlar da silinirdi. Düşürülen şey
   pratikte hatırlatma: iptal edilmiş randevu için ertesi gün "yarınki
   randevunuz" maili gitmesi, ürüne duyulan güveni tek başına bitirirdi.
-  **Silme, "IPTAL" durumu değil:** enum'da öyle bir değer yok ve eklemek göç
+  **Silme, "IPTAL" durumu değil:** enum'da öyle bir değer yok ve eklemek migration
   demekti. Silinen şey zaten hiç gönderilmemiş bir mesaj — geçmiş kaydı değil,
   geleceğe verilmiş bir söz. Gönderilmiş satırlara dokunulmuyor.
 
@@ -2452,17 +2452,17 @@ Faz E'de tam da bu faz göç istemesin diye kurulmuştu.
   işaretleniyor ve işletmenin kendi kaydı. "Gelmediniz" diyen bir mail,
   kısıtı zaten uygulanmış birine ikinci kez söylemek olurdu.
 
-- **`bildirimleriListele` yalnızca panel kapısında.** Kuyruk müşteri adı ve
-  randevu saati taşıyor; halka açık kapı oturumsuz.
+- **`bildirimleriListele` yalnızca panel gate'inde.** Queue müşteri adı ve
+  randevu saati taşıyor; public gate session'sız.
 
-- **Kuyruk metotları iki kapıda da AYNI kod** (`bildirimKapisi` yardımcısı).
-  Randevuyu yazan yol oturumsuz, durumunu değiştiren yol oturumlu, ama ikisi de
-  aynı kuyruğa yazıyor. İki kopya bir gün ayrışırdı — biri `tur = 'EPOSTA'`
+- **Queue metotları iki gate'te de AYNI kod** (`bildirimKapisi` helper'ı).
+  Randevuyu yazan yol session'sız, durumunu değiştiren yol session'lı, ama ikisi de
+  aynı queue'ya yazıyor. İki kopya bir gün ayrışırdı — biri `tur = 'EPOSTA'`
   filtresini unutur ve Faz K'nin SMS satırları e-posta olarak gönderilmeye
   çalışılırdı.
 
 - **`randevuIptalEt` satır sayısı yerine ID dönüyor.** Çağıran taraf iptal
-  bildirimleri için randevunun kimliğine ihtiyaç duyuyor; ikinci bir sorguyla
+  bildirimleri için randevunun kimliğine ihtiyaç duyuyor; ikinci bir query'yle
   okumak, bu arada silinmiş bir kayıtla yarışa girmek demekti.
 
 - **Hatırlatma 24 saat önce.** Müşterinin plan değiştirebileceği kadar erken,
@@ -2470,74 +2470,74 @@ Faz E'de tam da bu faz göç istemesin diye kurulmuştu.
   yazılsaydı ilk boşaltmada hemen gönderilir ve müşteri "yarınki randevunuz"
   mailini randevuyu aldığı dakikada alırdı.
 
-### Ortaya çıkan gerçek hata — üretim değişkenleri `next dev`'e sızıyordu
+### Ortaya çıkan gerçek hata — production variable'ları `next dev`'e sızıyordu
 
-Faz I'nin bildirim ekranını yerelde denerken çıktı: `/r/<slug>` üzerinden
+Faz I'nin bildirim ekranını local'de denerken çıktı: `/r/<slug>` üzerinden
 randevu alınmaya çalışılınca **"Doğrulama tamamlanamadı. Sayfayı yenileyip
 yeniden deneyin."** dönüyordu.
 
 **Zincir:** `next.config.ts` içindeki `initOpenNextCloudflareForDev()`,
-`next dev` sırasında `getCloudflareContext()`i çalışır kılıyor — amacı yerelde
+`next dev` sırasında `getCloudflareContext()`i çalışır kılıyor — amacı local'de
 Hyperdrive binding'ine ulaşmak. Yan etkisi, `wrangler.jsonc > vars` içindeki
-**üretim değişkenlerinin de yerelde okunması**. Faz L'de oraya
-`TURNSTILE_MODU: "gercek"` yazıldı ve o günden beri `next dev` bot kapısını
-gerçek modda koşturuyordu. Üretim site anahtarı yalnızca
+**production variable'larının da local'de okunması**. Faz L'de oraya
+`TURNSTILE_MODU: "gercek"` yazıldı ve o günden beri `next dev` bot gate'ini
+gerçek modda koşturuyordu. Production site key'i yalnızca
 `randevu.enesmemduhoglu.tech` için kayıtlı olduğundan widget `localhost`'ta
-**Turnstile 110200** (bilinmeyen alan adı) veriyor, jeton hiç üretilmiyor,
-sunucu da jetonsuz isteği 403'e çeviriyordu.
+**Turnstile 110200** (bilinmeyen domain) veriyor, token hiç üretilmiyor,
+server da token'sız request'i 403'e çeviriyordu.
 
-`.env.example` "yerelde sahte" diyordu ama bu **ulaşılamaz bir vaatti**:
+`.env.example` "local'de sahte" diyordu ama bu **ulaşılamaz bir vaatti**:
 `cfMod ?? process.env.TURNSTILE_MODU` zincirinde cf değeri önce geliyor, yani
 `.env`e ne yazılırsa yazılsın eziliyordu.
 
 **Faz I bunu ikinci kez üretiyordu.** `BILDIRIM_MODU: "gercek"` da aynı yoldan
-`next dev`e sızacaktı: yerel denemeler gerçek modda koşup `anahtar-yok`
-hatasıyla dolacak, anahtar girilseydi de **gerçek adreslere mail gidecekti**.
-Planın "test ve yerel her zaman sahte" sözü tutulmuyordu.
+`next dev`e sızacaktı: local denemeler gerçek modda koşup `anahtar-yok`
+hatasıyla dolacak, key girilseydi de **gerçek adreslere mail gidecekti**.
+Planın "test ve local her zaman sahte" sözü tutulmuyordu.
 
 **Çözüm — `src/lib/mod.ts`:** modu seçen kural iki dosyadan çıkarılıp tek yere
-alındı ve ortama bağlandı.
+alındı ve environment'a bağlandı.
 
-- Üretimde (`NODE_ENV === "production"`) karar Cloudflare değişkeninin, `.env`
-  yedek. Yerel bir dosyanın üretimin kararını ezmesi istenmiyor — "sessizce
-  sahte moda düşmüş üretim" bu deponun iki kez yaşadığı hata.
-- Yerelde ve testte **yalnızca** `.env`. Gelistiricinin makinesinde üretim
-  yapılandırmasının kendiliğinden devreye girmesi, geliştirmeyi engellemekten
+- Production'da (`NODE_ENV === "production"`) karar Cloudflare variable'ının, `.env`
+  fallback. Local bir dosyanın production'ın kararını ezmesi istenmiyor — "sessizce
+  sahte moda düşmüş production" bu repo'nun iki kez yaşadığı hata.
+- Local'de ve testte **yalnızca** `.env`. Gelistiricinin makinesinde production
+  config'inin kendiliğinden devreye girmesi, geliştirmeyi engellemekten
   başka bir şey yapmıyor.
-- Gevşetme yönü tek taraflı: bu dal üretimi hiçbir koşulda gevşetemiyor, çünkü
-  `NODE_ENV` üretim paketinde `next build` tarafından sabitleniyor.
+- Gevşetme yönü tek taraflı: bu branch production'ı hiçbir koşulda gevşetemiyor, çünkü
+  `NODE_ENV` production bundle'ında `next build` tarafından sabitleniyor.
 
-`turnstile-alani.tsx` de aynı kurala bağlandı: widget artık üretim dışında hiç
-çizilmiyor. Sunucu kapısıyla istemci kutusu **aynı anda açılıp kapanmalı** —
-ayrışırlarsa ya müşteri çözemeyeceği bir kutuyla karşılaşır ya da kapı jeton
-bekler ve kutu hiç çizilmez. (Dosyadaki eski yorum "anahtar yoksa çizilmiyor,
-sunucu da aynı koşulda sahte" diyordu; iki yarısı da artık doğru değildi.)
+`turnstile-alani.tsx` de aynı kurala bağlandı: widget artık production dışında hiç
+çizilmiyor. Server gate'iyle client kutusu **aynı anda açılıp kapanmalı** —
+ayrışırlarsa ya müşteri çözemeyeceği bir kutuyla karşılaşır ya da gate token
+bekler ve kutu hiç çizilmez. (Dosyadaki eski yorum "key yoksa çizilmiyor,
+server da aynı koşulda sahte" diyordu; iki yarısı da artık doğru değildi.)
 
 **Neden testler görmedi:** ikisi de `process.env` üzerinden koşuyor ve vitest'te
-Cloudflare bağlamı hiç yok — yani testlerin gördüğü dünyada bu çakışma
+Cloudflare context'i hiç yok — yani testlerin gördüğü dünyada bu çakışma
 oluşmuyor. Faz M ve Faz N'deki hatalarla aynı sınıf: yalnızca gerçek tarayıcıda
-gerçek ortamda ortaya çıkan bir kusur. `src/lib/mod.test.ts` artık zinciri
+gerçek environment'ta ortaya çıkan bir kusur. `src/lib/mod.test.ts` artık zinciri
 kilitliyor (5 test).
 
-**Tarayıcıdan uçtan uca doğrulandı** (`next dev`, tohumlanmış `randevu_dev`):
-randevu alma → kuyrukta `MUSTERI_RANDEVU_ONAYLANDI` + `ISLETME_YENI_RANDEVU`
-`GONDERILDI`, önizleme HTML'i dolu; iptal → `MUSTERI_RANDEVU_IPTAL` +
+**Tarayıcıdan end-to-end doğrulandı** (`next dev`, seed'lenmiş `randevu_dev`):
+randevu alma → queue'da `MUSTERI_RANDEVU_ONAYLANDI` + `ISLETME_YENI_RANDEVU`
+`GONDERILDI`, preview HTML'i dolu; iptal → `MUSTERI_RANDEVU_IPTAL` +
 `ISLETME_RANDEVU_IPTAL`. Turnstile hata kutusu yok. Yarınki randevuda
 hatırlatma satırı **yazılmadı** — hatırlatma zamanı geçmişte kalıyor, tasarlanan
 davranış canlıda da doğrulanmış oldu.
 
 ### Bilerek kapsam dışı
 
-- **Hatırlatmanın zamanı gelince gönderilmesi.** Kuyruk satırı yazılıyor ama
-  onu boşaltacak zamanlayıcı yok: boşaltma bugün yalnızca o randevuya dokunan
-  bir istekle tetikleniyor. Faz K'nin `workers/hatirlatici/` cron'u bunu
-  bağlayacak — kuyruğun tamamını tarayan sorgu kiracı-üstü olacağı için ayrı
+- **Hatırlatmanın zamanı gelince gönderilmesi.** Queue satırı yazılıyor ama
+  onu boşaltacak scheduler yok: boşaltma bugün yalnızca o randevuya dokunan
+  bir request'le tetikleniyor. Faz K'nin `workers/hatirlatici/` cron'u bunu
+  bağlayacak — queue'nun tamamını tarayan query cross-tenant olacağı için ayrı
   bir tasarım kararı ve `dizin.ts` gibi kendi dar yüzeyini isteyecek.
 - **SMS yok** (`sms.ts` yazılmadı) — Faz K.
 - **Yeniden deneme yok.** `HATA` satırı orada kalıyor; kimse tekrar denemiyor.
   Cron gelince "hatalıyı N kez tekrar dene" kararı verilebilir.
 - **İşletme bildirimi AÇILIP KAPANAMIYOR.** Sahibin gelen kutusuna her randevu
-  düşüyor. Ayar alanı göç demekti ve bugün kaç randevunun geldiği bilinmiyor.
+  düşüyor. Ayar alanı migration demekti ve bugün kaç randevunun geldiği bilinmiyor.
 - **Personele bildirim yok.** Sahip rolü seçiliyor; personelin gelen kutusuna
   işletmenin bütün randevuları düşmemeli.
 - **Müşterinin göreceği bir "gönderim geçmişi" yok.** Ekran
@@ -2548,29 +2548,29 @@ davranış canlıda da doğrulanmış oldu.
 - `npm run tip`, `npm run lint` temiz
 - `npm test` — **489 test geçti** (34 dosya, gerçek Postgres); yeni:
   `bildirim-sablon.test.ts` (9), `bildirim.test.ts` (11), `mod.test.ts` (5),
-  `degismezler.test.ts` +3, route testlerine +2 (kuyruğa yazıldığı ve iptalde
+  `degismezler.test.ts` +3, route testlerine +2 (queue'ya yazıldığı ve iptalde
   hatırlatmanın düştüğü)
 - `npm run build` başarılı, 37 route
 - `cf:kur` + `wrangler deploy --dry-run`: 1664.74 KiB gzip; `env.BILDIRIM_MODU
   ("gercek")` binding listesinde görünüyor
-- **Uçtan uca (tarayıcı, `next dev`):** randevu alma ve iptal akışları gerçekten
-  koşturuldu; kuyruğun dört satırı da `GONDERILDI` ve önizleme HTML'leri dolu
-- **Gözle (tarayıcı eklentisi):** altı şablonun gerçek HTML'i tek sayfada
-  işlendi — Türkçe karakterler, tablo yerleşimi, iptal bağlantısının yalnızca
+- **End-to-end (tarayıcı, `next dev`):** randevu alma ve iptal akışları gerçekten
+  koşturuldu; queue'nun dört satırı da `GONDERILDI` ve preview HTML'leri dolu
+- **Gözle (tarayıcı plugin'i):** altı şablonun gerçek HTML'i tek sayfada
+  işlendi — Türkçe karakterler, tablo yerleşimi, iptal link'inin yalnızca
   müşteri mesajlarında olması, işletme mesajlarında müşteri telefonunun
   biçimlenmiş hali (`0533 987 65 43`) doğrulandı
 
 ### Elle yapılması gerekenler (Faz I)
 
 - [ ] **MERGE ETMEDEN ÖNCE:** `wrangler secret put RESEND_API_KEY`. Merge anı
-      yayın anı; anahtar girilmezse ilk randevudan itibaren her mesaj kuyruğa
+      deploy anı; key girilmezse ilk randevudan itibaren her mesaj queue'ya
       `anahtar-yok` yazar.
 - [ ] `/panel/gelistirici/bildirimler` ekranı **gözle görülmedi** — panele
       girmek için giriş yapmak gerekiyor ve şifre girmek asistanın yapabileceği
-      bir şey değil. Sayfa derleniyor, beslediği sorgu testte ve yerel
-      `randevu_dev`de artık altı kuyruk satırı hazır duruyor (Işıl Güzellik
+      bir şey değil. Sayfa build ediliyor, beslediği query testte ve local
+      `randevu_dev`de artık altı queue satırı hazır duruyor (Işıl Güzellik
       Salonu) — panele girip ekrana bakmak yeterli.
-- [ ] Üretimde ilk randevudan sonra kuyruğun `GONDERILDI` gösterdiği ve mailin
+- [ ] Production'da ilk randevudan sonra queue'nun `GONDERILDI` gösterdiği ve mailin
       gerçekten geldiği doğrulanmalı (Resend panelinden de bakılabilir).
 
 ---
@@ -2579,12 +2579,12 @@ davranış canlıda da doğrulanmış oldu.
 
 **Kapandı:** `/dizin/[il]` ve `/dizin/[il]/[kategori]` iniş sayfaları, il ve
 kategori için slug eşlemesi, `app/robots.ts`, `app/sitemap.ts`, faceted
-navigation kapısı (`/dizin`in filtre parametreleri için canonical/noindex),
-kart listesinin paylaşılan bileşene çıkarılması.
+navigation gate'i (`/dizin`in filtre parametreleri için canonical/noindex),
+kart listesinin paylaşılan component'e çıkarılması.
 
 **515 test** (37 dosya). `npm run tip`, `npm run lint`, `npm test`,
 `npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1693.13 KiB
-gzip** (önceki 1664.74 — +28.4 KiB). **Göç yok.**
+gzip** (önceki 1664.74 — +28.4 KiB). **Migration yok.**
 
 ### Kararlar
 
@@ -2596,27 +2596,27 @@ gzip** (önceki 1664.74 — +28.4 KiB). **Göç yok.**
   - Filtre gerçek bir iniş sayfasına karşılık geliyorsa (il, ya da il+kategori,
     arama yok, ilk sayfa) → `canonical` o sayfayı gösteriyor.
   - Karşılığı olmayan her şey (arama metni, ikinci ve sonraki sayfalar, ilsiz
-    kategori) → `noindex, follow`. Dizine girmiyor ama bağlantılar izleniyor,
+    kategori) → `noindex, follow`. Dizine girmiyor ama link'ler izleniyor,
     yani işletme sayfaları yine bulunuyor.
 
-- **`robots.txt` `/dizin`in sorgu parametrelerini ENGELLEMİYOR** ve bu, ilk
+- **`robots.txt` `/dizin`in query parametrelerini ENGELLEMİYOR** ve bu, ilk
   içgüdünün tersi. Taranması engellenen bir sayfanın `canonical` etiketi de
   okunamıyor; o zaman motor "bu içeriğin aslı şurada" bilgisini hiç öğrenemez
   ve biriken değer iniş sayfasına akmaz. Doğru araç sayfanın kendi metadata'sı.
 
 - **`/r/*/randevu/` hem `robots.txt`'te kapalı hem sayfada `noindex`.** İki
-  kapı üst üste bilinçli: robots.txt bir *rica* (uymayan tarayıcı var), meta
+  gate üst üste bilinçli: robots.txt bir *rica* (uymayan tarayıcı var), meta
   etiketi ise ancak sayfa *taranırsa* görülüyor. Tek başına ikisi de yetmez ve
-  bu URL tek başına iptal yetkisi taşıyor (DEĞİŞMEZ 5'in dışarı bakan yüzü).
+  bu URL tek başına iptal yetkisi taşıyor (INVARIANT 5'in dışarı bakan yüzü).
 
-- **Slug eşlemesi ayrı bir tablo değil, `slugUret`.** Depoda slug üretimi zaten
+- **Slug eşlemesi ayrı bir tablo değil, `slugUret`.** Repo'da slug üretimi zaten
   tek yerde ve Türkçe harfleri elle eşliyor. İkinci bir tablo yazmak aynı
   kuralı iki yerde tutmak olurdu. Karşılığı: `slugUret` artık bir **URL
-  sözleşmesi** taşıyor — davranışı değişirse yayındaki adresler değişir.
+  sözleşmesi** taşıyor — davranışı değişirse canlıdaki adresler değişir.
   `dizin-slug.test.ts` bunu sabitliyor (81 ilin ve 9 kategorinin slug'ı
   benzersiz, gidip geri geliyor, dört bilinen adres birebir sabit).
 
-- **Tanınmayan slug 404, "boş liste" değil.** Dizin *sorgusunda* geçersiz il
+- **Tanınmayan slug 404, "boş liste" değil.** Dizin *query'sinde* geçersiz il
   parametresi yok sayılıyor (Faz M kararı) çünkü orada kullanıcının gördüğü şey
   bir liste. Burada il **adresin kendisi**: `/dizin/istanbull` diye bir sayfa
   yok ve "var ama boş" demek, arama motoruna sonsuz sayıda anlamsız URL açmak
@@ -2633,45 +2633,45 @@ gzip** (önceki 1664.74 — +28.4 KiB). **Göç yok.**
 - **Sitemap BOŞ iniş sayfalarını öne sürmüyor.** 81 il × 9 kategori = 729 adres;
   yalnızca gerçekten yayında işletmesi olanlar giriyor. Boş sayfaları sitemap'e
   koymak, arama motoruna "bunlar önemli" deyip içeriği olmayan sayfalara
-  götürmek olurdu. Boş sayfalar erişilebilir kalıyor (il sayfasından bağlantı
+  götürmek olurdu. Boş sayfalar erişilebilir kalıyor (il sayfasından link
   var), yalnızca öne sürülmüyorlar.
 
 - **`lastModified` işletmenin kendi güncelleme tarihinden.** Uydurma bir "bugün"
   değeri her taramada her sayfayı değişmiş gösterir ve sinyali tümden
   değersizleştirirdi.
 
-- **Sitemap sorgusu `isletmeleriAra` değil kendi metodu** (`sitemapKayitlari`).
+- **Sitemap query'si `isletmeleriAra` değil kendi metodu** (`sitemapKayitlari`).
   O sayfalama yapıyor (en çok 24 kart), sitemap ise tamamını istiyor. Ayrıca
   kart alanlarının hiçbiri gerekmiyor: sitemap'e "hakkında" metni ya da fiyat
-  taşımak, sızabilecek yüzeyi bedelsiz genişletmek olurdu. DEĞİŞMEZ 12 korunuyor
+  taşımak, sızabilecek yüzeyi bedelsiz genişletmek olurdu. INVARIANT 12 korunuyor
   — yalnızca `isletme` okunuyor, dönen tip elle yazılmış ve kapalı.
 
-- **Ana sayfanın şehir bağlantısı artık iniş sayfasına gidiyor**
+- **Ana sayfanın şehir link'i artık iniş sayfasına gidiyor**
   (`/dizin?il=İstanbul` → `/dizin/istanbul`). İkisi aynı listeyi gösteriyor ama
-  ilki dizine girmiyor; ana sayfadan çıkan bağlantının dizine giren sayfaya
-  işaret etmesi, iç bağlantı değerinin doğru yere akması demek.
+  ilki dizine girmiyor; ana sayfadan çıkan link'in dizine giren sayfaya
+  işaret etmesi, iç link değerinin doğru yere akması demek.
 
-- **Kart listesi `DizinListesi` bileşenine çıkarıldı.** Sayfalamanın sınır
-  davranışı (son sayfada "Sonraki" çizilmemesi, filtrenin bağlantılarda
+- **Kart listesi `DizinListesi` component'ine çıkarıldı.** Sayfalamanın sınır
+  davranışı (son sayfada "Sonraki" çizilmemesi, filtrenin link'lerde
   taşınması) üç yerde ayrı ayrı doğru tutulması gereken bir şey olurdu. Boş
   durum dışarıdan geliyor: `/dizin`de iki ayrı boş durum var, iniş sayfasında
   tek.
 
 - **Kategori adı cümle içinde geçmiyor.** Küçük harfe çevirmek
-  `toLocaleLowerCase("tr")` isterdi ve workerd'in ICU derlemesi tam değil; ham
+  `toLocaleLowerCase("tr")` isterdi ve workerd'in ICU build'i tam değil; ham
   bırakmak da cümle ortasında büyük harf demekti. Kategori zaten başlıkta ve
   rozetlerde duruyor.
 
 - **`metadataBase` eklendi.** Olmadan Next göreli `canonical` değerlerini
-  localhost'a göre üretiyor — yayında yanlış adresi gösteren bir canonical, hiç
+  localhost'a göre üretiyor — canlıda yanlış adresi gösteren bir canonical, hiç
   olmamasından kötü.
 
-- **`siteKoku()` yedek değer taşıyor.** `robots.txt` ve `sitemap.xml` mutlak
+- **`siteKoku()` fallback değer taşıyor.** `robots.txt` ve `sitemap.xml` mutlak
   adres istiyor; göreli URL protokole aykırı ve motor dosyayı tümden yok
-  sayıyor. Değişken tanımsızken üretilecek en doğru şey üretimde kullanılan
+  sayıyor. Variable tanımsızken üretilecek en doğru şey production'da kullanılan
   adres.
 
-### Ortaya çıkan gerçek hata — kurtarılamaz karakter girdi kapısından geçiyordu
+### Ortaya çıkan gerçek hata — kurtarılamaz karakter input gate'inden geçiyordu
 
 Dizinde bir işletme **"agdas Berber"** olarak görünüyordu; adın başındaki
 Ç yerine siyah baklava içinde soru işareti (U+FFFD, REPLACEMENT CHARACTER)
@@ -2679,19 +2679,19 @@ duruyordu.
 
 **Teşhis:** veritabanındaki kod noktaları tek tek okundu. `randevu_dev`'deki
 dokuz işletmeden yalnızca biri bozuktu; diğerlerinin hepsinde `ş`, `ı`, `ğ`,
-`ö`, `ç` doğru saklanıyordu. **Üretim veritabanı tamamen temiz.** Yani
+`ö`, `ç` doğru saklanıyordu. **Production veritabanı tamamen temiz.** Yani
 uygulamanın yazma yolunda hata yok — o kayıt, kod sayfası UTF-8 olmayan bir
-terminalden geçen bir betikle oluşturulmuş (bu deponun bilinen tuzağı; hafızada
+terminalden geçen bir script'le oluşturulmuş (bu repo'nun bilinen tuzağı; hafızada
 "Türkçe metni kabuktan geçirme" olarak duruyor).
 
-**Ama kapı açıktı.** `adDogrula`, `metinDogrula` ve `ilceDogrula` U+FFFD taşıyan
+**Ama gate açıktı.** `adDogrula`, `metinDogrula` ve `ilceDogrula` U+FFFD taşıyan
 bir değeri kabul ediyordu. Bu karakterin klavyede karşılığı yok ve kimse onu
 bilerek yazmıyor; göründüğü her yerde anlamı tek: metin bir yerde yanlış
 kodlamayla çözülmüş ve **asıl harf geri getirilemeyecek şekilde kaybolmuş**.
 Kaydedildikten sonra düzeltmenin yolu da yok — hangi harf olduğunu artık kimse
 bilmiyor.
 
-Üç kapıya da kontrol eklendi (`girdi.ts > cozulememisKarakterVar`). Kullanıcıya
+Üç gate'e de kontrol eklendi (`girdi.ts > cozulememisKarakterVar`). Kullanıcıya
 "geçersiz ad" değil, ne yapacağını söyleyen bir mesaj dönüyor: bozukluk çoğu
 fontta tek bir küçük işaret ve kullanıcı ekranda doğru görünen bir metne bakıp
 neden reddedildiğini anlamayabilir.
@@ -2699,27 +2699,27 @@ neden reddedildiğini anlamayabilir.
 Kontrol **kod noktası karşılaştırmasıyla**, regex ile değil; karakter kaynak
 dosyaya harf olarak da yazılmıyor, `String.fromCodePoint(0xfffd)` ile
 üretiliyor. Aynı gerekçe `kontrolKarakteriVar` için de yazılıydı: kaçış dizileri
-bu depoda birkaç kez araç zincirinde gerçek karaktere dönüşüp kaynağı bozdu — ve
+bu repo'da birkaç kez araç zincirinde gerçek karaktere dönüşüp kaynağı bozdu — ve
 tam da o bozulmadan şikâyet eden bir testte bedeli daha yüksek olurdu.
 
-Bozuk kayıt yerel veritabanında düzeltildi ("Çağdaş Berber", "Baba oğul
+Bozuk kayıt local veritabanında düzeltildi ("Çağdaş Berber", "Baba oğul
 berber"). **Slug değiştirilmedi** (`agdas-berber`): slug kayıt anında üretiliyor
 ve ad değişince yeniden üretilmiyor — bu bilinçli, çünkü o adres paylaşılmış
-olabilir. Üretimde düzeltilecek bir kayıt yok.
+olabilir. Production'da düzeltilecek bir kayıt yok.
 
 ### Yol boyunca temizlenen
 
-`siteKoku()` iki dosyada birden vardı: `bildirim.ts` (Faz I) tanımsız değişkende
-`null` dönüyordu, `site.ts` (Faz O) üretim adresini yedek olarak taşıyor. Aynı
+`siteKoku()` iki dosyada birden vardı: `bildirim.ts` (Faz I) tanımsız variable'da
+`null` dönüyordu, `site.ts` (Faz O) production adresini fallback olarak taşıyor. Aynı
 adı taşıyan iki fonksiyonun farklı davranması, hangisinin çağrıldığını okumadan
-bilmenin imkânsız olması demek. `bildirim.ts` kendi kopyasını bıraktı; yedek
-değer sayesinde "bağlantı hiç konulmasın" dalı da gereksiz kaldı.
+bilmenin imkânsız olması demek. `bildirim.ts` kendi kopyasını bıraktı; fallback
+değer sayesinde "link hiç konulmasın" branch'i de gereksiz kaldı.
 
 ### Bilerek kapsam dışı
 
 - **Kategori-yalnız iniş sayfası yok** (`/dizin/kategori/kuafor` gibi). Ana
   sayfadaki dokuz kutucuk hâlâ `/dizin?kategori=...`e gidiyor ve o adres
-  `noindex`. Ürün kararı: pazaryeri **yerel** — "kuaför" araması ülke çapında
+  `noindex`. Ürün kararı: marketplace **local** — "kuaför" araması ülke çapında
   bir liste istemiyor, "istanbul kuaför" istiyor. İl boyutu olmayan bir sayfanın
   kullanıcıya vaadi de zayıf. İhtiyaç görülürse eklenmesi ucuz.
 - **İlçe kırılımı yok** (`/dizin/istanbul/kadikoy`). İlçe serbest metin ve
@@ -2732,7 +2732,7 @@ değer sayesinde "bağlantı hiç konulmasın" dalı da gereksiz kaldı.
 - **Sıralama sinyali hâlâ yok** — iniş sayfaları da ada göre sıralı.
 - **`generateStaticParams` yok**, sayfalar `force-dynamic`. Dizinden yeni çıkmış
   bir işletmeyi göstermeye devam eden bayat bir liste istemiyoruz; sayfa sayısı
-  da 81 il ile sınırlı, yani önbellekten kazanılacak şey sınırlı.
+  da 81 il ile sınırlı, yani cache'ten kazanılacak şey sınırlı.
 - **Sitemap bölünmesi yok.** Üst sınır 5000 kayıt; protokol 50.000'e izin
   veriyor ama o boyuta gelindiğinde sitemap'i bölmek ayrı bir karar.
 
@@ -2744,7 +2744,7 @@ değer sayesinde "bağlantı hiç konulmasın" dalı da gereksiz kaldı.
 - `npm run build` başarılı, 40 route (`/robots.txt` statik, `/sitemap.xml`
   dinamik)
 - `cf:kur` + `wrangler deploy --dry-run`: 1693.13 KiB gzip
-- **Elle (`next dev`, tohumlanmış `randevu_dev`, tarayıcı eklentisi):**
+- **Elle (`next dev`, seed'lenmiş `randevu_dev`, tarayıcı plugin'i):**
   `/dizin/istanbul` ve `/dizin/istanbul/kuafor` 200, `/dizin/atlantis` **404**;
   `robots.txt` ve `sitemap.xml` mutlak adreslerle üretiliyor; sitemap yalnızca
   dolu il ve il+kategori kombinasyonlarını taşıyor. Canonical/noindex
@@ -2754,30 +2754,30 @@ değer sayesinde "bağlantı hiç konulmasın" dalı da gereksiz kaldı.
 
 ### Elle yapılması gerekenler (Faz O)
 
-- [ ] Yayından sonra Google Search Console'a `sitemap.xml` bildirilmeli; aksi
+- [ ] Deploy'dan sonra Google Search Console'a `sitemap.xml` bildirilmeli; aksi
       halde iniş sayfalarının keşfi tarayıcının kendi hızına kalıyor.
-- [ ] Üretimde `robots.txt` ve `sitemap.xml` bir kez açılıp `Host` satırının ve
+- [ ] Production'da `robots.txt` ve `sitemap.xml` bir kez açılıp `Host` satırının ve
       adreslerin `randevu.enesmemduhoglu.tech` olduğu doğrulanmalı
-      (`NEXT_PUBLIC_SITE_URL` derleme anında gömülüyor).
+      (`NEXT_PUBLIC_SITE_URL` build time'da gömülüyor).
 
 ## Faz J — müşteri hesabı
 
 **Kapandı:** `/uye-ol` müşteri üyeliği, gerçek `/randevularim` listesi,
-`getMusteriDb` kapısı (DEĞİŞMEZ 1'in ikinci ekseni), sahipliğe bağlı iptal,
-iptal bağlantısıyla randevuyu hesaba ekleme, yarım kalan müşteri kaydının
+`getMusteriDb` gate'i (INVARIANT 1'in ikinci ekseni), sahipliğe bağlı iptal,
+iptal link'iyle randevuyu hesaba ekleme, yarım kalan müşteri kaydının
 kurtarma yolu.
 
 **570 test** (42 dosya). `npm run tip`, `npm run lint`, `npm test`,
 `npm run build` yeşil. `cf:kur` + `wrangler deploy --dry-run`: **1728.15 KiB
-gzip** (önceki 1693.13 — +35 KiB). **Göç var:** `0005_musteri-hesabi.sql`.
+gzip** (önceki 1693.13 — +35 KiB). **Migration var:** `0005_musteri-hesabi.sql`.
 
 ### Kararlar
 
-- **Sahiplik RANDEVU BAŞINA, müşteri satırı başına değil.** Şemada Faz E'den
+- **Sahiplik RANDEVU BAŞINA, müşteri satırı başına değil.** Schema'da Faz E'den
   kalma boş bir `musteri.kullanici_id` vardı ve planın "telefon/e-posta
   eşleşmesiyle bağlama" cümlesi oraya işaret ediyordu. O eksen seçilmedi.
 
-  `musteri` satırı kiracı başına ve **telefonla** tekilleniyor
+  `musteri` satırı tenant başına ve **telefonla** tekilleniyor
   (`musteri_isletme_telefon_idx`); telefon ise bugün doğrulanmış bir kimlik
   değil — SMS Faz K'de. Sahiplik orada tutulsaydı şu delik açık kalırdı:
   saldırgan kurbanın numarasıyla bir randevu alır, kendi iptal token'ıyla o
@@ -2788,23 +2788,23 @@ gzip** (önceki 1693.13 — +35 KiB). **Göç var:** `0005_musteri-hesabi.sql`.
   Randevu başına sahiplikte kanıt randevunun **kendi** iptal token'ı: kişi
   yalnızca elinde linki olan randevuyu ekleyebiliyor. Aynı saldırgan yine
   yalnızca KENDİ randevusunu görüyor. Bedeli: misafirken alınmış eski
-  randevular listeye kendiliğinden gelmiyor, elde bağlantı olması gerekiyor.
+  randevular listeye kendiliğinden gelmiyor, elde link olması gerekiyor.
   SMS geldiğinde telefonla toplu bağlama bunun ÜSTÜNE eklenebilir.
 
-- **`getMusteriDb` DEĞİŞMEZ 12 gibi bir muafiyet DEĞİL, kapının ikinci
-  ekseni.** Müşterinin randevuları tanımı gereği çok kiracılı — iki ayrı
+- **`getMusteriDb` INVARIANT 12 gibi bir muafiyet DEĞİL, gate'in ikinci
+  ekseni.** Müşterinin randevuları tanımı gereği multi-tenant — iki ayrı
   salondan randevu almış biri ikisini de tek listede görüyor — yani
   `isletmeId` filtresi orada doğru soruyu soramıyor. `scoped-db`ye metot
-  eklemek de olmazdı: o kapının sözleşmesi "tek kiracı" ve onu delen bir
-  metot, kapının bütün çağıranlara verdiği güvenceyi zayıflatırdı.
+  eklemek de olmazdı: o gate'in sözleşmesi "tek tenant" ve onu delen bir
+  metot, gate'in bütün çağıranlara verdiği güvenceyi zayıflatırdı.
 
-  Filtre yine **parametre değil kapanış değişkeni**. Karşılığı `dizin.ts`
+  Filtre yine **parametre değil closure variable'ı**. Karşılığı `dizin.ts`
   disiplini: yalnızca `randevu` yazılabiliyor ve o da iki kolonda (`durum`,
   `kullanici_id`); okunan alanlar elle yazılı ve kapalı; `musteri` tablosu hiç
   import edilmiyor, yani `not` ve `telefon` sızamıyor; `iptalToken` dönmüyor.
 
 - **Rol kontrolü YOK.** Filtre `kullaniciId` olduğu için güvenlik role bağlı
-  değil: SAHIP rolündeki biri de bu kapıdan yalnızca kendi randevularını
+  değil: SAHIP rolündeki biri de bu gate'ten yalnızca kendi randevularını
   görüyor. Şart koymak güvenliğe hiçbir şey katmaz, buna karşılık başka bir
   salondan randevu alan işletme sahibini kendi listesinden mahrum bırakırdı —
   o kişi de bir müşteri.
@@ -2812,14 +2812,14 @@ gzip** (önceki 1693.13 — +35 KiB). **Göç var:** `0005_musteri-hesabi.sql`.
 - **Üyelik işletme kaydından AYRI bir fonksiyon ve ayrı bir route.**
   `isletmeKaydiOlustur` üç kaydı tek transaction'da yazıyor ve slug üretiyor;
   müşteride yazılacak tek satır var, yani transaction'ın koruyacağı bir
-  bütünlük yok. Tek route'ta bir bayrakla toplamak, gövdesinin yarısı
-  okunmayan bir dal üretirdi.
+  bütünlük yok. Tek route'ta bir flag'le toplamak, body'sinin yarısı
+  okunmayan bir branch üretirdi.
 
-- **Oturumlu randevu alırken bağlama sunucuda, ama `randevuOlustur`a
-  `kullaniciId` parametresi EKLENMEDİ.** O yol oturumsuz ve girdisinin tamamı
-  gövdeden geliyor; oraya bir kullanıcı kimliği alanı koymak, istemcinin
+- **Session'lı randevu alırken bağlama server'da, ama `randevuOlustur`a
+  `kullaniciId` parametresi EKLENMEDİ.** O yol session'sız ve input'unun tamamı
+  body'den geliyor; oraya bir kullanıcı kimliği alanı koymak, client'ın
   **başkasının hesabına** randevu yazdırabileceği bir yüzey açardı — alanı her
-  çağrı yerinde oturumdan doldurmayı hatırlamaya bağlı, yani unutmakla bozulan
+  çağrı yerinde session'dan doldurmayı hatırlamaya bağlı, yani unutmakla bozulan
   bir kural. Bunun yerine aynı tek kural kullanılıyor: token'ı gösteren
   sahiplenir.
 
@@ -2846,7 +2846,7 @@ yaptığında `/api/giris` onu `/kayit/tamamla`ya gönderiyor ve karşısına
 `kullanici_auth_user_id` tekil olduğu için bunun geri dönüşü de yok.
 
 Kod incelemesiyle görülmesi zor bir sınıf: eklenen dosyada değil, **eklenmeyen
-bir dalda**. Ekran artık iki türü de tamamlayabiliyor (`/api/uye-ol/tamamla`)
+bir branch'te**. Ekran artık iki türü de tamamlayabiliyor (`/api/uye-ol/tamamla`)
 ve varsayılan hâlâ işletme — bu ekrana düşmenin yolu neredeyse her zaman
 işletme kaydının yarıda kalması, çünkü müşteri kaydı tek satır yazıyor ve
 kırılma penceresi çok daha dar.
@@ -2855,8 +2855,8 @@ kırılma penceresi çok daha dar.
 
 - **Durum rozeti ve renkleri** `/r/[slug]/randevu/[token]` sayfasında gömülüydü.
   `/randevularim` ikinci bir müşteri ekranı getirdi; kopyalansaydı bir gün
-  birinde eklenen bir durum ötekinde eksik kalırdı ve eksik dal `undefined`
-  rozet olarak, yani **sessizce** çıkardı. `DurumRozeti` bileşenine çıktı.
+  birinde eklenen bir durum ötekinde eksik kalırdı ve eksik branch `undefined`
+  rozet olarak, yani **sessizce** çıkardı. `DurumRozeti` component'ine çıktı.
 
   Etiketler `randevu-durum.ts > DURUM_ETIKETLERI` ile birleştirilmedi: o liste
   panelin dili ("Onaylı", "Gelmedi"), rozet müşterinin dili ("Onaylandı",
@@ -2881,15 +2881,15 @@ kırılma penceresi çok daha dar.
   (Faz K) gelmeden güvenli değil.
 - **`musteri.kullanici_id` doldurulmuyor.** Panelde "bu müşterinin hesabı var"
   göstergesi olurdu ama aynı telefon deliği o alanı da güvenilmez yapıyor.
-  Kolon şemada duruyor; Faz K'de anlamı netleşecek.
+  Kolon schema'da duruyor; Faz K'de anlamı netleşecek.
 - **Şifre sıfırlama yok** — işletme tarafında da yok, ikisi birlikte gelmeli.
 - **Sayfalama yok.** Liste 200 randevuda kesiliyor. O sınıra dayanmak için
   yıllarca düzenli randevu almak gerekiyor ve o gün geldiğinde doğru çözüm
   sayfalama değil "geçmişi yıl yıl aç" olur.
 - **Müşteri profil ekranı yok** (ad/telefon düzenleme, favori işletme, "tekrar
   randevu al" kısayolu).
-- **Üst bar oturum durumunu göstermiyor.** "Randevularım" bağlantısı herkese
-  görünüyor ve oturumsuz tıklayan üyelik kartını görüyor — bu bilinçli, hesap
+- **Üst bar session durumunu göstermiyor.** "Randevularım" link'i herkese
+  görünüyor ve session'sız tıklayan üyelik kartını görüyor — bu bilinçli, hesap
   açmadan da randevusuna ulaşabileceğini orada öğreniyor.
 
 ### Doğrulama
@@ -2898,77 +2898,77 @@ kırılma penceresi çok daha dar.
 - `npm test` — **570 test geçti** (42 dosya, gerçek Postgres); yeni:
   `musteri-db.test.ts` (16), `uye-ol.test.ts` (7), `uye-ol/tamamla.test.ts` (5),
   `randevularim/ekle.test.ts` (9), `randevularim/[id]/iptal.test.ts` (4),
-  `kayit.test.ts`e müşteri kaydı (5), `degismezler.test.ts`e müşteri kapısı (5)
+  `kayit.test.ts`e müşteri kaydı (5), `degismezler.test.ts`e müşteri gate'i (5)
 - `npm run build` başarılı, 45 route
 - `cf:kur` + `wrangler deploy --dry-run`: **1728.15 KiB gzip**
-- **Göç:** boş DB'de ve gerçek veri taşıyan `randevu_dev`'de (9 işletme,
+- **Migration:** boş DB'de ve gerçek veri taşıyan `randevu_dev`'de (9 işletme,
   4 randevu) uygulandı, veri korundu; `drizzle-kit check` temiz, ikinci
   `generate` "No schema changes" dedi (göz ile doğrulandı). Backfill yok —
   `NULL` zaten doğru varsayılan. Geri alma tek satır:
   `ALTER TABLE randevu DROP COLUMN kullanici_id`.
 
 **IDOR testi `musteri-db.test.ts`'te** ve route'da değil, bilerek: route'un
-sızdırmama güvencesi tamamen kapının `where` koşullarına dayanıyor — oturumdan
-kimliği alıp sonucu HTTP koduna çeviriyor. Route seviyesinde aynı şeyi sınamak
-`cookies()` gerektiriyor (vitest'in node ortamında yok, aynı gerekçe
+sızdırmama güvencesi tamamen gate'in `where` koşullarına dayanıyor — session'dan
+kimliği alıp sonucu HTTP koduna çeviriyor. Route seviyesinde aynı şeyi test etmek
+`cookies()` gerektiriyor (vitest'in node environment'ında yok, aynı gerekçe
 `giris.test.ts`te yazılı) ve o test filtrenin **kendisini** değil yalnızca
 çağrılıp çağrılmadığını gösterirdi. İki ayrı hesap ve iki ayrı işletme
 kuruluyor; başkasının randevusu listede görünmüyor, iptal edilemiyor ve
 **gerçekten ONAYLI kalıyor**, bağlanmış randevu ikinci hesap tarafından
 çalınamıyor, eşzamanlı iki iptalden tam olarak biri kazanıyor.
 
-**Elle (`next dev`, tohumlanmış `randevu_dev`, tarayıcı eklentisi):** gerçek
-bir oturumla `/randevularim` render oldu — yani `auth() → getMusteriDb →
-liste` zinciri çalışma zamanında doğrulandı; `/uye-ol` oturumluyken role göre
-`/panel`e yönlendiriyor; oturumsuz `/randevularim` üyelik kartını gösteriyor;
+**Elle (`next dev`, seed'lenmiş `randevu_dev`, tarayıcı plugin'i):** gerçek
+bir session'la `/randevularim` render oldu — yani `auth() → getMusteriDb →
+liste` zinciri runtime'da doğrulandı; `/uye-ol` session'lıyken role göre
+`/panel`e yönlendiriyor; session'sız `/randevularim` üyelik kartını gösteriyor;
 token sayfası ortak rozet ve `tarihUzun` ile doğru çiziliyor. **390px** (iframe
 içinde gerçek dar görünüm, `scrollWidth` 386 — yatay taşma yok) ve **açık/koyu
 tema** gözle doğrulandı.
 
 ### Elle yapılması gerekenler (Faz J)
 
-- [x] **Müşteri hesabı gerektiren adımlar elle sınandı.** Kutu Faz P turunda
-      kapandı: canlıda gerçek bir oturumla `/randevularim` render oluyor,
+- [x] **Müşteri hesabı gerektiren adımlar elle test edildi.** Kutu Faz P turunda
+      kapandı: canlıda gerçek bir session'la `/randevularim` render oluyor,
       listede hesaba bağlı bir randevu ve iptal düğmesi duruyor, "Elinizdeki
       randevuyu ekleyin" kutusu yerinde.
-- [x] **Prod'a göç uygulandı.** `0005_musteri-hesabi.sql` canlıda; doğrulaması
-      yukarıdaki satırın kendisi — kolon olmasa `/randevularim` sorgusu düşerdi.
+- [x] **Prod'a migration uygulandı.** `0005_musteri-hesabi.sql` canlıda; doğrulaması
+      yukarıdaki satırın kendisi — kolon olmasa `/randevularim` query'si düşerdi.
 ### Faz J üstüne gelen düzeltmeler
 
 Kullanıcı PR açıldıktan sonra üç şey söyledi. İkisi düzeltildi, biri karara
 bağlandı.
 
-- **"Giriş yap" alt bilgiden üst bara taşındı ve üst bar oturumu yansıtıyor.**
+- **"Giriş yap" alt bilgiden üst bara taşındı ve üst bar session'ı yansıtıyor.**
   Şikâyet somuttu: işletme hesabıyla girişliyken "Giriş yap"a basınca `/giris`
-  onu zaten girişli görüp `/panel`e atıyordu. Bağlantı oturum durumundan
-  habersizdi — hem yanlış yerdeydi hem yanlış şeyi söylüyordu. Artık oturum
-  açıkken o düğme hiç çizilmiyor, yani yönlendirme **oluşamıyor**.
+  onu zaten girişli görüp `/panel`e atıyordu. Link session durumundan
+  habersizdi — hem yanlış yerdeydi hem yanlış şeyi söylüyordu. Artık session
+  açıkken o düğme hiç çizilmiyor, yani redirect **oluşamıyor**.
 
-  Hesap menüsü yeniden uydurulmadı: panelde çözülmüş desen (`HesapMenusu` +
-  `CikisDugmesi`) üst bara taşındı, çıkış düğmesi birebir aynı bileşen. Ayrı
-  bir kardeş bileşen olmasının tek sebebi tetikleyicinin şekli — panelinki
+  Hesap menüsü yeniden uydurulmadı: panelde çözülmüş pattern (`HesapMenusu` +
+  `CikisDugmesi`) üst bara taşındı, çıkış düğmesi birebir aynı component. Ayrı
+  bir kardeş component olmasının tek sebebi trigger'ın şekli — panelinki
   geniş bir kenar çubuğu düğmesi, üst barınki dar ve yatay bir avatar. Rol
   etiketi ve baş harf `src/lib/rol.ts`e çıktı, çünkü aynı harita artık iki
-  ayrı bileşen ağacında gerekiyor.
+  ayrı component ağacında gerekiyor.
 
-  Bedeli açıkça kaydedilsin: `auth()` çerez okuyor, yani `UstBar` kullanan her
+  Bedeli açıkça kaydedilsin: `auth()` cookie okuyor, yani `UstBar` kullanan her
   sayfa dinamik oldu. Pratikte tek kayıp `/isletmeler-icin` (○ → ƒ). Alternatif
-  oturumu her sayfadan prop geçirmekti; o da statik kalan sayfada girişli
+  session'ı her sayfadan prop geçirmekti; o da statik kalan sayfada girişli
   kullanıcıya "Giriş yap" göstermeye devam ederdi — düzeltilen hatanın
   kendisini bir sayfada bırakırdı.
 
 - **Hesap ayrımı bugünkü hâliyle kalıyor.** Veri tarafında ayrım zaten var: bir
   Supabase hesabı ya işletmeye ya müşteriye ait (`kullanici_auth_user_id`
-  tekil). Eksik olan ayrım değil, **arayüzün oturumu göstermemesiydi** ve
+  tekil). Eksik olan ayrım değil, **arayüzün session'ı göstermemesiydi** ve
   yukarıdaki madde onu kapatıyor. Ayrı giriş adresleri (`/isletme/giris`) ve
-  aynı tarayıcıda iki oturum birden değerlendirildi, ikisi de bugün
-  gerekmiyor — ikincisi iki ayrı çerez ad alanı ve `auth.ts`in yeniden
-  yazılması demek, DEĞİŞMEZ 6 ve 11'e dokunur.
+  aynı tarayıcıda iki session birden değerlendirildi, ikisi de bugün
+  gerekmiyor — ikincisi iki ayrı cookie ad alanı ve `auth.ts`in yeniden
+  yazılması demek, INVARIANT 6 ve 11'e dokunur.
 
 - **Misafir randevusu KALIYOR.** Soru şuydu: "giriş yapmamış biri randevu
   alabiliyor, birisi bot atıp sistemi tıkayabilir." Bugün üç kat koruma var —
-  Turnstile (üretimde `gercek`, `degismezler.test.ts` zorluyor), Worker hız
-  sınırı (`RANDEVU_SINIRI`, IP başına 5 istek/60sn) ve telefon başına en çok
+  Turnstile (production'da `gercek`, `degismezler.test.ts` zorluyor), Worker rate
+  limit (`RANDEVU_SINIRI`, IP başına 5 istek/60sn) ve telefon başına en çok
   3 açık randevu; bunların üstüne `gelmediKisitiGun`.
 
   Üyelik zorunluluğu dördüncü bir kat olurdu ama **botu durdurmuyor**: kayıt da
@@ -2977,7 +2977,7 @@ bağlandı.
   karşısına düşüyor.
 
   Karar: üyelik zorunlu değil, kalkan ayrı bir fazda güçlendirilecek. Sıradaki
-  adımlar: IP hız sınırını sıkılaştırmak, telefon başına **günlük** randevu
+  adımlar: IP rate limit'i sıkılaştırmak, telefon başına **günlük** randevu
   tavanı, işletme başına günlük yeni-müşteri tavanı, ve panelde şüpheli
   yoğunluğu gösteren bir uyarı. Reddedilen üçüncü seçenek, misafir randevusunu
   e-posta/SMS koduyla doğrulatmaktı: bota gerçek maliyet yaratıyor ama kendi
@@ -2988,51 +2988,51 @@ bağlandı.
 
 ## Faz P — tur sonrası düzeltmeler
 
-**Kapandı:** yedi PR (#25–#31). Uygulama yerelde ve **canlıda** uçtan uca
-gezildi; çıkan üç sınıf sorun kapatıldı. **625 test** (43 dosya). Göç yok.
+**Kapandı:** yedi PR (#25–#31). Uygulama local'de ve **canlıda** end-to-end
+gezildi; çıkan üç sınıf sorun kapatıldı. **625 test** (43 dosya). Migration yok.
 
 Turun kendisi bir yöntem notu bırakıyor: bulguların hiçbiri koddan okunarak
-değil, **ürünü kullanarak** çıktı. Testler yeşildi, tipler temizdi, değişmezler
+değil, **ürünü kullanarak** çıktı. Testler yeşildi, tipler temizdi, invariant'lar
 tutuyordu — ve ana sayfa yine de arayana sonuç vermiyordu.
 
 ### Canlıda yanlış söyleyen üç yer (PR #25)
 
 - **Panelde "Geliştirici" bölümü her işletme sahibine görünüyordu.** Karar
-  `Teknik borç` maddesinde YAZILIYDI ("silme, env bayrağıyla kapat") ama
-  uygulanmamıştı — yani karar günlüğüne yazmak tek başına yetmiyor. Şimdi iki
-  kapı üst üste: sayfalar üretimde `notFound()`, menü bölümü çizilmiyor.
+  `Teknik borç` maddesinde YAZILIYDI ("silme, env flag'iyle kapat") ama
+  uygulanmamıştı — yani decision log'a yazmak tek başına yetmiyor. Şimdi iki
+  gate üst üste: sayfalar production'da `notFound()`, menü bölümü çizilmiyor.
   `degismezler.test.ts` ikisini de zorluyor.
 
   > **Bilerek yapılmayan:** vitrin **bundle'dan çıkmıyor**, route hâlâ
-  > derleniyor. Teknik borcun "üretim yüzeyinde geliştirici aracı durmamalı"
+  > build ediliyor. Teknik borcun "production yüzeyinde geliştirici aracı durmamalı"
   > kısmı kapandı, "bundle'a giriyor" kısmı kapanmadı.
 
 - **Randevu formu olmayan bir SMS hatırlatması vaat ediyordu.** Telefon
   alanının altında "Randevu hatırlatması da buraya gidiyor" yazıyordu; SMS
   kanalı yok (Faz K), bütün bildirimler e-postayla gidiyor ve e-posta formda
-  isteğe bağlı. Yani telefonunu yazıp e-postasını boş bırakan müşteri hiçbir
+  opsiyonel. Yani telefonunu yazıp e-postasını boş bırakan müşteri hiçbir
   şey almıyordu — üstelik `bildirim.ts` o satırı `adres-yok` diye **hata**
-  işaretliyordu. Vaat yalnızca yanlış değil, kuyrukta görünür bir arıza
+  işaretliyordu. Vaat yalnızca yanlış değil, queue'da görünür bir arıza
   üretiyordu.
 
-- **`/saglik` arama motoruna açıktı.** Sayfa halka açık kalıyor (teşhis değeri
+- **`/saglik` arama motoruna açıktı.** Sayfa public kalıyor (teşhis değeri
   tam da deploy sonrası tarayıcıdan açılabilmesinde) ama `robots.txt` +
   `noindex` ile dizinden çekildi.
 
 ### Arama vaadi karşılıyor (PR #26)
 
-Ana sayfa "Ne arıyorsunuz?" diyordu, sorgu yalnızca `isletme.ad` ve
+Ana sayfa "Ne arıyorsunuz?" diyordu, query yalnızca `isletme.ad` ve
 `isletme.slug`'a bakıyordu. Ölçüldü: `saç kesimi` **0 sonuç**, `kuaför` ise
 Kuaför kategorisindeki işletmeyi adında o kelime geçmediği için bulamıyordu.
 `/dizin` aynı kutuyu dürüstçe "İşletme adı" diye etiketliyordu — ön kapı
 dizinin verebileceğinden fazlasını vaat ediyordu.
 
-- **`exists` kullanıldı, JOIN değil.** `isletmeleriAra` iki sorgu koşuyor ve
-  ikisi de aynı `kosul`u paylaşıyor: kart sorgusu `hizmet`e LEFT JOIN atıp
-  topluyor, sayım sorgusu **join'siz** `count(*)`. Koşula doğrudan bir `hizmet`
-  kolonu koymak sayım sorgusunu kırar, kart sorgusunda LEFT JOIN'i fiilen
+- **`exists` kullanıldı, JOIN değil.** `isletmeleriAra` iki query koşuyor ve
+  ikisi de aynı `kosul`u paylaşıyor: kart query'si `hizmet`e LEFT JOIN atıp
+  topluyor, sayım query'si **join'siz** `count(*)`. Koşula doğrudan bir `hizmet`
+  kolonu koymak sayım query'sini kırar, kart query'sinde LEFT JOIN'i fiilen
   INNER'a çevirip hizmetsiz işletmeyi düşürür ve toplamaları bozardı.
-  Korelasyonlu `exists` her iki sorguda da kendi başına ayakta duruyor.
+  Korelasyonlu `exists` her iki query'de de kendi başına ayakta duruyor.
 
 - **Kategori eşleşmesi SQL'de değil, kapalı liste üzerinden JS'te.** `ilike`
   küçültmeyi collation'la yapıyor ve `kuafor` yazan ziyaretçi `Kuaför`
@@ -3044,18 +3044,18 @@ dizinin verebileceğinden fazlasını vaat ediyordu.
   olarak okunuyor. `translate` önce, `lower` sonra — `lower('I')` collation'a
   bağlı, `translate` değil.
 
-- **DEĞİŞMEZ 12 metni güncellendi:** `hizmet` artık **filtrelenebilir ama
+- **INVARIANT 12 metni güncellendi:** `hizmet` artık **filtrelenebilir ama
   döndürülemez**. Bir kolona göre süzmek o kolonun içeriğini dışarı vermiyor;
   ziyaretçi zaten elindeki metni soruyor. Kart hâlâ yalnızca toplama gösteriyor.
 
-  > **Kapı kasıtlı ihlalle sınandı — yakaladı.** Korelasyon satırı kaldırılınca
+  > **Gate kasıtlı ihlalle test edildi — yakaladı.** Korelasyon satırı kaldırılınca
   > tam olarak üç test kırmızıya döndü; biri `exists`'in sabit-doğruya dönüp
-  > **bütün dizini** döndürmesini yakalayan çapraz kiracı testi.
+  > **bütün dizini** döndürmesini yakalayan çapraz tenant testi.
 
-  > **Bilerek yapılmayan:** `pg_trgm` indeksi. Bir `CREATE EXTENSION` göçü demek
+  > **Bilerek yapılmayan:** `pg_trgm` indeksi. Bir `CREATE EXTENSION` migration'ı demek
   > ve korelasyon zaten `isletme_id` ile daralttığı için planlayıcı muhtemelen
   > seçmezdi. Eşik: `hizmet` ~50k satırı geçerse yeniden bakılmalı. Türkçe dışı
-  > aksanlar (`Café`) da katlanmıyor — `unaccent` yine göç.
+  > aksanlar (`Café`) da katlanmıyor — `unaccent` yine migration.
 
 ### Kaybolan filtre (PR #27)
 
@@ -3072,21 +3072,21 @@ ayrıca hangi filtrenin etkin olduğunu yazıyor.
 
 Faz J "elinizdeki randevuyu ekleyin" kutusunu `/randevularim`a koymuştu, ama
 kullanıcının linki **elinde tuttuğu** tek an token sayfası; o sayfa da
-oturumdan tamamen habersizdi. Yani akış, kullanıcıdan linki kopyalayıp başka
+session'dan tamamen habersizdi. Yani akış, kullanıcıdan linki kopyalayıp başka
 bir sayfaya gidip **geri** yapıştırmasını bekliyordu.
 
 - **Token hiçbir yeni URL'e konmadı.** Onay ekranından giriş yoluna geçirmek
-  için `?devam=<iptalYolu>` yazmak cazipti ama o değer sunucu erişim loglarına
-  düşerdi ve token tek başına yetki taşıyor (DEĞİŞMEZ 5'in ruhu). Tek tıkla
+  için `?devam=<iptalYolu>` yazmak cazipti ama o değer server erişim loglarına
+  düşerdi ve token tek başına yetki taşıyor (INVARIANT 5'in ruhu). Tek tıkla
   ekleme bu yüzden token'ın **zaten adres çubuğunda olduğu** sayfada duruyor;
   onay ekranı düz bir `/uye-ol` daveti gösteriyor. Aynı gerekçeyle `/uye-ol`'a
   `devam` desteği **eklenmedi** — bugün onu besleyecek güvenli bir çağıran yok.
   (Yazıldı, sonra geri alındı: spekülatif kapsam.)
 
-- **Yetki modeli değişmedi.** Sayfayı hâlâ URL'deki token açıyor; oturum hiçbir
-  kapı açmıyor, yalnızca bir kutu çiziyor.
+- **Yetki modeli değişmedi.** Sayfayı hâlâ URL'deki token açıyor; session hiçbir
+  gate açmıyor, yalnızca bir kutu çiziyor.
 
-- **`/giris` artık iki çıkış gösteriyor.** Tek bağlantı `/uye-ol`a — müşteri
+- **`/giris` artık iki çıkış gösteriyor.** Tek link `/uye-ol`a — müşteri
   kaydına — gidiyordu ve bu **geri dönüşü olmayan** bir tuzaktı:
   `kullanici_auth_user_id` tekil, yani oradan kaydolan işletme sahibinin
   e-postası kalıcı olarak MUSTERI oluyor ve o adresle bir daha işletme
@@ -3114,7 +3114,7 @@ bir sayfaya gidip **geri** yapıştırmasını bekliyordu.
 
 - **`/gizlilik` eklendi.** Ürün ad, telefon ve e-posta topluyor ve Türkiye'de
   tüketiciye açıktan hizmet veriyor; bugüne kadar formda tek satır
-  bilgilendirme, alt bilgide tek bir bağlantı yoktu.
+  bilgilendirme, alt bilgide tek bir link yoktu.
 
   > **Onay kutusu konmadı, bilinçli:** misafir randevusunun sürtünmesini
   > artırmamak Faz J kararıydı ve buradaki işleme sözleşmenin ifası için
@@ -3129,12 +3129,12 @@ bir sayfaya gidip **geri** yapıştırmasını bekliyordu.
   bugünkü en pahalı boşluk. Faz P2'ye alındı.
 - **`scoped-db.ts` bölünmesi** ve **uyarı/hata takibi** — teknik borcun kalan
   iki maddesi, Faz P2.
-- **`/saglik`'in şemayı gerçekten kontrol etmesi** — bu turda yalnızca dizinden
+- **`/saglik`'in schema'yı gerçekten kontrol etmesi** — bu turda yalnızca dizinden
   çekildi, teşhis derinleştirilmedi.
 - **`/r/<slug>` bir profil sayfası değil, doğrudan form.** Dizinden gelen kişi
   "Beşiktaş, İstanbul" yazan bir kart tıklıyor, karşısında adres yok, çalışma
   saati yok, dizine dönüş yok. `/r/`'ye üst bar koymama kararı Instagram
-  trafiği içindi; pazaryeri ön kapısı kararından sonra o gerekçe tek başına
+  trafiği içindi; marketplace ön kapısı kararından sonra o gerekçe tek başına
   yetmiyor. Ayrı bir iş.
 - **Elle randevu ekleme ve müşteri listesi** — Faz H2, aşağıya bakın.
 
@@ -3151,11 +3151,11 @@ takvim" derken bunu kapsıyormuş gibi duruyordu. H2 `plan.md`ye geri kondu,
 `plan.md`nin bağlam cümlesi de "tam bir randevu yazılımı" iddiasını bugünkü
 gerçeğe çekti.
 
-### Prod'a tohum atıldığı KAYDA GEÇMEMİŞTİ
+### Prod'a seed atıldığı KAYDA GEÇMEMİŞTİ
 
-Canlı dizindeki yedi işletmenin **tamamı** `tohum-demo.ts` çıktısı. Betik
+Canlı dizindeki yedi işletmenin **tamamı** `tohum-demo.ts` çıktısı. Script
 `--prod --onayla` ile bunu destekliyor, yani bilinçli bir işti — ama TODOS'taki
-her tohum satırı `randevu_dev` diyor ve prod'a yazıldığı hiçbir yerde yazılı
+her seed satırı `randevu_dev` diyor ve prod'a yazıldığı hiçbir yerde yazılı
 değildi. Kayıt buraya düşüyor.
 
 Bunun iki sonucu var ve ikisi de görülmeliydi: kayıtlar `sitemap.xml`'de, yani
@@ -3175,19 +3175,19 @@ Google'a **uydurma salonlar** sunuluyor; ve `page.tsx`'in kendi yorumu
       commit;  -- ya da rollback;
       ```
       `SUPABASE_DB_URL` üzerinden, `prod-goc.ts` disipliniyle. Sitemap
-      `force-dynamic`, bir sonraki istekte kendiliğinden düşüyor. `auth.users`
-      girdisi kalıyor (DEĞİŞMEZ 9: FK yok).
+      `force-dynamic`, bir sonraki request'te kendiliğinden düşüyor. `auth.users`
+      girdisi kalıyor (INVARIANT 9: FK yok).
 - [ ] **`/gizlilik` metnini hukukçuya okut ve yer tutucuları doldur:** üç ayrı
       bilgi, dört yerde geçiyor — veri sorumlusunun unvanı (1), başvuru adresi
       (2 yer: "Veri sorumlusu" ve "Haklarınız") ve saklama süresi (1). Sayfada
       `[doldurulacak]` olarak görünüyorlar.
-- [x] **Oturumlu iki dalın ilki canlıda doğrulandı** (5 Eylül 2026, merge
-      sonrası): `/panel/gelistirici/vitrin` işletme sahibi oturumuyla **404**
+- [x] **Session'lı iki branch'in ilki canlıda doğrulandı** (5 Eylül 2026, merge
+      sonrası): `/panel/gelistirici/vitrin` işletme sahibi session'ıyla **404**
       veriyor ve panel yan menüsünde "Geliştirici" bölümü yok. Plan bunu
-      "ölçülemedi" diye kapatmıştı; tarayıcıda zaten açık bir üretim oturumu
+      "ölçülemedi" diye kapatmıştı; tarayıcıda zaten açık bir production session'ı
       olduğu ortaya çıkınca şifre girmeye gerek kalmadan ölçüldü.
-- [ ] **Token sayfasının "Hesabıma ekle" dalı hâlâ ölçülmedi.** Görmek için
-      üretimde gerçek bir randevu oluşturmak gerekiyor (kayıt yazar ve e-posta
+- [ ] **Token sayfasının "Hesabıma ekle" branch'i hâlâ ölçülmedi.** Görmek için
+      production'da gerçek bir randevu oluşturmak gerekiyor (kayıt yazar ve e-posta
       gönderir), o yüzden tur sırasında yapılmadı. `musteri-db.test.ts`'teki üç
       testle kilitli.
 
@@ -3195,20 +3195,20 @@ Google'a **uydurma salonlar** sunuluyor; ve `page.tsx`'in kendi yorumu
 
 Yedi PR sırayla `main`'e alındı (#25 → #31) ve `main`'in ağacı zincirin son
 ucuyla **birebir aynı** çıktı — `git diff 83d13df d13adf6` boş. CI + Cloudflare
-yayını yeşil.
+deploy'u yeşil.
 
 **Merge sırasında öğrenilen: `--delete-branch` zinciri kırıyor.** #25 merge
 edilip `faz-p/canli-duzeltmeler` silinince GitHub #26'yı `main`'e yeniden
 hedeflemedi — **kapattı**, ve kapalı bir PR'ın tabanı değiştirilemediği için
-`gh pr edit --base` de reddetti. Kurtarma: silinen dalı eski ucuna geri push
+`gh pr edit --base` de reddetti. Kurtarma: silinen branch'i eski ucuna geri push
 et (`git push origin <sha>:refs/heads/<dal>`), PR'ı reopen et, tabanı `main`
-yap, sonra dalı tekrar sil.
+yap, sonra branch'i tekrar sil.
 Doğru sıra bu yüzden şu: **önce çocuğun tabanını `main` yap, sonra ebeveyni
-merge et, en son dalı sil.** Kalan altısı bu sırayla sorunsuz geçti.
+merge et, en son branch'i sil.** Kalan altısı bu sırayla sorunsuz geçti.
 
 **Canlıda ölçülenler.** Dizin araması: `saç kesimi` / `sac kesimi` / `KESİMİ`
-→ 4, `kuaför` / `kuafor` → 1, `manikür` → 2, `zzz` → 0; **her sorguda sayaç =
-kart sayısı**, yani iki sorgunun ayrışmadığı canlıda da doğrulandı. Boş
+→ 4, `kuaför` / `kuafor` → 1, `manikür` → 2, `zzz` → 0; **her query'de counter =
+kart sayısı**, yani iki query'nin ayrışmadığı canlıda da doğrulandı. Boş
 kategori (`?arama=zzz&kategori=Veteriner&il=Bursa`) seçimini kutuda gösteriyor
 ve boş durum "zzz · Veteriner · Bursa" yazıyor. Gün şeridi başlığı aralık:
 "5 – 11 Eylül 2026", ay sınırında "26 Eylül – 2 Ekim 2026", son pencere randevu
@@ -3217,7 +3217,7 @@ kayıyor (ölçüldü: `getBoundingClientRect().y` 728 → 728). Farketmez seçi
 boş gün ipucu çizilmiyor. Form metinleri, `/gizlilik`, `robots.txt`'te
 `/saglik`, sitemap'te `/gizlilik` ve sekiz sayfanın ayrı başlığı yerinde.
 
-**Yayın turunda çıkan yeni bulgu: üçüncü arama kutusu unutulmuştu.** Faz P
+**Deploy turunda çıkan yeni bulgu: üçüncü arama kutusu unutulmuştu.** Faz P
 aramanın kapsamını genişletirken iki etiketi düzeltti (kahraman ve dizin
 filtresi) ama `ust-bar.tsx`'teki kutu "İşletme adı ara" demeye devam ediyordu —
 iç sayfalarda görünen tek arama girişi o. Artık "Hizmet ya da işletme ara".
@@ -3236,7 +3236,7 @@ Faz H'de ayrılıp yol haritasından düşen işin ilk yarısı. Telefonla gelen
 randevu artık panele giriliyor; **müşteri listesi ve geçmişi** bu fazın ikinci
 PR'ında.
 
-### Müsaitlik motoru iki kapıya birden bağlandı
+### Müsaitlik motoru iki gate'e birden bağlandı
 
 Motorun ilk hâli `getHalkaAcikDb`nin **dönüş tipine** bağlıydı
 (`type HalkaAcikDb = NonNullable<Awaited<ReturnType<typeof getHalkaAcikDb>>>`),
@@ -3245,15 +3245,15 @@ yani panel tarafı aynı hesabı yapamıyordu. Bağ iki adımda çözüldü:
 - `musaitlik-sorgu.ts` artık dar bir **yapısal arayüz** istiyor
   (`MusaitlikKapisi`: dört metot) ve işletme ayarlarını `db`den değil ayrı bir
   `isletme` alanından alıyor. Ayrı olmasının sebebi somut: `getHalkaAcikDb`
-  işletmeyi slug'dan çözerken zaten okuyor, `getScopedDb` ise yalnızca oturumun
-  `isletmeId`sini biliyor — ayarları okumak ek bir sorgu ve panelin ayarla
+  işletmeyi slug'dan çözerken zaten okuyor, `getScopedDb` ise yalnızca session'ın
+  `isletmeId`sini biliyor — ayarları okumak ek bir query ve panelin ayarla
   ilgilenmeyen her sayfasına onu ödetmek istemedik.
-- Üç sorgu (`hizmetiVerenPersoneller`, `kapaliAraliklariListele`,
+- Üç query (`hizmetiVerenPersoneller`, `kapaliAraliklariListele`,
   `doluRandevulariListele`) `musaitlikKapisi(db, kiraci)` ortak fonksiyonuna
-  taşındı ve **iki kapıya da aynı kod** yayılıyor — `bildirimKapisi` deseninin
+  taşındı ve **iki gate'e de aynı kod** yayılıyor — `bildirimKapisi` pattern'ının
   aynısı. Kopyalamanın bedeli sessiz olurdu: `doluRandevulariListele`nin durum
-  kümesi veritabanındaki `EXCLUDE` kısıtının `WHERE`iyle aynı olmak zorunda
-  (DEĞİŞMEZ 8), ayrışsa motor "boş" dediği bir slotu kısıt reddederdi.
+  kümesi veritabanındaki `EXCLUDE` constraint'inin `WHERE`iyle aynı olmak zorunda
+  (INVARIANT 8), ayrışsa motor "boş" dediği bir slotu constraint reddederdi.
 
 Müşteriyi telefonla tekilleyen yarış çözümü de ortaklaştı (`musteriyiCoz`):
 `onConflictDoNothing` + yarışı kaybedeni okuma mantığı tek yerde.
@@ -3266,25 +3266,25 @@ dışında kalıyor. Motorun kuralları müşteriye "bu saat alınamaz" demek i�
 işletmenin kendi takvimine istisna yazmasını engellemek için değil.
 
 Serbestliğin **sınırı yine veritabanında**: aynı personelin çakışan iki aktif
-randevusu `EXCLUDE` kısıtıyla imkânsız ve `zorla` bayrağı bunu **aşmıyor**.
+randevusu `EXCLUDE` constraint'iyle imkânsız ve `zorla` flag'i bunu **aşmıyor**.
 Yani işletme çalışma saati dışına yazabiliyor, dolu bir saatin üstüne
 yazamıyor.
 
-İstisna **iki adımlı**: istemci önce bayraksız gönderiyor, saat motorun
+İstisna **iki adımlı**: client önce flag'siz gönderiyor, saat motorun
 dışındaysa 409 + `zorlanabilir: true` alıyor ve kullanıcıya "yine de eklensin
 mi" diye soruluyor. Tek adımda yazsaydık yanlış saate dokunan bir tık sessizce
 takvime işlerdi.
 
-### Halka açık yoldan üç fark
+### Public yoldan üç fark
 
-1. **`kaynak: "ISLETME"`.** Şema bu ayrımı Faz E'den beri taşıyordu ama yazan
+1. **`kaynak: "ISLETME"`.** Schema bu ayrımı Faz E'den beri taşıyordu ama yazan
    bir yol yoktu.
 2. **`durum: "ONAYLI"`, `otomatikOnay` ayarına bakılmadan.** O ayar müşterinin
    aldığı randevunun onay bekleyip beklemeyeceğini söylüyor; işletme kendi
    girdiği randevuyu kendi onaylayacak olurdu.
-3. **Gelmedi kısıtı ve açık randevu tavanı uygulanmıyor.** İkisi de oturumsuz
+3. **Gelmedi kısıtı ve açık randevu tavanı uygulanmıyor.** İkisi de session'sız
    yolun kötüye kullanımına karşıydı. Kısıt özellikle önemli: "gelmedi"
-   işaretlenen müşteri telefonla arayıp özür dilediğinde işletme onu kapıda
+   işaretlenen müşteri telefonla arayıp özür dilediğinde işletme onu gate'te
    bırakmak zorunda kalmamalı — **affetme yolu bu.**
 
 ### IDOR: foreign key'in yakalayamadığı yer
@@ -3292,7 +3292,7 @@ takvime işlerdi.
 `randevu.personel_id` foreign key'i yalnızca `personel.id`ye bakıyor,
 **işletmeye değil**. Yani başka bir salonun personel id'si veritabanı
 tarafından reddedilmezdi ve randevu bizim işletmemizde o yabancı personelle
-oluşurdu. Kontrol route'ta değil **kapının transaction'ının içinde** duruyor ki
+oluşurdu. Kontrol route'ta değil **gate'in transaction'ının içinde** duruyor ki
 çağıran taraf onu unutamasın; `scoped-db-elle-randevu.test.ts` bunu kilitliyor.
 
 ### Bildirim: işletmeye mesaj yok
@@ -3301,7 +3301,7 @@ oluşurdu. Kontrol route'ta değil **kapının transaction'ının içinde** duru
 işletmenin kendisi. Müşteri tarafı değişmiyor: onay mesajı **iptal linkini
 taşıyor** ve o link müşterinin randevuyu kendi iptal edebileceği tek yol.
 Hatırlatmanın "geçmişe yazma" kuralı iki yolda da ortak (`hatirlatmaKaydi`) ve
-elle girilen randevularda o dal daha sık çalışıyor — telefonla alınan
+elle girilen randevularda o branch daha sık çalışıyor — telefonla alınan
 randevunun çoğu aynı haftanın içinde.
 
 ### Bilerek kapsam dışı
@@ -3310,7 +3310,7 @@ randevunun çoğu aynı haftanın içinde.
   Bugünkü sonucu: mevcut müşterinin **adı ve notu güncellenmiyor** — işletme
   "Ahmet" diye kayıtlı birini "Ahmet Yılmaz" yazarak aradığında kaydın sessizce
   yeniden adlandırılması sürpriz olurdu; ad düzeltmek ayrı ve açık bir iş.
-- **Geçmişe randevu yazma.** Tarih girdisinin alt sınırı bugün. Geçmişe yazmak
+- **Geçmişe randevu yazma.** Tarih input'unun alt sınırı bugün. Geçmişe yazmak
   bir kayıt tutma işi (dünkü müşteriyi sonradan girmek) ve randevu akışının
   değil müşteri geçmişinin sorusu.
 - **L3'ün "gelmedi" kısıtını panelden görme ve kaldırma ekranı.** Kısıt elle
@@ -3321,7 +3321,7 @@ randevunun çoğu aynı haftanın içinde.
 - **Randevu düzenleme (saat/personel değiştirme).** Bugün yalnızca durum
   değiştirilebiliyor. Ayrı iş.
 
-### Elle doğrulandı — 5 Eylül 2026, `npm run dev` + gerçek oturum
+### Elle doğrulandı — 5 Eylül 2026, `npm run dev` + gerçek session
 
 Veri: `isil-guzellik-salonu` (4 hizmet, 2 personel, Pzt–? 09:00–12:00 /
 13:00–18:00).
@@ -3342,7 +3342,7 @@ Veri: `isil-guzellik-salonu` (4 hizmet, 2 personel, Pzt–? 09:00–12:00 /
 - [x] **Müşteri tekilleme.** Aynı numarayla ikinci randevu → tek `musteri`
       satırı, iki randevu. Formda ad "Fatma Ş." yazılmasına rağmen kayıt
       **"Fatma Şahin"** kaldı: mevcut müşterinin adı bilerek güncellenmiyor.
-- [x] **Bildirim.** Kuyrukta `MUSTERI_RANDEVU_ONAYLANDI` +
+- [x] **Bildirim.** Queue'da `MUSTERI_RANDEVU_ONAYLANDI` +
       `MUSTERI_HATIRLATMA` (randevudan 24 saat önce); **`ISLETME_YENI_RANDEVU`
       yok**. E-posta girilmediği için onay satırı `adres-yok` ile hata
       alıyor — müşteri akışıyla aynı davranış.
@@ -3355,11 +3355,11 @@ Veri: `isil-guzellik-salonu` (4 hizmet, 2 personel, Pzt–? 09:00–12:00 /
 ### Bundle bütçesi
 
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1769,53 KiB** (bütçe 3 MiB).
-Faz P sonundaki 1634 KiB'den **+135 KiB** — yeni sayfa, form bileşeni ve
+Faz P sonundaki 1634 KiB'den **+135 KiB** — yeni sayfa, form component'i ve
 ikonlar. Bütçenin yarısında duruyoruz ama artış tek bir ekran için küçük
 değil; sonraki panel ekranlarında ölçüm sürmeli.
 
-### İKİNCİ BİR YAYIN HATTI BAĞLANMIŞ: Cloudflare "Workers Builds"
+### İKİNCİ BİR DEPLOY PIPELINE BAĞLANMIŞ: Cloudflare "Workers Builds"
 
 PR #33'te Cloudflare'ın **Workers Builds** entegrasyonu bir commit status'u
 düşürüyor ve **fail** veriyor. Bu kontrol `main`'in son commit'inde YOK, yani
@@ -3367,10 +3367,10 @@ entegrasyon yeni bağlanmış ve ilk kez burada göründü.
 
 **Kodla ilgisi yok.** Build log'u sebebi tek başına söylüyor: `next build`in
 prerender adımında `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-tanımsız olduğu için `src/lib/supabase/sunucu.ts` fırlatıyor. İki koşumda iki
+tanımsız olduğu için `src/lib/supabase/sunucu.ts` fırlatıyor. İki run'da iki
 farklı sayfada patlamış (`/isletmeler-icin` ve `/giris`) — prerender sırası
-rastgele, sebep aynı. `ci.yml` bu değişkenleri veriyor (`dogrula` işine sahte
-değerler, `yayinla` işine gerçek `vars`), Cloudflare'ın build ortamına ise
+rastgele, sebep aynı. `ci.yml` bu variable'ları veriyor (`dogrula` job'ına sahte
+değerler, `yayinla` job'ına gerçek `vars`), Cloudflare'ın build environment'ına ise
 kimse vermemiş.
 
 **Ama asıl mesele başarısızlık değil, entegrasyonun kendisi.** Üç ayrı sorun
@@ -3378,22 +3378,22 @@ kimse vermemiş.
 
 1. **Yanlış komut.** Cloudflare `npm run build` koşuyor, `npm run cf:kur`
    değil — başarılı olsa bile OpenNext bundle'ı üretmiyor.
-2. **İki yayın hattı.** Depodaki sözleşme "merge anı yayın anı" ve yayını
+2. **İki deploy pipeline.** Repo'daki sözleşme "merge anı deploy anı" ve deploy'u
    `ci.yml`deki *Cloudflare Workers yayini* işi yapıyor (`docs/yayin.md`).
-   İkinci bir hat aynı Worker'a bakıyor.
-3. **En tehlikelisi:** Workers Builds **dal başına** koşuyor. Yapılandırması
-   düzeltilip yeşile dönseydi, merge edilmemiş bir PR dalını üretime
-   yayınlayabilirdi. Bugün onu engelleyen tek şey, eksik bir env değişkeni.
+   İkinci bir pipeline aynı Worker'a bakıyor.
+3. **En tehlikelisi:** Workers Builds **branch başına** koşuyor. Config'i
+   düzeltilip yeşile dönseydi, merge edilmemiş bir PR branch'ini production'a
+   deploy edebilirdi. Bugün onu engelleyen tek şey, eksik bir env variable'ı.
 
 **Öneri: entegrasyon kaldırılsın.** Cloudflare panelinde Workers → randevu →
-Settings → Builds bağlantısı sökülür; yayın `ci.yml`de kalır. İkinci seçenek
-(env'leri ekleyip komutu `cf:kur` yapmak) 3. maddeyi çözmüyor, dal koruması da
+Settings → Builds bağlantısı sökülür; deploy `ci.yml`de kalır. İkinci seçenek
+(env'leri ekleyip komutu `cf:kur` yapmak) 3. maddeyi çözmüyor, branch koruması da
 ayrıca kurulmalı.
 
-> Yan bulgu, ayrı bir iş: **build zamanı bu iki değişkene bağımlı.** `/giris`
+> Yan bulgu, ayrı bir iş: **build zamanı bu iki variable'a bağımlı.** `/giris`
 > ve `/isletmeler-icin` `ƒ (Dynamic)` olarak işaretli olmasına rağmen
-> prerender denemesi `auth()` üzerinden Supabase istemcisini kuruyor ve env
-> yoksa build tümden düşüyor. CI bunu sahte değerlerle örtüyor. Sırların
+> prerender denemesi `auth()` üzerinden Supabase client'ını kuruyor ve env
+> yoksa build tümden düşüyor. CI bunu sahte değerlerle örtüyor. Secret'ların
 > yokluğunda build'in ayakta kalması Faz P2'ye yazılmalı.
 
 
@@ -3428,8 +3428,8 @@ kimliği**. Düzenlenebilir bir alan olsaydı ya başka bir müşterinin numaras
 ikinci bir müşteri kaydı açardı. Numarası değişen müşteri, yeni numarayla
 gelen ilk randevuda zaten ayrı bir kayıt olarak açılıyor.
 
-Alan doğrulayıcıda (`musteri-girdi.ts`) da yok: gövdeye telefon yazılsa bile
-**okunmuyor**, yani kapıya hiç ulaşmıyor. Test bunu ayrıca kilitliyor.
+Alan doğrulayıcıda (`musteri-girdi.ts`) da yok: body'ye telefon yazılsa bile
+**okunmuyor**, yani gate'e hiç ulaşmıyor. Test bunu ayrıca kilitliyor.
 
 ### Ad güncelleme: iki yolun bilinçli farkı
 
@@ -3449,30 +3449,30 @@ düşürüp geri açmak gerekiyordu.
 
 `DELETE /api/musteriler/[id]/kisit` tek satırı sıfırlıyor, ayara dokunmuyor.
 Kısıt **sıfırlanıyor, kısaltılmıyor** — affetme yarım olmaz; yazma tarafı da
-süreyi `greatest` ile hiç kısaltmıyordu, buradaki `null` o kapının bilinçli
+süreyi `greatest` ile hiç kısaltmıyordu, buradaki `null` o gate'in bilinçli
 karşı yönü.
 
 Üç sonuç dönüyor (`tamam` / `kisit-yok` / `yok`) çünkü `isNotNull` koşulu
 yüzünden 0 satırın iki sebebi var: "müşteri yok" 404, "zaten kısıtlı değil"
 409. İkisi kullanıcıya aynı cümleyle anlatılamaz.
 
-**Kısıtın GEÇERLİ olup olmadığına sunucu karar veriyor**, istemci değil:
+**Kısıtın GEÇERLİ olup olmadığına server karar veriyor**, client değil:
 tarihin gelecekte olması tek başına yetmiyor, işletme ayarı 0'a çekildiyse
 kayıtlı tarih de yok sayılıyor — randevu yazan yol (`randevuYaz`) tam olarak
 böyle bakıyor. İki yer ayrışsaydı ekran "kısıtlı" derken müşteri randevu
 alabiliyor olurdu.
 
-### Liste tamamen sunucu bileşeni
+### Liste tamamen server component'i
 
 Arama düz bir **GET formu**, satırlar birer link — tutulacak durum yok. Üç
 sonucu var: arama JavaScript kapalıyken de çalışıyor, sonuç URL'e yazıldığı
-için yer imine konabiliyor, ve liste istemci paketine hiç inmiyor. Fazın ilk
+için yer imine konabiliyor, ve liste client bundle'ına hiç inmiyor. Fazın ilk
 yarısı tek ekran için +135 KiB getirmişti; bu PR **+22,7 KiB** getiriyor.
 
 Sayfalama yok, bilerek: bir salonun müşteri sayısı binlerle değil yüzlerle
 ölçülüyor ve sayfa numaraları, arama kutusunun çözdüğü sorunu ikinci kez
-çözerdi. Sınır aşıldığında liste **sessizce kesilmiyor** — kapı bir satır
-fazla okuyup `dahaVar` bayrağını dolduruyor ve ekran aramayı daraltmayı
+çözerdi. Sınır aşıldığında liste **sessizce kesilmiyor** — gate bir satır
+fazla okuyup `dahaVar` flag'ini dolduruyor ve ekran aramayı daraltmayı
 söylüyor.
 
 ### Elle doğrulamada bulunan iki hata
@@ -3511,7 +3511,7 @@ numarayı arıyordu, yani ekranın gösterdiği biçimi hiç sormamışlardı.
   ayrı bir karar (ekran omuz üstünden okunuyor).
 - **Sayfalama ve sıralama seçenekleri.** Gerekçesi yukarıda.
 
-### Elle doğrulandı — 7 Eylül 2026, `npm run dev` + gerçek oturum
+### Elle doğrulandı — 7 Eylül 2026, `npm run dev` + gerçek session
 
 Veri: `isil-guzellik-salonu`, üç müşteri.
 
@@ -3524,7 +3524,7 @@ Veri: `isil-guzellik-salonu`, üç müşteri.
       işareti ve durum rozetleri yerinde.
 - [x] **Düzenleme.** Ad, e-posta ve not kaydedildi; **telefon alanı formda
       yok**. Değişen ad takvimde de göründü.
-- [x] **Kısıt zinciri uçtan uca.** Takvimde randevu → "Gelmedi" → listede
+- [x] **Kısıt zinciri end-to-end.** Takvimde randevu → "Gelmedi" → listede
       **Kısıtlı** rozeti → detayda kart (*"7 Ekim 2026 tarihine kadar"*, ayar
       30 gün) → "Kısıtı kaldır" → kart kayboldu.
 - [x] **Affetme geçmişi bozmuyor.** Kısıt kalktıktan sonra randevu hâlâ
@@ -3541,15 +3541,15 @@ Veri: `isil-guzellik-salonu`, üç müşteri.
 ### Bundle bütçesi
 
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1792,26 KiB** (bütçe 3 MiB).
-H2a sonundaki 1769,53 KiB'den **+22,73 KiB**. İki ekran ve bir istemci
-bileşeni için küçük — listenin sunucuda kalması işe yaradı (H2a tek ekran için
+H2a sonundaki 1769,53 KiB'den **+22,73 KiB**. İki ekran ve bir client
+component'i için küçük — listenin server'da kalması işe yaradı (H2a tek ekran için
 +135 KiB getirmişti).
 
 ---
 
-## Faz P2 — sırların yokluğunda build (PR #35)
+## Faz P2 — secret'ların yokluğunda build (PR #35)
 
-**Kapandı:** `npm run build` ve `npm run cf:kur` artık Supabase değişkenleri
+**Kapandı:** `npm run build` ve `npm run cf:kur` artık Supabase variable'ları
 olmadan da geçiyor. Faz H2'nin sonunda "P2'ye yazılmalı" diye bırakılan yan
 bulgu.
 
@@ -3557,11 +3557,11 @@ bulgu.
 
 `supabaseSunucu()` şu sırayla koşuyordu: önce `ayarlar()` (env okuyor ve yoksa
 fırlatıyor), sonra `await cookies()`. Next, `dynamic` işareti olmayan bir
-sayfayı build'de **önce prerender etmeyi deniyor** ve sayfa ancak bir istek-anı
+sayfayı build'de **önce prerender etmeyi deniyor** ve sayfa ancak bir request-anı
 API'sine *gerçekten ulaştığında* dinamiğe düşüyor. `ayarlar()` bir satır önce
 patladığı için o düşüş hiç gerçekleşmiyordu.
 
-**`ƒ (Dynamic)` işareti bir girdi değil, çıktı.** Bu sayfaların hiçbirinde
+**`ƒ (Dynamic)` işareti bir input değil, çıktı.** Bu sayfaların hiçbirinde
 `export const dynamic` yok. Env varken prerender denemesi `cookies()`e ulaşıp
 bailout ediyor ve Next sayfayı `ƒ` diye *etiketliyor* — yani etiket, "prerender
 denenmedi"nin değil, **"prerender denendi ve bailout etti"nin** kanıtı. Faz
@@ -3569,24 +3569,24 @@ H2'nin notu bu ilişkiyi ters okumuştu.
 
 **Etki iki değil altı sayfa:** `/giris`, `/kayit`, `/uye-ol`,
 `/kayit/tamamla`, `/isletmeler-icin` ve `/gizlilik` (son ikisi `UstBar` →
-`auth()` üzerinden). Build ilk hatada durduğu için her koşumda yalnızca biri
+`auth()` üzerinden). Build ilk hatada durduğu için her run'da yalnızca biri
 görünüyordu.
 
 ### `connection()` denendi ve ÖLÇÜLDÜ, sonra geri alındı
 
 İlk düzeltme `supabaseSunucu()`'nun ilk satırına `await connection()` koydu —
 niyeti açıkça yazan, `src/app/saglik/page.tsx`'te emsali olan araç. Çalıştı,
-ama `next/server` import'u bu modül üzerinden worker paketine **+45,4 KiB gzip**
+ama `next/server` import'u bu modül üzerinden worker bundle'ına **+45,4 KiB gzip**
 ekledi (1792,40 → 1837,77). Bütçe 3 MiB ve her fazda izleniyor; bir satırın
 sırası için ödenecek bedel değil.
 
 Bugünkü hâli: `cookies()` çağrısı `ayarlar()`'ın **üstüne** alındı. Aynı kesmeyi
-zaten orada duran bir çağrı yapıyor, paket `main` ile birebir aynı kaldı
+zaten orada duran bir çağrı yapıyor, bundle `main` ile birebir aynı kaldı
 (1792,40 KiB).
 
 **"İki satırın sırası" kırılgan bir garanti** — o yüzden kaza olmaktan
-çıkarıldı: `degismezler.test.ts` gövdenin **ilk ifadesinin** o satır olduğunu
-zorluyor. Kapının kırmızıya döndüğü, satırlar bilerek takas edilerek
+çıkarıldı: `degismezler.test.ts` body'nin **ilk ifadesinin** o satır olduğunu
+zorluyor. Gate'in kırmızıya döndüğü, satırlar bilerek takas edilerek
 doğrulandı.
 
 ### CI'daki sahte değerler kaldırıldı
@@ -3597,39 +3597,39 @@ artık doğru değil.
 
 **Kaldırmak, bu regresyonu yakalayan tek koruma.** Sebep ergonomik değil
 teknik: `next build` `.env`'i kendiliğinden yüklüyor ve `.env` gitignore'da —
-yani `.env`'i olan bir geliştirici hatayı **hiçbir zaman göremez**. Depodaki
-tek sırsız ortam o adım. İkinci bir kapı `degismezler.test.ts`'te: adımın içine
-Supabase değişkeni geri konulursa test kırmızıya dönüyor (Faz L'de
+yani `.env`'i olan bir geliştirici hatayı **hiçbir zaman göremez**. Repo'daki
+tek secret'sız environment o adım. İkinci bir gate `degismezler.test.ts`'te: adımın içine
+Supabase variable'ı geri konulursa test kırmızıya dönüyor (Faz L'de
 `TURNSTILE_MODU`'nun sessizce kaybolmasıyla aynı hata sınıfı).
 
 ### Gürültülü hata sessiz hataya dönüşmesin diye
 
 Bu düzeltmenin bilinen bedeli var: **eksik env build'i düşürerek kazara koruma
-sağlıyordu.** Artık sağlamıyor, yani sırsız bir `cf:yayinla` başarıyla **kırık
-bir Worker** yayınlayabilir — `NEXT_PUBLIC_*` derleme anında gömüldüğü için
-`wrangler vars` bunu çalışma anında düzeltemiyor.
+sağlıyordu.** Artık sağlamıyor, yani secret'sız bir `cf:yayinla` başarıyla **kırık
+bir Worker** deploy edebilir — `NEXT_PUBLIC_*` build time'da gömüldüğü için
+`wrangler vars` bunu runtime'da düzeltemiyor.
 
-Karşılığı iki yerde: `next.config.ts` üretim build'inde eksik değişkeni görürse
+Karşılığı iki yerde: `next.config.ts` production build'inde eksik variable'ı görürse
 "bu çıktıyı yayınlamayın" uyarısı basıyor (`throw` değil — fazın işi tam olarak
-düşmemek), ve `ci.yml`'deki mevcut "derleme değişkenleri var mı" kapısı artık
+düşmemek), ve `ci.yml`'deki mevcut "derleme değişkenleri var mı" gate'i artık
 **tek** koruma olarak `docs/yayin.md`'ye yazıldı.
 
-Uyarı üç kez basıyordu; modül seviyesindeki bir bayrak aynı süreçteki tekrarı
-kesti. **İkiye indi, bire değil**: `next build` ayrı bir süreç daha açıyor ve
-oradaki çağrı bayrağı görmüyor. Ölçüldü, kabul edildi.
+Uyarı üç kez basıyordu; modül seviyesindeki bir flag aynı process'teki tekrarı
+kesti. **İkiye indi, bire değil**: `next build` ayrı bir process daha açıyor ve
+oradaki çağrı flag'i görmüyor. Ölçüldü, kabul edildi.
 
 ### Bilerek kapsam dışı
 
-- **`NEXT_PUBLIC_` önekinden kurtulmak.** Bu iki değer tarayıcıda hiç
+- **`NEXT_PUBLIC_` prefix'inden kurtulmak.** Bu iki değer tarayıcıda hiç
   kullanılmıyor (tek okuma noktası `supabase/sunucu.ts`; formlar `/api/*`'ye
-  POST atıyor), yani önek gereksiz ve kaldırılması "sırsız üretilen paket
+  POST atıyor), yani prefix gereksiz ve kaldırılması "secret'sız üretilen bundle
   kırıktır" tuzağını tümden ortadan kaldırırdı. Ama `wrangler.jsonc`,
   `docs/yayin.md` ve `ci.yml`'nin iki işini birden değiştirir — **ayrı iş**.
 - **`NEXT_PUBLIC_SITE_URL` ve `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.** İkisi de
-  build'i zaten düşürmüyordu (`site.ts`'te yedek değer, `turnstile-alani.tsx`
+  build'i zaten düşürmüyordu (`site.ts`'te fallback değer, `turnstile-alani.tsx`
   sessizce kapanıyor). Ayrı davranışlar, ayrı karar.
 - **`/isletmeler-icin` ve `/gizlilik`'i gerçekten statik yapmak** (`UstBar`'ı
-  oturumsuz bir varyanta ayırarak). Performans kararı, bu fazın konusu değil.
+  session'sız bir varyanta ayırarak). Performans kararı, bu fazın konusu değil.
 
 ### Faz P2'den DÜŞÜRÜLEN madde: `scoped-db.ts` bölünmesi
 
@@ -3638,7 +3638,7 @@ kalma, dosya o gün bugün %70 büyümüş). Bölünme yine de **yapılmıyor**,
 ölçülen faydası yok:
 
 - **Bundle: 0.** Dış yüzey (`getScopedDb`) değişmediği için her sayfa yine
-  bütün parçaları yüklüyor; istemci tarafına bugün de hiçbir şey inmiyor
+  bütün parçaları yüklüyor; client tarafına bugün de hiçbir şey inmiyor
   (`import type` kullanılıyor).
 - **Test süresi: 0.** Maliyet gerçek Postgres gidiş-dönüşü, modül boyutu değil;
   test dosyaları zaten bölünmüş.
@@ -3648,13 +3648,13 @@ kalma, dosya o gün bugün %70 büyümüş). Bölünme yine de **yapılmıyor**,
 Kalan fayda tamamen insani: 1809 satırda eksik bir `eq(x.isletmeId, kiraci)`'yi
 incelemede kaçırmak kolay. Ama bedeli ağır: `bildirimKapisi(db, kiraci)` bugün
 *dosya içi* bir fonksiyon; `export` edildiği an `kiraci` **gerçek bir
-parametre** oluyor ve `randevuKapisi(db, "başka-işletme-id")` derlenen,
+parametre** oluyor ve `randevuKapisi(db, "başka-işletme-id")` build edilen,
 lint'ten geçen, hiçbir testin görmediği bir satır hâline geliyor. Yani bölünme
-DEĞİŞMEZ 1'in bugünkü en güçlü argümanını ("filtre tek dosyada bir kapanış
-değişkeni") zayıflatıyor.
+INVARIANT 1'in bugünkü en güçlü argümanını ("filtre tek dosyada bir kapanış
+variable'ı") zayıflatıyor.
 
-Yeniden bakılacak eşik: dosya büyümeye devam ederse ya da kapanış değişkenini
-koruyan kapılar (kiracı bağlama tek dosyada, parçalar dışarıdan import
+Yeniden bakılacak eşik: dosya büyümeye devam ederse ya da closure variable'ını
+koruyan gate'ler (tenant bağlama tek dosyada, parçalar dışarıdan import
 edilemez, imza taraması) ayrı bir iş olarak yazılmak istenirse.
 
 ### Elle doğrulandı — 7 Eylül 2026
@@ -3662,13 +3662,13 @@ edilemez, imza taraması) ayrı bir iş olarak yazılmak istenirse.
 - [x] **Hata önce üretildi.** `.env` geçici kaldırıldı → `npm run build`
       `Error occurred prerendering page "/giris"` ile düştü. Teşhis
       varsayılmadı.
-- [x] **Düzeltmeden sonra sırsız `npm run build` geçiyor**, uyarı basıyor.
-- [x] **Sırsız `npm run cf:kur` geçiyor** — CI'ın artık koşacağı adımın aynısı.
-- [x] **Statik/dinamik sınıflandırması değişmedi.** `main`'de ve dalda statik
+- [x] **Düzeltmeden sonra secret'sız `npm run build` geçiyor**, uyarı basıyor.
+- [x] **Secret'sız `npm run cf:kur` geçiyor** — CI'ın artık koşacağı adımın aynısı.
+- [x] **Statik/dinamik sınıflandırması değişmedi.** `main`'de ve branch'te statik
       kalan üç yol aynı: `/_not-found`, `/icon.svg`, `/robots.txt`.
-- [x] **Gerçek istek.** `npm run dev` → `/giris`, `/kayit`, `/uye-ol`,
+- [x] **Gerçek request.** `npm run dev` → `/giris`, `/kayit`, `/uye-ol`,
       `/isletmeler-icin`, `/gizlilik`, `/` **200**; `POST /api/oturum` **200**.
-- [x] **Kapı kırmızıya dönüyor.** Satırlar bilerek takas edildi, test düştü,
+- [x] **Gate kırmızıya dönüyor.** Satırlar bilerek takas edildi, test düştü,
       geri alındı.
 
 ### Bundle bütçesi
@@ -3681,14 +3681,14 @@ geri alındı.
 
 - [x] **Cloudflare panelinde Workers Builds bağlantısı söküldü** (Workers →
       randevu → Settings → Builds), 7 Eylül 2026. `TODOS.md > Faz H2`'de zaten
-      önerilmişti; bu faz **aciliyetini artırmıştı**: o hat dal başına koşuyor
-      ve üretime yayınlamaktan alıkoyan tek şey eksik env değişkeniydi — bu faz
+      önerilmişti; bu faz **aciliyetini artırmıştı**: o pipeline branch başına koşuyor
+      ve production'a deploy etmekten alıkoyan tek şey eksik env variable'ıydı — bu faz
       o kazayı ortadan kaldırdı, yani söküm koddan önce gelmek zorundaydı.
 
       **Nasıl doğrulandı (ampirik, çünkü CLI'dan okunamıyor):** `wrangler` bu
-      yapılandırmayı göstermiyor ve GitHub App kurulum listesi kullanıcı
-      token'ına kapalı. Bu dalın push'undan sonra Cloudflare'de **ne yeni
-      sürüm ne yeni yayın** belirdi (son ikisi de 7 Eylül 12:41Z, PR #34
+      config'i göstermiyor ve GitHub App kurulum listesi kullanıcı
+      token'ına kapalı. Bu branch'in push'undan sonra Cloudflare'de **ne yeni
+      version ne yeni deploy** belirdi (son ikisi de 7 Eylül 12:41Z, PR #34
       merge'ünden), commit'te Cloudflare'e ait **check run yok**.
 
       **Yanıltıcı görünen şey:** commit'te `cloudflare-workers-and-pages`
@@ -3700,11 +3700,11 @@ geri alındı.
 
 ---
 
-## Faz P2 — `/saglik` şema kontrolü (PR #36)
+## Faz P2 — `/saglik` schema kontrolü (PR #36)
 
-**Kapandı:** `/saglik` artık "Postgres ayakta" demiyor, "şema uygulamanın
+**Kapandı:** `/saglik` artık "Postgres ayakta" demiyor, "schema uygulamanın
 beklediğiyle uyumlu" diyor. Faz L3'ün gösterdiği boşluğu kapatıyor: 200 dönmesi
-şema kanıtı değildi, `hizmet` tablosuna `hizmet_id` FK'sinden farklı bir kolon
+schema kanıtı değildi, `hizmet` tablosuna `hizmet_id` FK'sinden farklı bir kolon
 eklenip drift yaşanabiliyordu.
 
 ### Dört kontrol, tek gidiş-dönüş
@@ -3712,78 +3712,78 @@ eklenip drift yaşanabiliyordu.
 - **Kolon kümesi** — `src/db/sema.ts`'ten `getTableConfig`/`PgTable` ile
   RUNTIME'da türetiliyor, elle yazılmış bir tablo/kolon listesi YOK. Yeni bir
   kolon eklendiğinde kimsenin ikinci bir yeri güncellemesi gerekmiyor.
-- **Göç sayısı ve son göç zamanı** — `drizzle.__drizzle_migrations`, **DEĞİL**
+- **Migration sayısı ve son migration zamanı** — `drizzle.__drizzle_migrations`, **DEĞİL**
   Supabase CLI'ın `supabase_migrations` tablosu (TODOS.md > Faz L3'te bu ayrım
   zaten yazılıydı, burada tekrar doğrulandı: test DB'de yalnızca `drizzle`
-  şeması var). Beklenen sayı `drizzle/meta/_journal.json`'dan **derleme
-  anında** gömülüyor (`resolveJsonModule`); `drizzle-kit generate` her
+  schema'sı var). Beklenen sayı `drizzle/meta/_journal.json`'dan **build
+  time'da** gömülüyor (`resolveJsonModule`); `drizzle-kit generate` her
   koştuğunda kendiliğinden senkron kalıyor.
-- **Çakışma kısıtı** (DEĞİŞMEZ 8) — `randevu_cakisma_yok`, `contype = 'x'`
-  şartıyla. Bu şart olmadan aynı adla bir CHECK kısıtı de "kısıt var" diye
+- **Çakışma constraint'i** (INVARIANT 8) — `randevu_cakisma_yok`, `contype = 'x'`
+  şartıyla. Bu şart olmadan aynı adla bir CHECK constraint'i de "constraint var" diye
   geçerdi; test bunu ayrıca kilitliyor.
 
 **Yön önemli, ters çevrilirse yanlış:** eksik kolon = **bozuk**, fazla kolon =
-**sağlıklı**. İkincisi doğru göç sırasının (`docs/yayin.md`: önce göç, sonra
+**sağlıklı**. İkincisi doğru migration sırasının (`docs/yayin.md`: önce migration, sonra
 deploy) normal ara durumu — hata sayılsaydı doğru davranış cezalandırılırdı.
 
-### Halka açık gövde daraltılmış
+### Public body daraltılmış
 
-`/saglik` ve yeni `/api/saglik` (makine yolu, 200/503) **aynı süzgeçten**
+`/saglik` ve yeni `/api/saglik` (makine yolu, 200/503) **aynı filter'dan**
 geçiyor: `kamuyaAcilanYoklama()`. Kamuya yalnızca `durum`, `surum`, `sureMs`,
-`goc` gidiyor. **Eksik kolon adları ve kısıt durumu GİTMİYOR** — DEĞİŞMEZ 8'in
-kendi ifadesiyle "uygulama katmanı garanti değil"; "kısıt yok" cümlesi
+`goc` gidiyor. **Eksik kolon adları ve constraint durumu GİTMİYOR** — INVARIANT 8'in
+kendi ifadesiyle "uygulama layer'ı garanti değil"; "constraint yok" cümlesi
 saldırgana tam olarak neyin savunmasız olduğunu söylerdi. Sebep yalnızca
-`uretimMi()` false iken (yerel, `wrangler dev`, CI, vitest) sayfada gösteriliyor
+`uretimMi()` false iken (local, `wrangler dev`, CI, vitest) sayfada gösteriliyor
 — geliştirme teşhisi zayıflamıyor.
 
-**"Tablo adları zaten sır değil" argümanı burada geçerli değildi, bilerek
-kullanılmadı:** depo public, `drizzle/*.sql` GitHub'da tam metin duruyor. Ama
-gerçek risk isim değil **drift bilgisi** — "kısıt düştü" cümlesi TOCTOU
+**"Tablo adları zaten secret değil" argümanı burada geçerli değildi, bilerek
+kullanılmadı:** repo public, `drizzle/*.sql` GitHub'da tam metin duruyor. Ama
+gerçek risk isim değil **drift bilgisi** — "constraint düştü" cümlesi TOCTOU
 penceresinin açık olduğunu doğrudan söyler.
 
 ### `/api/saglik` neden ayrı, `/saglik` sayfası neden yetmiyordu
 
 HTML sayfa durum kodu taşımıyor; deploy sonrası bir `curl -f` bunu tek satırda
-okuyamaz. Yeni route GET (mutasyon yok, DEĞİŞMEZ 2 kapsamı dışında),
+okuyamaz. Yeni route GET (mutation yok, INVARIANT 2 kapsamı dışında),
 `Cache-Control: no-store`, `robots.ts`'in `/api/` kuralı zaten kapsıyor.
 
-### Test dosyası DEĞİŞMEZ 1'e nasıl uyuyor
+### Test dosyası INVARIANT 1'e nasıl uyuyor
 
 `src/app/api/saglik/saglik.test.ts` `@/lib/db`'yi **import edemiyor** —
 `iptal.test.ts` ve `randevu.test.ts`'teki emsalin aynısı: havuz kapatılmıyor
 (`baglantiyiKapat` `@/lib/db`'de), `globalThis` üzerinde yaşıyor,
 `fileParallelism: false` olduğu için `src/lib` altındaki testler kendi
-`afterAll`'larında kapatması yetiyor. "Bozuk → 503" dalı bu dosyada DB'yi elle
+`afterAll`'larında kapatması yetiyor. "Bozuk → 503" branch'i bu dosyada DB'yi elle
 bozamadığı için **metin** olarak doğrulanıyor (`route.ts`'teki ternary'nin
 varlığı); davranışsal kanıt `src/lib/saglik.test.ts`'te.
 
 ### Bilerek kapsam dışı
 
-- **Deploy sonrası duman testi ve zamanlanmış nabız.** `/api/saglik` artık var,
+- **Deploy sonrası smoke test ve zamanlanmış health check.** `/api/saglik` artık var,
   ikisi de ona bağlanabilir — ayrı PR, çünkü bu PR merge olup canlıda
-  görünmeden `ci.yml`'e bir duman adımı eklemek ilk günü kırmızıya düşürür
+  görünmeden `ci.yml`'e bir smoke test adımı eklemek ilk günü kırmızıya düşürür
   (endpoint canlıda yok).
-- **Uyarı/hata takibi** (tek hata kapısı + `onRequestError`) — Faz P2'nin
+- **Uyarı/hata takibi** (tek error gate + `onRequestError`) — Faz P2'nin
   ayrı maddesi, bu PR'ın konusu değil.
-- **`bildirim_kuyrugu` başarısız mail sayacı.** Gerçek bir boşluk
-  (`/panel/gelistirici/bildirimler` üretimde 404) ama bu bir *iş* sinyali,
+- **`bildirim_kuyrugu` başarısız mail counter'ı.** Gerçek bir boşluk
+  (`/panel/gelistirici/bildirimler` production'da 404) ama bu bir *iş* sinyali,
   *sağlık* sinyali değil.
-- **Göç `hash` doğrulaması** (`drizzle.__drizzle_migrations.hash` ile
+- **Migration `hash` doğrulaması** (`drizzle.__drizzle_migrations.hash` ile
   `.sql` dosyalarının karşılaştırılması). Drizzle'ın kendi karşılaştırması
-  yalnızca `created_at` sırasına bakıyor, yani uygulanmış bir göç dosyası
-  sonradan düzenlense kimse görmez — gerçek risk ama `.sql` metinlerini pakete
+  yalnızca `created_at` sırasına bakıyor, yani uygulanmış bir migration dosyası
+  sonradan düzenlense kimse görmez — gerçek risk ama `.sql` metinlerini bundle'a
   gömmek ya da codegen adımı gerektiriyor, ayrı iş.
-- **Deploy öncesi şema kapısı** (`_journal.json` ↔ prod karşılaştırıp deploy'u
-  durduran adım). Bu PR'ın **sonrası**: `SUPABASE_DB_URL`'i yayın işine sokmak
-  demek ve o sır bugün bilerek yalnızca `goc` işinde.
+- **Deploy öncesi schema gate'i** (`_journal.json` ↔ prod karşılaştırıp deploy'u
+  durduran adım). Bu PR'ın **sonrası**: `SUPABASE_DB_URL`'i deploy job'ına sokmak
+  demek ve o secret bugün bilerek yalnızca `goc` job'ında.
 
 ### Elle doğrulandı — 7 Eylül 2026
 
-- [x] `npm run dev`, kısıt yerindeyken `/saglik` → "saglikli", `/api/saglik` →
+- [x] `npm run dev`, constraint yerindeyken `/saglik` → "saglikli", `/api/saglik` →
       200
 - [x] Dev DB'de `randevu_cakisma_yok` elle düşürüldü → `/api/saglik` **503**,
       `/saglik` sayfasında "bozuk" + eksik kolon/kısıt teşhisi (yalnızca
-      geliştirmede), kısıt geri eklendi ve `/api/saglik` **200**'e döndü
+      geliştirmede), constraint geri eklendi ve `/api/saglik` **200**'e döndü
 - [x] `npm test` — 716 test geçti (main'e göre +14)
 
 ### Bundle bütçesi
@@ -3807,9 +3807,9 @@ Planın "bugünkü en pahalı boşluk" dediği madde.
 **kendi iç tarayıcısında** açıldığında o cookie orada yok ve akış sessizce
 ölüyor — hedef kitle telefondan geliyor (`docs/plan.md`), yani bu marjinal
 değil baskın durum. `token_hash` cihazdan bağımsız; `/sifre-yenile` sayfası
-GET'te **hiçbir doğrulama yapmıyor, oturum açmıyor** — iki ayrı gerekçeyle:
-kurumsal mail tarayıcıları (Outlook SafeLinks) bağlantıyı kullanıcı
-tıklamadan kendileri açıyor, ve doğrulamak linki açan **herkese** oturum
+GET'te **hiçbir doğrulama yapmıyor, session açmıyor** — iki ayrı gerekçeyle:
+kurumsal mail tarayıcıları (Outlook SafeLinks) link'i kullanıcı
+tıklamadan kendileri açıyor, ve doğrulamak linki açan **herkese** session
 verirdi. Asıl doğrulama yalnızca `POST /api/sifre/yenile`'de, "Şifreyi
 güncelle"ye basıldığında.
 
@@ -3821,13 +3821,13 @@ diğer cihazlardaki yenileme token'larını ayakta bırakmak akışın amacını
 çıkarırdı. İki kararın yan yana okunduğunda çelişki gibi görünmesin diye
 buraya yazılıyor.
 
-### `girisYonu` ortak yardımcıya çıkarıldı
+### `girisYonu` ortak helper'a çıkarıldı
 
 `/api/giris` ve `/api/sifre/yenile` **aynı üçlü kararı** veriyor (kayıtsız →
 `/kayit/tamamla`, MÜŞTERİ → `/randevularim`, diğeri → `devam` ya da `/panel`).
 `src/lib/auth.ts > girisYonu` — tek yerde tutulmazsa bir gün ayrışıp
 müşteriyi panele düşürürlerdi. Bugüne kadar `/api/giris`'in içine gömülü
-olduğu için hiç test edilemeyen bu dal artık saf fonksiyon, `src/lib/auth.test.ts`.
+olduğu için hiç test edilemeyen bu branch artık saf fonksiyon, `src/lib/auth.test.ts`.
 
 **Yan bulgu — gerçek bir tip boşluğu:** `girisYonu`'nun parametre tipini
 `Awaited<ReturnType<typeof kullaniciyiYukle>>` olarak yazınca `null` geçmek
@@ -3835,74 +3835,74 @@ tip hatası verdi. Sebep: `noUncheckedIndexedAccess` kapalı, yani
 `const [kayit] = await db.select()...` tek başına `kayit`i HER ZAMAN dolu
 sayıyor ve `kayit ?? null` sessizce `T | null`den `T`ye daralıyor.
 `kullaniciyiYukle`'nin dönüş tipi artık açıkça `Promise<KullaniciKaydi | null>`
-yazılı. Bu boşluk depodaki her `const [x] = await db.select()...` deseninde
+yazılı. Bu boşluk repo'daki her `const [x] = await db.select()...` pattern'ında
 var olabilir — bilerek geniş taranmadı, yalnızca burada düzeltildi.
 
 ### Kullanıcı numaralandırma (enumeration) yok
 
-`/api/sifre/sifirla` her durumda **tek yanıt**: kayıtlı adres, kayıtsız
+`/api/sifre/sifirla` her durumda **tek response**: kayıtlı adres, kayıtsız
 adres, kayıtlı ama `kullanici` satırı olmayan hesap — üçü de aynı ekrana
 gidiyor. `resetPasswordForEmail` **koşulsuz** çağrılıyor; kendi tablomuzda ön
-kontrol yapılmıyor çünkü (a) yanıt süresini hesabın varlığına göre ayırıp
+kontrol yapılmıyor çünkü (a) response süresini hesabın varlığına göre ayırıp
 zamanlama kanalı açardı, (b) kaydı yarım kalmış biri sıfırlama hakkını
 kaybederdi. `/api/sifre/yenile` de tek mesaj: geçersiz, süresi dolmuş,
 kullanılmış token — üçü de "geçersiz ya da süresi dolmuş" diyor.
 
-### DEĞİŞMEZ 4 ihlal edilmiyor, ama farklı bir yoldan
+### INVARIANT 4 ihlal edilmiyor, ama farklı bir yoldan
 
 Bu tek mail **Resend/`email.ts`'ten geçmiyor** — Supabase'in kendi
 mailer'ından çıkıyor. `degismezler.test.ts`'in `api.resend.com` taraması bu
 yüzden etkilenmiyor. Reddedilen alternatif: `admin.generateLink` ile
-bağlantıyı üretip markalı maili `email.ts`'ten göndermek — bedeli
-`service_role` anahtarını Worker'a sokmak, kazanç yalnızca marka tutarlılığı.
+link'i üretip markalı maili `email.ts`'ten göndermek — bedeli
+`service_role` key'ini Worker'a sokmak, kazanç yalnızca marka tutarlılığı.
 
-### `/giris`'e üçüncü bağlantı DEĞİL, şifre kutusunun yanına
+### `/giris`'e üçüncü link DEĞİL, şifre kutusunun yanına
 
 "Şifremi unuttum" `KimlikKabugu`'nun `alt` dizisine eklenmedi: `/giris` orada
 zaten iki çıkış taşıyor (Faz P kararı, müşteri/işletme ayrımı) ve üçüncüsü o
-çatalı bulanıklaştırırdı. Bağlantı şifre etiketinin yanında.
+çatalı bulanıklaştırırdı. Link şifre etiketinin yanında.
 
 ### Elle yapılan (kod dışı)
 
 - [x] Supabase custom SMTP kuruldu (Resend, `bildirim@randevu.enesmemduhoglu.tech`).
 - [x] **Mail şablonu değiştirildi — 13 Eylül 2026**, Management API
-      (`PATCH /v1/projects/<ref>/config/auth`) ile. Bağlantı
+      (`PATCH /v1/projects/<ref>/config/auth`) ile. Link
       `{{ .SiteURL }}/sifre-yenile?token_hash={{ .TokenHash }}&type=recovery`.
       Konu ve metin de Türkçeye çevrildi ("Şifrenizi yenileyin"); o güne
       kadar Supabase'in İngilizce varsayılanıydı. Geri okunarak doğrulandı.
-      Bu depo dışında yaşayan bir ayar, hiçbir test onu göremiyor.
+      Bu repo dışında yaşayan bir ayar, hiçbir test onu göremiyor.
       Değiştirilmeden linkler Supabase'in kendi `/verify` ucuna düşüyordu ve
       `token_hash` hiç gelmiyordu.
 - [x] E-posta OTP/recovery süresi **zaten 3600 sn** (1 saat). 13 Eylül'de
       okunduğunda öyleydi; bu satır ne zaman değiştiği bilinmeden açık kalmıştı.
-- [x] Auth hız sınırları okundu, **varsayılanlarında bırakıldı** (13 Eylül):
+- [x] Auth rate limit'ler okundu, **varsayılanlarında bırakıldı** (13 Eylül):
       e-posta gönderimi saatte 30, doğrulama 30, OTP 30, anonim kullanıcı
       30, token yenileme 150. Kullanıcı yokken ölçülecek bir yük yok. Faz Q
       (kalkan 2) bunlara dokunmadı; lansmandan önce yeniden bakılmalı.
-- [ ] **Uçtan uca henüz denenmedi:** gerçek bir kutuya sıfırlama maili
-      isteyip bağlantının `/sifre-yenile?token_hash=` ile açıldığını ve yeni
+- [ ] **End-to-end henüz denenmedi:** gerçek bir kutuya sıfırlama maili
+      isteyip link'in `/sifre-yenile?token_hash=` ile açıldığını ve yeni
       şifreyle girişin çalıştığını görmek.
 
 ### Elle doğrulandı — 7 Eylül 2026
 
-- [x] `POST /api/sifre/sifirla`, kayıtsız adresle → 200, aynı sabit yanıt
-- [x] `POST /api/sifre/sifirla`, üretim demo hesabıyla → 200 (gerçek Supabase
-      Auth'a gidiyor — yerel `.env` de aynı bulut projesine bağlı, yalnızca
+- [x] `POST /api/sifre/sifirla`, kayıtsız adresle → 200, aynı sabit response
+- [x] `POST /api/sifre/sifirla`, production demo hesabıyla → 200 (gerçek Supabase
+      Auth'a gidiyor — local `.env` de aynı bulut projesine bağlı, yalnızca
       DB ayrı). **Mail teslimi doğrulanamadı** — şablon henüz `token_hash`
       biçimine geçmedi (yukarıdaki elle iş).
 - [x] `/sifremi-unuttum`, `/sifremi-unuttum/gonderildi`, `/sifre-yenile`,
       `/sifre-yenile?token_hash=...` → hepsi 200
-- [x] `/giris`'te "Şifremi unuttum" bağlantısı görünüyor
+- [x] `/giris`'te "Şifremi unuttum" link'i görünüyor
 - [x] `npm run tip && npm run lint && npm test && npm run build` temiz —
       750 test geçti
 
 ### Bilerek kapsam dışı
 
-- **Oturum içi şifre değiştirme** (`/panel/ayarlar`). Ayrı akış: mevcut
-  şifreyi sormak ve yeniden kimlik doğrulama gerektiriyor.
+- **Session içi şifre değiştirme** (`/panel/ayarlar`). Ayrı akış: mevcut
+  şifreyi sormak ve yeniden authentication gerektiriyor.
 - **Markalı sıfırlama maili** (`email.ts` üzerinden). `service_role`
-  anahtarını Worker'a sokmayı gerektiriyor.
-- **`/api/sifre/yenile`'ye ek yerel hız sınırı.** Bilerek yok: yeni şifresini
+  key'ini Worker'a sokmayı gerektiriyor.
+- **`/api/sifre/yenile`'ye ek local rate limit.** Bilerek yok: yeni şifresini
   birkaç kez zayıf giren meşru kullanıcı, bir saatlik tek token'ıyla
   kilitlenmesin.
 - **`/api/sifre/sifirla`'ya Turnstile eklendi** (kapsam dışı değil, bu PR'a
@@ -3915,7 +3915,7 @@ P2b sonundaki 1859,17 KiB'den **+10,26 KiB**.
 
 ## Düzeltme — dizin filtresi temizlenmiyordu (PR #38)
 
-`/dizin`'de "Filtreleri temizle" bağlantısı yalnızca arama kutusunu
+`/dizin`'de "Filtreleri temizle" link'i yalnızca arama kutusunu
 boşaltıyordu; İl ve Kategori kutuları eski seçimde kalıyordu.
 
 ### Sebep: `defaultValue` bir kez uygulanıyor
@@ -3935,16 +3935,16 @@ gerçekten gönderiliyordu.
 
 ### Karar: kontrollü kutu değil, forma `key`
 
-Kutuları kontrollü yapmak formu istemci bileşenine çevirirdi ve dosyanın kendi
+Kutuları kontrollü yapmak formu client component'ine çevirirdi ve dosyanın kendi
 gerekçesini (yavaş bağlantıda çalışan, paylaşılabilir URL üreten düz GET formu)
 bozardı. Bunun yerine forma URL filtrelerinden türetilen bir `key` konuldu:
-filtre değişince React formu baştan kuruyor, bütün alanlar sunucunun söylediği
-değerle geliyor. Çözüm sunucu bileşeninde kalıyor.
+filtre değişince React formu baştan kuruyor, bütün alanlar server'ın söylediği
+değerle geliyor. Çözüm server component'inde kalıyor.
 
 ### Otomatik test yok — bilerek
 
-Vitest bu depoda `environment: "node"` ve `include` yalnızca `src/**/*.ts`;
-`.tsx` bileşen testi altyapısı hiç yok. Hata React'in DOM uzlaştırmasında
+Vitest bu repo'da `environment: "node"` ve `include` yalnızca `src/**/*.ts`;
+`.tsx` component testi altyapısı hiç yok. Hata React'in DOM uzlaştırmasında
 yaşıyor, yani ancak bir tarayıcı/jsdom render'ıyla yakalanabilirdi — o altyapıyı
 tek bir düzeltme için kurmak bu PR'ın kapsamı değil. Elle doğrulandı.
 
@@ -3957,100 +3957,100 @@ tek bir düzeltme için kurmak bu PR'ın kapsamı değil. Elle doğrulandı.
 
 ---
 
-## Faz P2 — duman testi ve nabız
+## Faz P2 — smoke test ve health check
 
-**Kapandı:** Yayın hattı artık "Worker yüklendi"de değil "Worker çalışıyor"da
-bitiyor, ve canlı site yayın anı dışında da yoklanıyor. PR #36'nın "bilerek
+**Kapandı:** Deploy pipeline artık "Worker yüklendi"de değil "Worker çalışıyor"da
+bitiyor, ve canlı site deploy anı dışında da yoklanıyor. PR #36'nın "bilerek
 kapsam dışı" bıraktığı madde; o gün ayrı tutulmasının sebebi `/api/saglik`'in
 canlıda henüz olmamasıydı.
 
-### Tek betik, iki çağıran
+### Tek script, iki çağıran
 
 `scripts/duman.ts`: `/api/saglik` 200 dönene kadar 12 × 5 sn dener, ardından
-`/`, `/dizin`, `/giris`, `/isletmeler-icin`, `/saglik`'in **yönlendirmesiz**
-200 döndüğüne bakar. `yayinla` işinin son adımı ve `nabiz.yml` aynı betiği
-çağırıyor. **Bağımlılığı yok** (node'un `fetch`'i): nabız işi `npm ci` koşmuyor,
+`/`, `/dizin`, `/giris`, `/isletmeler-icin`, `/saglik`'in **redirect'siz**
+200 döndüğüne bakar. `yayinla` job'ının son adımı ve `nabiz.yml` aynı script'i
+çağırıyor. **Bağımlılığı yok** (node'un `fetch`'i): health check job'ı `npm ci` koşmuyor,
 sparse checkout ile yalnızca bu dosyayı çekiyor.
 
-Yönlendirme takip edilmiyor, çünkü `/giris`'e ya da bir hata sayfasına atan
+Redirect takip edilmiyor, çünkü `/giris`'e ya da bir hata sayfasına atan
 bir yol "200 geldi" diye geçmemeli.
 
-### Sürüm kimliği — eski sürümün 200'ü yeni yayının kanıtı değil
+### Version id — eski version'ın 200'ü yeni deploy'un kanıtı değil
 
-Deploy'dan hemen sonra gelen 200'ü henüz yerini bırakmamış eski sürüm de
-verebilir. Sürüm kimliği olmadan duman testi kırık bir yayını birkaç saniyelik
-pencerede "sağlıklı" geçirebilirdi — ve testin tek işi tam olarak o yayını
+Deploy'dan hemen sonra gelen 200'ü henüz yerini bırakmamış eski version da
+verebilir. Version id olmadan smoke test kırık bir deploy'u birkaç saniyelik
+pencerede "sağlıklı" geçirebilirdi — ve testin tek işi tam olarak o deploy'u
 yakalamak.
 
 - `wrangler.jsonc > version_metadata` → `SURUM` binding'i
-- `src/lib/surum.ts > workerSurumu()` — Cloudflare bağlamı yoksa `null`
-- `/api/saglik` kimliği **gövdeye değil** `X-Worker-Surum` başlığına koyuyor:
-  kamu gövdesinin anahtar kümesi `saglik.test.ts`'te kilitli ve bu alan sağlık
-  bilgisi değil. Bağlam yokken başlık **hiç gitmiyor** (boş değer değil) —
+- `src/lib/surum.ts > workerSurumu()` — Cloudflare context'i yoksa `null`
+- `/api/saglik` kimliği **body'ye değil** `X-Worker-Surum` başlığına koyuyor:
+  kamu body'sinin key kümesi `saglik.test.ts`'te kilitli ve bu alan sağlık
+  bilgisi değil. Context yokken başlık **hiç gitmiyor** (boş değer değil) —
   testte kilitli.
 - CI kimliği `wrangler deployments status --json`'dan okuyor ve yalnızca
-  `%100` trafik taşıyan sürümü kabul ediyor. **JSON'un tamamı basılmıyor:**
-  içinde yayını yapanın e-postası (`author_email`) var ve depo public.
-- Boş bir `--surum` sessizce sürümsüz kontrole düşmüyor, betik 2 ile çıkıyor —
-  yoksa kimlik okunamadığında duman testi eski davranışa dönüp yeşil yanardı.
+  `%100` trafik taşıyan version'ı kabul ediyor. **JSON'un tamamı basılmıyor:**
+  içinde deploy'u yapanın e-postası (`author_email`) var ve repo public.
+- Boş bir `--surum` sessizce version'sız kontrole düşmüyor, script 2 ile çıkıyor —
+  yoksa kimlik okunamadığında smoke test eski davranışa dönüp yeşil yanardı.
 
-Kimlik opak bir uuid; sır değil.
+Kimlik opak bir uuid; secret değil.
 
 ### Otomatik geri alma BİLEREK yok
 
-Duman testi kırmızıysa yayın çıkmış demektir. `wrangler rollback` otomatik
-koşmuyor, çünkü en olası kırmızı sebebi şema (`/api/saglik` → 503) ve şema
+Smoke test kırmızıysa deploy çıkmış demektir. `wrangler rollback` otomatik
+koşmuyor, çünkü en olası kırmızı sebebi schema (`/api/saglik` → 503) ve schema
 bozuksa eski kod da bozuk çalışır — geri alma yalnızca belirtiyi saklardı.
 Karar insana bırakıldı; komut `docs/yayin.md`'de.
 
-### Nabız: 30 dakika, üçüncü parti yok
+### Health check: 30 dakika, üçüncü parti yok
 
-Planın zaten koyduğu karar: depo public, zamanlanmış Actions ücretsiz, başarısız
-koşum bildirim gönderiyor. 30 dakika seçildi, daha sık değil: site düştüğünde
+Planın zaten koyduğu karar: repo public, zamanlanmış Actions ücretsiz, başarısız
+run bildirim gönderiyor. 30 dakika seçildi, daha sık değil: site düştüğünde
 saatte dört ayrı bildirim yeterince gürültü.
 
 GitHub'ın iki bilinen davranışı `nabiz.yml` başlığında yazılı: zamanlanmış
-koşumlar gecikebiliyor, ve **public depoda 60 gün hareket olmazsa zamanlanmış
-iş akışları kendiliğinden kapanıyor.** Bildirim cron satırını en son
+run'lar gecikebiliyor, ve **public repo'da 60 gün hareket olmazsa zamanlanmış
+workflow'lar kendiliğinden kapanıyor.** Bildirim cron satırını en son
 değiştirene gidiyor.
 
 ### Bilerek kapsam dışı
 
-- **`/r/<slug>` duman listesinde yok.** Plan onu da sayıyordu, ama üretimde
+- **`/r/<slug>` smoke test listesinde yok.** Plan onu da sayıyordu, ama production'da
   sabit, silinmeyeceği garanti bir işletme yok (bugün 2 işletme, 0'ı dizinde).
-  Betiğe gömülü bir slug, o işletme kapandığı gün yayını kırmızıya düşürür.
-- **Uyarı/hata takibi** (tek hata kapısı + `onRequestError`) — P2'nin son
+  Script'e gömülü bir slug, o işletme kapandığı gün deploy'u kırmızıya düşürür.
+- **Uyarı/hata takibi** (tek error gate + `onRequestError`) — P2'nin son
   maddesi, ayrı PR.
-- **Nabzın Supabase'i uyanık tuttuğu** — `/api/saglik` her koşumda gerçek bir
-  sorgu atıyor, yani ücretsiz katmanın "bir hafta hareketsiz" duraklatmasını
+- **Health check'in Supabase'i uyanık tuttuğu** — `/api/saglik` her run'da gerçek bir
+  query atıyor, yani free tier'ın "bir hafta hareketsiz" duraklatmasını
   muhtemelen engelliyor. **Ölçülmedi**, bu yüzden plandaki risk satırı
   kapatılmadı.
-- **Deploy öncesi şema kapısı** — PR #36'daki gerekçe aynen geçerli
-  (`SUPABASE_DB_URL` yayın işine girmiyor).
+- **Deploy öncesi schema gate'i** — PR #36'daki gerekçe aynen geçerli
+  (`SUPABASE_DB_URL` deploy job'ına girmiyor).
 
 ### Elle doğrulandı — 11 Eylül 2026
 
-- [x] Canlıya karşı sürümsüz: `/api/saglik` 200 (`goc 6/6`), beş sayfa 200,
+- [x] Canlıya karşı version'sız: `/api/saglik` 200 (`goc 6/6`), beş sayfa 200,
       çıkış 0
 - [x] Canlıya karşı yanlış `--surum`: 12 denemede kırmızı, çıkış 1; olmayan
       adres (404) kırmızı; argümansız çağrı çıkış 2
-- [x] `cf:onizle` (workerd): `X-Worker-Surum` geliyor, istekler arasında sabit;
-      betik o kimlikle çıkış 0
-- [x] `cf:onizle`: test konteyneri durdurulunca `/api/saglik` **503**, geri
+- [x] `cf:onizle` (workerd): `X-Worker-Surum` geliyor, request'ler arasında sabit;
+      script o kimlikle çıkış 0
+- [x] `cf:onizle`: test container'ı durdurulunca `/api/saglik` **503**, geri
       açılınca 200
-- [x] CI adımındaki satır içi JS kabuksuz sınandı: normal çıktıdan yalnızca
-      kimlik çıkıyor, kademeli yayında (%60/%40) ve bozuk JSON'da çıkış 1
+- [x] CI adımındaki satır içi JS kabuksuz test edildi: normal çıktıdan yalnızca
+      kimlik çıkıyor, kademeli deploy'da (%60/%40) ve bozuk JSON'da çıkış 1
 - [x] `npm run tip && npm run lint && npm test` temiz — 750 test, 54 dosya
 
 ### Merge sonrası bakıldı — 11 Eylül 2026
 
-- [x] İlk `yayinla` koşumunda duman adımı yeşil (koşum 34535080337).
-      **Sürüm karşılaştırmasının gerekli olduğu ilk koşumda görüldü:** deneme 1
-      hâlâ trafik taşıyan ESKİ sürüme denk geldi (başlık yok, `surum=-`), bir
-      sonraki deneme yeni sürümü gördü. Kimlik karşılaştırması olmasaydı ilk
-      200 yeni yayının kanıtı sayılacaktı. Log'da e-posta yok.
-- [x] Elle tetiklenen ilk nabız yeşil (koşum 34535481109) — GitHub
-      koşucusundan gelen istek Cloudflare'in bot kurallarına takılmadı
+- [x] İlk `yayinla` run'ında smoke test adımı yeşil (run 34535080337).
+      **Version karşılaştırmasının gerekli olduğu ilk run'da görüldü:** deneme 1
+      hâlâ trafik taşıyan ESKİ version'a denk geldi (başlık yok, `surum=-`), bir
+      sonraki deneme yeni version'ı gördü. Kimlik karşılaştırması olmasaydı ilk
+      200 yeni deploy'un kanıtı sayılacaktı. Log'da e-posta yok.
+- [x] Elle tetiklenen ilk health check yeşil (run 34535481109) — GitHub
+      koşucusundan gelen request Cloudflare'in bot kurallarına takılmadı
 
 ### Bundle bütçesi
 
@@ -4061,18 +4061,18 @@ P2c sonundaki 1869,43 KiB'den **+0,14 KiB**.
 
 ## Faz P2 — hata takibi
 
-**Kapandı:** Üretimde bir istek patladığında artık birisi duyuyor. Teknik borç
+**Kapandı:** Production'da bir request patladığında artık birisi duyuyor. Teknik borç
 maddesi 3'ün (*"log düşüyor ama uyarı çıkmıyor ve kimse panele bakmıyor"*) son
-yarısı; `/saglik`'in şema kontrolü P2b'de, nabız P2d'de kapanmıştı. P2'nin son
+yarısı; `/saglik`'in schema kontrolü P2b'de, health check P2d'de kapanmıştı. P2'nin son
 maddesi.
 
-### Tek kapı: `src/lib/hata.ts > hataBildir(kaynak, hata)`
+### Tek gate: `src/lib/hata.ts > hataBildir(kaynak, hata)`
 
-`email.ts > gonder()` deseninin hata yolundaki karşılığı — TODOS'un kendi
-cümlesi: *"süzgeç tek bir kapıdan geçmeli"*. İki yerden çağrılıyor:
+`email.ts > gonder()` pattern'ının hata yolundaki karşılığı — TODOS'un kendi
+cümlesi: *"filter tek bir gate'ten geçmeli"*. İki yerden çağrılıyor:
 
 - `src/instrumentation.ts > onRequestError` — `catch` görmeyen her hata
-  (route handler, sunucu bileşeni, server action)
+  (route handler, server component'i, server action)
 - Kendi `catch`'i olan dört yol (`kayit`, `kayit/tamamla`, `uye-ol`,
   `uye-ol/tamamla`). Önceden sabit bir `console.error` metni basıyorlardı ve o
   satır hiçbir şeye sayılmıyordu.
@@ -4082,135 +4082,135 @@ ve `HATA` binding'i ile Analytics Engine'e bir veri noktası ("kaç tane").
 `degismezler.test.ts` `console.error`'un ve `writeDataPoint`'in `src` altında
 başka yerde geçmesini yasaklıyor.
 
-### Kapı MESAJ TAŞIMIYOR — neden desenle temizlemek değil
+### Gate MESAJ TAŞIMIYOR — neden pattern'la temizlemek değil
 
-Drizzle'ın `DrizzleQueryError`'u mesaja sorgunun **parametrelerini** ekliyor
-(`params: ali@ornek.com,0555...`). Mesajı bir desen listesiyle temizlemek
+Drizzle'ın `DrizzleQueryError`'u mesaja query'nin **parametrelerini** ekliyor
+(`params: ali@ornek.com,0555...`). Mesajı bir pattern listesiyle temizlemek
 mümkündü ama liste bir gün eksik kalır; mesajın hiç alınmaması eksik kalmaz.
-Taşınanlar: kaynak, tür, Postgres kodu (ağ hatalarında `ECONNREFUSED` gibi Node
-kodu), kısıt adı, React'in `digest`'i. Ayrıntı kaybolmuyor — Next aynı hatayı
+Taşınanlar: kaynak, tür, Postgres kodu (network hatalarında `ECONNREFUSED` gibi Node
+kodu), constraint adı, React'in `digest`'i. Ayrıntı kaybolmuyor — Next aynı hatayı
 kendi satırına basıyor ve `digest` ikisini eşleştiriyor (ama bkz. aşağıdaki
 bulgu).
 
 Kaynak route'un **dosya yolu** (`route /api/musaitlik`, `render /dizin`),
-isteğin yolu değil: `istek.path` sorgu dizesini taşıyor ve iptal jetonu,
-`token_hash` orada; `istek.headers` oturum cookie'sini taşıyor.
+request'in yolu değil: `istek.path` query dizesini taşıyor ve iptal token'ı,
+`token_hash` orada; `istek.headers` session cookie'sini taşıyor.
 
-### Neden veritabanı değil, neden log sorgusu değil
+### Neden veritabanı değil, neden log query'si değil
 
 - **Veritabanı:** en olası hata veritabanının kendisi (Supabase duraklatıldı,
-  Hyperdrive bağlantıyı kaybetti). Hatayı DB'ye yazan kapı tam o anda düşerdi.
-  Üstelik şema göçü gerektirirdi.
-- **Workers Logs sorgusu:** log satırını metinle aramak, satırın biçimi
-  değiştiği gün sessizce **sıfır** döndürür ve nabız yeşil yanar. Analytics
-  Engine'de sayaç ayrı bir kayıt; SQL API tek satır sorgu ve tek okuma izni.
-  Ücretsiz planda günde 100 bin yazma, 10 bin sorgu — nabız günde 48 sorgu.
+  Hyperdrive connection'ı kaybetti). Hatayı DB'ye yazan gate tam o anda düşerdi.
+  Üstelik schema migration'ı gerektirirdi.
+- **Workers Logs query'si:** log satırını metinle aramak, satırın biçimi
+  değiştiği gün sessizce **sıfır** döndürür ve health check yeşil yanar. Analytics
+  Engine'de counter ayrı bir kayıt; SQL API tek satır query ve tek okuma izni.
+  Ücretsiz planda günde 100 bin yazma, 10 bin query — health check günde 48 query.
 
-### Uyarı kanalı: nabızın ikinci adımı
+### Uyarı kanalı: health check'in ikinci adımı
 
 `scripts/hata-say.ts` son **60 dakikadaki** hataları sayıyor, sıfırdan büyükse
-1 ile çıkıyor; başarısız koşum bildirim gönderiyor. Duman kırmızıyken de koşuyor
+1 ile çıkıyor; başarısız run bildirim gönderiyor. Smoke test kırmızıyken de koşuyor
 (`!cancelled()`) — iki sinyal birbirinin yerini tutmuyor.
 
-- **Pencere > aralık, bilerek.** GitHub zamanlanmış koşumları geciktiriyor;
-  pencere 30 dakika olsaydı iki koşum arası 30'u aştığında aradaki hatalar
-  hiç sayılmazdı. Bedeli: aynı hata iki koşumda görünür.
-- **Eşik sıfır.** Her sunucu hatası bir bildirim. Gürültü çıkarsa eşik o gün
+- **Pencere > aralık, bilerek.** GitHub zamanlanmış run'ları geciktiriyor;
+  pencere 30 dakika olsaydı iki run arası 30'u aştığında aradaki hatalar
+  hiç sayılmazdı. Bedeli: aynı hata iki run'da görünür.
+- **Eşik sıfır.** Her server hatası bir bildirim. Gürültü çıkarsa eşik o gün
   ölçülerek konur — bugün gürültünün ne olacağı bilinmiyor.
 - **Public log'a yalnızca toplam basılıyor.** Hangi route'un patladığı P2b'deki
   gerekçeyle (drift bilgisi saldırgana harita) basılmıyor; ayrıntı Workers
   Logs'ta.
-- **Ayrı, yalnızca okuyan jeton** (`CLOUDFLARE_ANALIZ_TOKENI`, Account
-  Analytics Read). Yayın jetonu otuz dakikada bir koşan bir işe girmiyor.
-- **Jeton yoksa 2 ile çıkıyor, sessizce geçmiyor** — Faz L'deki
+- **Ayrı, yalnızca okuyan token** (`CLOUDFLARE_ANALIZ_TOKENI`, Account
+  Analytics Read). Deploy token'ı otuz dakikada bir koşan bir işe girmiyor.
+- **Token yoksa 2 ile çıkıyor, sessizce geçmiyor** — Faz L'deki
   `TURNSTILE_MODU` dersi.
 - `console.warn` sayılmıyor: `turnstile.ts`'teki uyarı bot denemesinin izi,
   uygulama hatası değil.
 
 ### `cf:onizle`'de ölçülenler — iki varsayım yanlış çıktı
 
-Test konteyneri durdurularak `/dizin` (render) ve `/api/musaitlik` (route)
-500'e düşürüldü, yerel workerd'in log'u gözlem API'sinden okundu:
+Test container'ı durdurularak `/dizin` (render) ve `/api/musaitlik` (route)
+500'e düşürüldü, local workerd'in log'u gözlem API'sinden okundu:
 
 - `onRequestError` workerd'de **tetikleniyor** — OpenNext instrumentation
-  dosyasını statik `require`'a çeviriyor. `routePath` desen olarak geliyor
+  dosyasını statik `require`'a çeviriyor. `routePath` pattern olarak geliyor
   (`/dizin`, `/api/musaitlik`), `render` hatasında `digest` dolu.
-- **`constructor.name` → `"a2"`.** Worker paketinde sınıf adları küçültülüyor.
-- **`instanceof DrizzleQueryError` → tutmadı.** Pakette sınıfın birden fazla
+- **`constructor.name` → `"a2"`.** Worker bundle'ında sınıf adları küçültülüyor.
+- **`instanceof DrizzleQueryError` → tutmadı.** Bundle'da sınıfın birden fazla
   kopyası var. Tür artık biçimden tanınıyor (`query` metni + `params` alanı);
   ölçümde iki yol da `DrizzleQueryError` verdi.
-- `HATA` binding'i yerelde de bağlanıyor (`Analytics Engine Dataset local`).
+- `HATA` binding'i local'de de bağlanıyor (`Analytics Engine Dataset local`).
 
 ### `tsconfig > moduleDetection: "force"`
 
 `scripts/hata-say.ts` ile `scripts/duman.ts`'in ikisinde de import yok;
 TypeScript onları tek küresel kapsamda görüp aynı adlı sabitlerde hata verdi.
 `export {}` eklemek çare değildi (ölçüldü): Node dosyayı ESM olarak yeniden
-ayrıştırıyor, her koşumda uyarı basıyor ve Windows'ta üst seviye
-`process.exit` libuv assertion'ına düşüyor. Çalışma zamanı değil derleyici
+ayrıştırıyor, her run'da uyarı basıyor ve Windows'ta üst seviye
+`process.exit` libuv assertion'ına düşüyor. Runtime değil compiler
 ayarı değişti.
 
-### BULGU — Next'in kendi hata satırı sorgu parametrelerini taşıyor
+### BULGU — Next'in kendi hata satırı query parametrelerini taşıyor
 
 Ölçüm sırasında görüldü: Next yakalanmamış hatayı kendi `console.error`'uyla
 da basıyor ve Drizzle'ın mesajını olduğu gibi yazıyor —
 `Failed query: select ... from "isletme" where "slug" = $1 ... params: yok,true,1`.
 Parametre ziyaretçinin yazdığı slug'dı; aynı satır bir e-posta, telefon ya da
-**ham iptal jetonu** da taşıyabilir (`randevu.iptal_token` sorguya düz
+**ham iptal token'ı** da taşıyabilir (`randevu.iptal_token` query'ye düz
 giriyor, `musteri-db.ts` ve `scoped-db.ts`).
 
-Bu PR'ın kapısı temiz; sızıntı Next'in varsayılan log'unda ve bu faz öncesinden
+Bu PR'ın gate'i temiz; leak Next'in varsayılan log'unda ve bu faz öncesinden
 beri var. Log hesaba özel ve ücretsiz planda üç gün tutuluyor, yani ciddiyeti
-orta-düşük — ama DEĞİŞMEZ 5'in lafzına aykırı. **Ayrı iş**, çünkü çözümü
-başka bir konu: ya DB katmanında Drizzle hatasını parametresiz bir hataya
+orta-düşük — ama INVARIANT 5'in lafzına aykırı. **Ayrı iş**, çünkü çözümü
+başka bir konu: ya DB layer'ında Drizzle hatasını parametresiz bir hataya
 çevirmek, ya da Next'in log'unu susturmak. İkisi de ölçülmeden seçilmemeli.
 
 ### Bilerek kapsam dışı
 
 - **Next'in log satırındaki parametreler** — yukarıdaki bulgu, ayrı iş.
-- **Tarayıcı hataları.** `onRequestError` yalnızca sunucu. İstemci bileşeninde
-  patlayan bir şey sayılmıyor; `error.tsx`/`global-error.tsx` bu depoda yok.
-- **`bildirim_kuyrugu` başarısız mail sayacı** — PR #36'daki gerekçe aynen:
+- **Tarayıcı hataları.** `onRequestError` yalnızca server. Client component'inde
+  patlayan bir şey sayılmıyor; `error.tsx`/`global-error.tsx` bu repo'da yok.
+- **`bildirim_kuyrugu` başarısız mail counter'ı** — PR #36'daki gerekçe aynen:
   bu bir iş sinyali, sağlık sinyali değil.
 - **Hangi route'un patladığını bildirimde göstermek.** Public log'a basılmıyor;
-  özel bir kanal (e-posta) üçüncü parti ya da sır demek.
+  özel bir kanal (e-posta) üçüncü parti ya da secret demek.
 
 ### Elle doğrulandı — 11 Eylül 2026
 
-- [x] `cf:onizle`, DB kapalı: `render /dizin` ve `route /api/musaitlik` kapıdan
-      geçti, tür `DrizzleQueryError`, log satırında sorgu metni ve parametre yok
-- [x] `hata-say.ts` jetonsuz çıkış 2; `duman.ts` argümansız hâlâ çıkış 2 ve
+- [x] `cf:onizle`, DB kapalı: `render /dizin` ve `route /api/musaitlik` gate'ten
+      geçti, tür `DrizzleQueryError`, log satırında query metni ve parametre yok
+- [x] `hata-say.ts` token'sız çıkış 2; `duman.ts` argümansız hâlâ çıkış 2 ve
       uyarısız (moduleDetection değişikliğinden sonra)
 - [x] `npm run tip && npm run lint && npm test` temiz — 767 test, 55 dosya
       (P2d'ye göre +17)
 
 ### Merge öncesi elle iş — yapıldı, 11 Eylül 2026
 
-- [x] Cloudflare'de yalnızca **Account Analytics Read** izinli jeton,
+- [x] Cloudflare'de yalnızca **Account Analytics Read** izinli token,
       GitHub'a `CLOUDFLARE_ANALIZ_TOKENI` secret'ı
-- [x] **Analytics Engine hesapta etkinleştirildi.** Dalda koşulan ilk nabız
-      (34541249091) `API 403 - Authorization error` verdi: jeton doğruydu,
+- [x] **Analytics Engine hesapta etkinleştirildi.** Branch'te koşulan ilk health check
+      (34541249091) `API 403 - Authorization error` verdi: token doğruydu,
       özellik hesapta kapalıydı. Topluluk bildirimlerine göre aynı durumda
       `HATA` binding'li bir deploy da `403 [10089] "You need to enable
       Analytics Engine"` ile düşüyor — **ölçmeden merge edilseydi merge anı
-      kırık bir yayın anı olurdu** (yayın hattında onay kapısı yok). Bu kısım
+      kırık bir deploy anı olurdu** (deploy pipeline'da approval gate yok). Bu kısım
       topluluktan, bizde ölçülmedi.
-- [x] Etkinleştirmeden sonra nabız dalda yeşil (34604357887): SQL API
-      veri seti **henüz yokken hata dönmüyor, boş sonuç dönüyor** ve betik
+- [x] Etkinleştirmeden sonra health check branch'te yeşil (34604357887): SQL API
+      dataset **henüz yokken hata dönmüyor, boş sonuç dönüyor** ve script
       bunu "hata yok" okuyor.
 
-Son maddenin bedeli: adı yanlış yazılmış bir veri seti de hata vermez, sonsuza
+Son maddenin bedeli: adı yanlış yazılmış bir dataset de hata vermez, sonsuza
 dek sıfır sayar — yani `hata-say.ts > VERI_SETI` ile `wrangler.jsonc >
-dataset` ayrışırsa nabız kör olur. `degismezler.test.ts` iki adın aynı
+dataset` ayrışırsa health check kör olur. `degismezler.test.ts` iki adın aynı
 olduğunu arıyor.
 
 ### Merge sonrası bakılacak
 
-- [x] İlk `yayinla` koşumu yeşil — `HATA` binding'li ilk gerçek deploy
-      (CI koşumu 34604897458, 11 Eylül 2026; Faz Q başlarken bakıldı)
-- [ ] Uçtan uca yazma üretimde **henüz gözlenmedi**: yerelde binding bağlandı
-      ve kapı çağrıldı, ama Analytics Engine'e düşen ilk veri noktası ilk
-      gerçek hatayla görülecek. O gün nabız kırmızı olmalı ve Workers Logs'ta
+- [x] İlk `yayinla` run'ı yeşil — `HATA` binding'li ilk gerçek deploy
+      (CI run'ı 34604897458, 11 Eylül 2026; Faz Q başlarken bakıldı)
+- [ ] End-to-end yazma production'da **henüz gözlenmedi**: local'de binding bağlandı
+      ve gate çağrıldı, ama Analytics Engine'e düşen ilk veri noktası ilk
+      gerçek hatayla görülecek. O gün health check kırmızı olmalı ve Workers Logs'ta
       `olay = "hata"` satırı bulunmalı.
 
 ### Bundle bütçesi
@@ -4222,18 +4222,18 @@ P2d sonundaki 1869,57 KiB'den **+3,11 KiB**.
 
 ## Faz Q — kalkan 2
 
-**Kapandı:** Oturumsuz `POST /api/randevu` yoluna numara değiştiren bota karşı
+**Kapandı:** Session'sız `POST /api/randevu` yoluna numara değiştiren bota karşı
 iki veritabanı tavanı ve panelde bir yoğunluk uyarısı. Faz J'de "misafir
 randevusu kalıyor, kalkan ayrı fazda güçlenecek" kararının karşılığı — orada
 sayılan dört adımın üçü yapıldı, biri ölçüye dayanarak reddedildi.
 
 ### Neden veritabanı, neden kenar değil
 
-Mevcut üç kat numarayı her istekte değiştiren **yavaş** bir betiği görmüyor:
-Turnstile jeton başına maliyet üretmiyor, IP hız sınırı yaklaşık ve kolo
-başına (Faz L'de üretimde ilk 429 **22. istekte** geldi), açık randevu sınırı
-ve gelmedi kısıtı ise numaraya bağlı. Bu betiği durduracak tek yer yazılan
-satırların kendisi. Şema göçü gerekmedi: `randevu` ve `musteri` tablolarında
+Mevcut üç kat numarayı her request'te değiştiren **yavaş** bir script'i görmüyor:
+Turnstile token başına maliyet üretmiyor, IP rate limit yaklaşık ve kolo
+başına (Faz L'de production'da ilk 429 **22. request'te** geldi), açık randevu sınırı
+ve gelmedi kısıtı ise numaraya bağlı. Bu script'i durduracak tek yer yazılan
+satırların kendisi. Schema migration'ı gerekmedi: `randevu` ve `musteri` tablolarında
 `olusturma_tarihi` zaten vardı.
 
 ### İki tavan (`src/lib/randevu-kotasi.ts`)
@@ -4241,10 +4241,10 @@ satırların kendisi. Şema göçü gerekmedi: `randevu` ve `musteri` tabloları
 | Tavan | Değer | Kapattığı delik |
 |---|---|---|
 | Numara başına, son 24 saatte oluşturulan randevu | 5 | Al → iptal et → yeniden al. Açık sınır (3) hiç aşılmadan takvimde gezinmek ve her turda bildirim üretmek |
-| İşletme başına, son 24 saatte çevrim içi randevu alan **yeni** müşteri | 20 | Numara değiştiren betik; her istek yeni bir müşteri |
+| İşletme başına, son 24 saatte çevrim içi randevu alan **yeni** müşteri | 20 | Numara değiştiren script; her request yeni bir müşteri |
 
 Sabitler route'tan ayrı bir dosyada, çünkü panel de aynı tavana bakıyor. İki
-yerde iki sabit, panelin "20'ye ulaşırsa" dediği gün kapının 30'da kapanması
+yerde iki sabit, panelin "20'ye ulaşırsa" dediği gün gate'in 30'da kapanması
 demekti. Açık randevu sınırı (`EN_COK_ACIK_RANDEVU`) da aynı dosyaya taşındı.
 
 ### Kararlar
@@ -4252,17 +4252,17 @@ demekti. Açık randevu sınırı (`EN_COK_ACIK_RANDEVU`) da aynı dosyaya taş�
 - **Tavan dolunca yeni müşteri REDDEDİLİYOR** (kullanıcı kararı, 13 Eylül
   2026). Üç seçenek konuşuldu: reddet, yalnızca panel uyarısı, tavandan
   sonrasını onaya düşür. Onaya düşürmek işe yaramıyor, çünkü `BEKLIYOR` da
-  slotu tutuyor (`EXCLUDE` kısıtının `WHERE`'i) ve takvim yine doluyor.
+  slotu tutuyor (`EXCLUDE` constraint'inin `WHERE`'i) ve takvim yine doluyor.
   Yalnızca uyarı ise zararı sınırlamıyor. **Bedel bilerek kabul edildi:** bot
   tavanı doldurduğu gün o işletmeye gelen gerçek yeni müşteri de reddediliyor
   ve işletmeyi aramaya yönlendiriliyor. Kayıtlı müşteri etkilenmiyor. Tavan bu
   yüzden cömert (20); hedef kitle çevrim içi yolla günde birkaç yeni müşteri
   kazanıyor.
 
-- **IP hız sınırı SIKILAŞTIRILMADI** (kullanıcı kararı). Plandaki madde buydu
+- **IP rate limit SIKILAŞTIRILMADI** (kullanıcı kararı). Plandaki madde buydu
   ama iki gerekçe tersini söylüyor: Türkiye'de mobil operatörler CGNAT
   kullanıyor, yani çok sayıda gerçek müşteri aynı IP'yi paylaşıyor; ve
-  üretimdeki sayaç zaten yaklaşık — 5'i 3 yapmak ölçülen davranışı pek
+  production'daki counter zaten yaklaşık — 5'i 3 yapmak ölçülen davranışı pek
   değiştirmez, CGNAT arkasındaki müşteriyi ise gerçekten etkiler.
 
 - **Pencere veritabanı saatiyle** (`now() - interval '24 hours'`), route'un
@@ -4272,8 +4272,8 @@ demekti. Açık randevu sınırı (`EN_COK_ACIK_RANDEVU`) da aynı dosyaya taş�
   gerekçesiyle aynı.
 
 - **Kayan pencere, takvim günü değil.** Takvim günü işletmenin saat dilimine
-  çevirmeyi gerektirirdi (DEĞİŞMEZ 7) ve gece yarısı sayacı sıfırlayan bir
-  kapı betiğe tam olarak ne zaman döneceğini söylerdi. Müşteri mesajı bu
+  çevirmeyi gerektirirdi (INVARIANT 7) ve gece yarısı counter'ı sıfırlayan bir
+  gate script'e tam olarak ne zaman döneceğini söylerdi. Müşteri mesajı bu
   yüzden "bugün" değil "son 24 saatte" diyor; "yarın deneyin" deyip gece
   yarısında yine reddetmek yanlış bir söz olurdu.
 
@@ -4286,8 +4286,8 @@ demekti. Açık randevu sınırı (`EN_COK_ACIK_RANDEVU`) da aynı dosyaya taş�
   "son 24 saatte oluşmuş VE en az bir `kaynak: MUSTERI` randevusu olan müşteri
   satırı".
 
-- **Yeni müşteri kapısı müşteri satırı YAZILMADAN önce.** Reddedilen istek
-  transaction'ı hatasız bitiriyor; kapı sonra olsaydı commit edilen şey
+- **Yeni müşteri gate'i müşteri satırı YAZILMADAN önce.** Reddedilen request
+  transaction'ı hatasız bitiriyor; gate sonra olsaydı commit edilen şey
   randevusu olmayan bir müşteri kaydı olurdu. Testi var: reddedilen numaranın
   satırı veritabanında yok.
 
@@ -4295,36 +4295,36 @@ demekti. Açık randevu sınırı (`EN_COK_ACIK_RANDEVU`) da aynı dosyaya taş�
   "önce birini iptal edin" mesajı yanlış yol gösterirdi — iptal edilen de
   sayılıyor.
 
-- **Mesajlar sayı ve sebep taşımıyor.** Halka açık yol oturumsuz; "bu işletme
-  bugün 20 yeni müşteri aldı" hem hacmi dışarı verir hem betiğe kotasını
+- **Mesajlar sayı ve sebep taşımıyor.** Public yol session'sız; "bu işletme
+  bugün 20 yeni müşteri aldı" hem hacmi dışarı verir hem script'e kotasını
   öğretir. Yeni müşteri mesajı işletmenin telefonunu taşıyor — müşterinin
   yapabileceği tek şey aramak. Testler mesajda sayının geçmediğini arıyor.
 
-- **Sayım SERIALIZABLE değil.** Aynı anda gelen istekler tavanı birkaç kişi
+- **Sayım SERIALIZABLE değil.** Aynı anda gelen request'ler tavanı birkaç kişi
   aşabilir; açık randevu sınırındaki gerekçeyle kabul edildi.
 
-- **İki taraf aynı sayım fonksiyonu** (`cevrimIciYeniMusteriSay`): yazma kapısı
-  ve panel. Ayrışsalar panel "sınıra üç kişi kaldı" derken kapı çoktan
+- **İki taraf aynı sayım fonksiyonu** (`cevrimIciYeniMusteriSay`): yazma gate'i
+  ve panel. Ayrışsalar panel "sınıra üç kişi kaldı" derken gate çoktan
   kapanmış olurdu.
 
 - **Panel uyarısı yalnızca `/panel` ana sayfasında** ve eşik tavanın yarısı
   (10). Tavan dolmadan başlıyor ki işletme tanımadığı kayıtları iptal edip
-  kapının kapanmasını önleyebilsin. Eşiğin altında hiçbir şey çizilmiyor.
-  Düzene konmadı: her panel sayfasına bir sorgu eklerdi ve Next'in dokümanına
+  gate'in kapanmasını önleyebilsin. Eşiğin altında hiçbir şey çizilmiyor.
+  Düzene konmadı: her panel sayfasına bir query eklerdi ve Next'in dokümanına
   göre düzen sayfalar arası geçişte yeniden çizilmiyor, yani uyarı zaten
   tazelenmezdi. Renk amber (`durum-bekliyor`): tasarım sisteminde "bekleyen
   durum ve uyarı" rengi.
 
-### Kasıtlı ihlalle sınandı
+### Kasıtlı ihlalle test edildi
 
-İki mutasyon denendi, ikisi de yakalandı ve geri alındı: kayıtlı müşteri
-muafiyeti kaldırılınca hem kapı hem route testi kırmızı; günlük sayımdan
+İki mutation denendi, ikisi de yakalandı ve geri alındı: kayıtlı müşteri
+muafiyeti kaldırılınca hem gate hem route testi kırmızı; günlük sayımdan
 `kaynak` filtresi kaldırılınca "işletmenin elle eklediği randevu kotayı
 yemiyor" testi kırmızı.
 
 ### Bilerek kapsam dışı
 
-- **İşletmeye özel ayarlanabilir tavan.** Şema göçü gerektirir (`isletme`e
+- **İşletmeye özel ayarlanabilir tavan.** Schema migration'ı gerektirir (`isletme`e
   iki kolon) ve bugün hiçbir işletme farklı bir değer istemiyor. Gerçek
   bir işletme 20'ye çarptığında o gün ölçülerek konuşulur.
 - **SMS/e-posta koduyla doğrulama.** Faz J'de reddedilen üçüncü seçenek; kod
@@ -4332,24 +4332,24 @@ yemiyor" testi kırmızı.
 - **Tavan dolduğunda işletmeye e-posta.** Bildirim altyapısı var ama "tavan
   doldu" olayı için yeni bir şablon ve bir kez gönderme kuralı gerekiyor; panel
   uyarısı bugünkü ölçekte yeterli.
-- **Numara başına işletmeler ARASI tavan.** Kiracılar arası sayım DEĞİŞMEZ 1'i
-  delerdi; tavanlar kiracıya özel (IDOR testleri bunu arıyor).
-- **Next'in log satırındaki sorgu parametreleri** (P2e bulgusu) — ayrı iş,
+- **Numara başına işletmeler ARASI tavan.** Tenant'lar arası sayım INVARIANT 1'i
+  delerdi; tavanlar tenant'a özel (IDOR testleri bunu arıyor).
+- **Next'in log satırındaki query parametreleri** (P2e bulgusu) — ayrı iş,
   hâlâ açık.
 
 ### Doğrulama
 
 - `npm run tip` temiz, `npm run lint` hata yok (iki uyarı bu işten önce de
   vardı, `panel-randevu-girdi.test.ts`)
-- `npm test` — **782 test, 55 dosya** (P2e'ye göre +15): kapı katmanında 13
+- `npm test` — **782 test, 55 dosya** (P2e'ye göre +15): gate layer'ında 13
   (sınır, iptallerin sayılması, 24 saat penceresi, `kaynak` ayrımı, sahipsiz
   müşteri satırı, sıra, iki IDOR, panel sayımı ve IDOR'u), route'ta 2 (gerçek
   tavanlarla 429, mesajda sayı yok, kayıtlı müşteri geçiyor)
 
-### Elle doğrulandı — 13 Eylül 2026 (`next dev`, yerel `randevu_dev`)
+### Elle doğrulandı — 13 Eylül 2026 (`next dev`, local `randevu_dev`)
 
 Yeni müşteriler SQL ile değil **gerçek `POST /api/randevu`** ile oluşturuldu
-(`isil-guzellik-salonu`, her istek ayrı numara).
+(`isil-guzellik-salonu`, her request ayrı numara).
 
 - [x] 0 yeni müşteride panelde uyarı yok
 - [x] 10'da eşik metni ("olağan dışı bir yoğunluk", "Son 24 saatte 10 yeni
@@ -4358,21 +4358,21 @@ Yeni müşteriler SQL ile değil **gerçek `POST /api/randevu`** ile oluşturuld
 - [x] Kontrast ölçüldü (canvas ile, koyu temada yarı saydam zemin sayfa
       rengiyle birleştirilerek): açık tema başlık/ikon **5,42:1**, metin
       **15,4:1**; koyu tema başlık **6,49:1**, metin **13,25:1**. Hepsi AA üstü
-- [x] 390px (aynı kökenden iframe; medya sorguları iframe genişliğine göre
+- [x] 390px (aynı kökenden iframe; medya query'leri iframe genişliğine göre
       çalışıyor): yatay taşma yok, kutu sarıyor
-- [x] **Ölçümün bulduğu hata:** "Müşterileri gör" bağlantısı 20px yükseklikteydi,
+- [x] **Ölçümün bulduğu hata:** "Müşterileri gör" link'i 20px yükseklikteydi,
       tasarım sisteminin 44px dokunma hedefinin altında. `min-h-11` ile
       düzeltildi, yeniden ölçüldü: 98×44
 - [x] Müşteri tarafı, 390px formda: 21. yeni numara formun üstünde "Bu
       işletmeden şu anda çevrim içi randevu alınamıyor. Randevu için işletmeyi
       arayabilirsiniz: 0532 123 45 67" gördü; reddedilen numaranın `musteri`
-      satırı **oluşmadı**, sayaç 20'de kaldı
+      satırı **oluşmadı**, counter 20'de kaldı
 - [x] Aynı formda kayıtlı bir müşterinin numarası tavan doluyken randevu aldı
-- [x] Doğrulamanın kayıtları (20 müşteri, 21 randevu, 63 kuyruk satırı) sonra
-      yerel veritabanından silindi
+- [x] Doğrulamanın kayıtları (20 müşteri, 21 randevu, 63 queue satırı) sonra
+      local veritabanından silindi
 
 Günlük numara tavanının müşteri ekranı tarayıcıda denenmedi: mesaj aynı
-yoldan (sunucunun metni olduğu gibi) gösteriliyor ve metnin kendisi route
+yoldan (server'ın metni olduğu gibi) gösteriliyor ve metnin kendisi route
 testinde kilitli.
 
 ### Bundle bütçesi
@@ -4380,21 +4380,21 @@ testinde kilitli.
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1873,98 KiB** (bütçe 3 MiB).
 P2e sonundaki 1872,68 KiB'den **+1,30 KiB**.
 
-## Faz P2 — nabız zamanlayıcısı
+## Faz P2 — health check scheduler
 
-**Kapandı:** Nabzın saati GitHub'dan Cloudflare'e taşındı. Kontroller ve
+**Kapandı:** Health check'in saati GitHub'dan Cloudflare'e taşındı. Kontroller ve
 bildirim kanalı değişmedi.
 
 ### Bulgu — `*/30` gerçekte 2–5,5 saatti
 
-P2e'den sonra koşumlara bakıldığında görüldü: 10–13 Eylül 2026 arasında
-`nabiz.yml`'nin 22 zamanlanmış koşumu arasındaki aralık 2 ile 5,5 saat,
-ortalaması ~3 saatti (ör. 13 Eylül 03:36 → 09:08 arasında hiç koşum yok).
-GitHub zamanlanmış koşumları "mümkün olunca" başlatıyor.
+P2e'den sonra run'lara bakıldığında görüldü: 10–13 Eylül 2026 arasında
+`nabiz.yml`'nin 22 zamanlanmış run'ı arasındaki aralık 2 ile 5,5 saat,
+ortalaması ~3 saatti (ör. 13 Eylül 03:36 → 09:08 arasında hiç run yok).
+GitHub zamanlanmış run'ları "mümkün olunca" başlatıyor.
 
 İki sonucu vardı:
 
-- **Hata sayımı kördü.** `hata-say.ts`'in 60 dakikalık penceresi "koşumlar
+- **Hata sayımı kördü.** `hata-say.ts`'in 60 dakikalık penceresi "run'lar
   biraz gecikebilir" varsayımıyla seçilmişti. 3 saatlik aralıkta bu, sürenin
   üçte ikisinde çıkan hataların hiç sayılmaması demekti. P2e'nin "pencere >
   aralık" gerekçesi bu yüzden hiç tutmadı.
@@ -4404,28 +4404,28 @@ GitHub zamanlanmış koşumları "mümkün olunca" başlatıyor.
 
 Worker'ın Cron Trigger'ı 30 dakikada bir `nabiz.yml`'yi `workflow_dispatch`
 ile tetikliyor (`worker-girisi.ts > scheduled` → `src/lib/zamanlayici.ts`).
-Bu tür koşum zamanlanmış koşum gibi ertelenip düşürülmüyor.
+Bu tür run zamanlanmış run gibi ertelenip düşürülmüyor.
 
 **Reddedilen: her şeyi Cloudflare'de yapmak** (kontroller ve uyarı e-postası
 Worker'ın içinde). İki sebep:
 
-- Gözcü gözlediği şeyin içinde kalırdı. Worker bozuk yayınlanırsa, DNS ya da
+- Gözcü gözlediği şeyin içinde kalırdı. Worker bozuk deploy edilirse, DNS ya da
   sertifika giderse uyarı da susardı.
 - Uyarı kanalını sıfırdan yazmak gerekirdi: `email.ts` üzerinden e-posta ve
   site düştüğünde her 30 dakikada bir mail atmamak için bir "bildirdim"
-  durumu. GitHub'ın başarısız koşum e-postası bunu bedavaya yapıyor.
+  durumu. GitHub'ın başarısız run e-postası bunu bedavaya yapıyor.
 
-**Reddedilen: pencereyi "son koşumdan bu yana" yapmak.** İlk öneri buydu.
+**Reddedilen: pencereyi "son run'dan bu yana" yapmak.** İlk öneri buydu.
 Hata sayımını düzeltirdi ama sitenin saatlerce düşük kalmasını düzeltmezdi;
 sorun pencerede değil saatteydi.
 
 ### Neden ayrı Worker değil
 
 Plan Faz K'nin hatırlatıcısını "adaptörün iç yapısına bağımlılık" gerekçesiyle
-ayrı bir Worker'a koymuştu. OpenNext bu deseni artık belgeliyor
+ayrı bir Worker'a koymuştu. OpenNext bu pattern'ı artık belgeliyor
 (opennext.js.org/cloudflare/howtos/custom-worker): giriş dosyası üretilen
 Worker'ın `fetch`'ini aynen geçiriyor, `scheduled` ekliyor. Ayrı Worker ise
-ikinci bir yayın adımı, ikinci bir sır seti ve ikinci bir wrangler dosyası
+ikinci bir deploy adımı, ikinci bir secret seti ve ikinci bir wrangler dosyası
 demekti. `plan.md > Faz K` buna göre güncellendi; hatırlatıcının nerede
 duracağı Faz K'nin kararı.
 
@@ -4433,35 +4433,35 @@ Adlandırılmış export'lar (OpenNext'in Durable Object sınıfları) `export *
 ile geçiyor. Tek tek yazılsaydı OpenNext ileride yeni bir sınıf eklediğinde
 burada unutulurdu.
 
-### Sessizce ölemiyor — iki katman
+### Sessizce ölemiyor — iki layer
 
-1. **Tetik koşuyor ama başarısız** (jeton yok, süresi dolmuş, GitHub cevap
+1. **Trigger koşuyor ama başarısız** (token yok, süresi dolmuş, GitHub cevap
    vermiyor): `hataBildir("cron nabiz", ..., env)`. `kod` alanı `JETON_YOK`,
-   `HTTP_<durum>` ya da ağ hatasının türü. Jeton ve GitHub'ın yanıt gövdesi
+   `HTTP_<durum>` ya da network hatasının türü. Token ve GitHub'ın response body'si
    hiçbir yere konmuyor.
-2. **Tetik hiç koşmuyor** (silindi, Worker patlıyor, işlemci sınırı): kapıya
-   da yazılamaz. `nabiz.yml`'nin yedek zamanlanmış koşumu (6 saatte bir) son
-   `workflow_dispatch` koşumuna bakıyor, 90 dakikadan eskiyse kırmızı.
+2. **Trigger hiç koşmuyor** (silindi, Worker patlıyor, işlemci sınırı): gate'e
+   da yazılamaz. `nabiz.yml`'nin fallback zamanlanmış run'ı (6 saatte bir) son
+   `workflow_dispatch` run'ına bakıyor, 90 dakikadan eskiyse kırmızı.
 
-`hataBildir`'e isteğe bağlı `ortam` parametresi bu yüzden eklendi: sayaç
+`hataBildir`'e opsiyonel `ortam` parametresi bu yüzden eklendi: counter
 `getCloudflareContext`'ten alınıyordu, o da OpenNext'in `fetch`
-sarmalayıcısından geliyor. Cron Trigger o sarmalayıcıdan geçmiyor. Parametre
-olmasaydı tetik hatası yalnızca log'a düşer, sayılmazdı. `writeDataPoint` yine
+wrapper'ından geliyor. Cron Trigger o wrapper'dan geçmiyor. Parametre
+olmasaydı trigger hatası yalnızca log'a düşer, sayılmazdı. `writeDataPoint` yine
 yalnızca `hata.ts`'te.
 
-**Doksan dakika:** tetik 30 dakikada bir, tetik değişikliği Cloudflare'de 15
-dakikaya kadar yayılıyor. Tek bir kaçırılmış tetik arıza değil, iki tanesi arıza.
+**Doksan dakika:** trigger 30 dakikada bir, trigger değişikliği Cloudflare'de 15
+dakikaya kadar yayılıyor. Tek bir kaçırılmış trigger arıza değil, iki tanesi arıza.
 
-**Yedek neden 6 saat:** yedeğin amacı arızayı hızla duyurmak değil,
-zamanlayıcının öldüğünü fark etmek. Dakikası 17, çünkü GitHub saat başındaki
-yoğunlukta en çok o anı geciktiriyor. Yedek de GitHub'ın saatine tabi; gerçek
+**Fallback neden 6 saat:** fallback'in amacı arızayı hızla duyurmak değil,
+scheduler'ın öldüğünü fark etmek. Dakikası 17, çünkü GitHub saat başındaki
+yoğunlukta en çok o anı geciktiriyor. Fallback de GitHub'ın saatine tabi; gerçek
 aralığı muhtemelen 6 saatten uzun olacak.
 
 ### Sınırlar (ücretsiz plan)
 
 Hesap başına 5 Cron Trigger; bu ilki. Zamanlanmış çağrı başına **10 ms
-işlemci süresi**. Tetik tek bir `fetch` atıyor ve yanıt beklenirken geçen
-süre sayılmıyor. Yerelde ölçülemiyor. Aşılırsa çağrı düşer ve 2. katman
+CPU time**. Trigger tek bir `fetch` atıyor ve response beklenirken geçen
+süre sayılmıyor. Local'de ölçülemiyor. Aşılırsa çağrı düşer ve 2. layer
 yakalar.
 
 ### `cf:onizle` ile ölçülenler — 13 Eylül 2026
@@ -4469,90 +4469,90 @@ yakalar.
 `wrangler dev --test-scheduled` ile, `/__scheduled` elle tetiklenerek:
 
 - [x] `/`, `/api/saglik`, `/dizin` → 200. `fetch` giriş dosyasından aynen geçiyor
-- [x] Jetonsuz tetik → `{"olay":"hata","kaynak":"cron nabiz","tur":"ZamanlayiciHatasi","kod":"JETON_YOK",...}`
-- [x] Sahte jetonla tetik **gerçek GitHub'a** gitti → `HTTP_401`. İstek
-      GitHub'ın kimlik doğrulamasına kadar ulaşıyor (User-Agent ya da biçim
-      yüzünden 403/422 değil). Jeton log'da hiç geçmiyor
-- [x] "Zamanlayıcı canlı mı" betiği yerelde gerçek depoya karşı → son tetik
+- [x] Token'sız trigger → `{"olay":"hata","kaynak":"cron nabiz","tur":"ZamanlayiciHatasi","kod":"JETON_YOK",...}`
+- [x] Sahte token'la trigger **gerçek GitHub'a** gitti → `HTTP_401`. Request
+      GitHub'ın authentication'a kadar ulaşıyor (User-Agent ya da biçim
+      yüzünden 403/422 değil). Token log'da hiç geçmiyor
+- [x] "Zamanlayıcı canlı mı" script'i local'de gerçek repo'ya karşı → son trigger
       3298 dakika önce, çıkış 1
 - [x] `npm run tip && npm run lint && npm test` temiz
 
-**Ölçülmedi:** gerçek jetonla mutlu yol (204) ve Cron Trigger'ın üretimde
+**Ölçülmedi:** gerçek token'la happy path (204) ve Cron Trigger'ın production'da
 kendiliğinden koşması. İkisi de merge sonrası.
 
 ### Merge öncesi elle iş
 
-- [x] İnce taneli GitHub jetonu: yalnızca bu depo, yalnızca **Actions: Read and
-      write** (`docs/yayin.md > Nabız zamanlayıcısı`) — 14 Eylül 2026
+- [x] İnce taneli GitHub token'ı: yalnızca bu repo, yalnızca **Actions: Read and
+      write** (`docs/yayin.md > Health check scheduler`) — 14 Eylül 2026
 - [x] `wrangler secret put GITHUB_NABIZ_TOKENI` — 14 Eylül 2026, `wrangler
-      secret list`'te görüldü. Girilmeden merge edilseydi yayın düşmezdi ama
-      tetik her 30 dakikada `JETON_YOK` yazar ve yedek nabız kırmızı yanardı.
+      secret list`'te görüldü. Girilmeden merge edilseydi deploy düşmezdi ama
+      trigger her 30 dakikada `JETON_YOK` yazar ve fallback health check kırmızı yanardı.
 - [ ] Hesapta başka Cron Trigger var mı (ücretsiz planda 5 hak)
 
 ### Merge sonrası bakılacak
 
-- [ ] 15 dakika içinde Actions'ta `workflow_dispatch` olaylı ilk Nabız koşumu
-- [ ] Bir gün sonra: tetiklenen koşumlar arası gerçekten ~30 dakika mı
-- [ ] İlk yedek koşumda "zamanlayıcı canlı mı" yeşil
+- [ ] 15 dakika içinde Actions'ta `workflow_dispatch` olaylı ilk Health check run'ı
+- [ ] Bir gün sonra: tetiklenen run'lar arası gerçekten ~30 dakika mı
+- [ ] İlk fallback run'da "zamanlayıcı canlı mı" yeşil
 
 ### Bilerek kapsam dışı
 
-- **Nabzın kontrollerini değiştirmek.** Duman testi ve hata sayımı aynı.
+- **Health check'in kontrollerini değiştirmek.** Smoke test ve hata sayımı aynı.
 - **Aynı hatanın iki kez bildirilmesi.** 60 dakikalık pencere ile 30
-  dakikalık aralıkta her hata iki koşumda görünüyor. Bilerek: kaçırmaktansa
+  dakikalık aralıkta her hata iki run'da görünüyor. Bilerek: kaçırmaktansa
   iki kez duymak (P2e'nin gerekçesi, artık gerçekten geçerli).
-- **Next'in log satırındaki sorgu parametreleri** (P2e bulgusu) ayrı iş.
+- **Next'in log satırındaki query parametreleri** (P2e bulgusu) ayrı iş.
 
 ### Bundle bütçesi
 
 `cf:kur` + `wrangler deploy --dry-run`, Faz Q ile birleştikten sonra: **gzip
 1877,85 KiB** (bütçe 3 MiB). Faz Q sonundaki 1873,98 KiB'den **+3,87 KiB**
-(dal tek başına P2e'nin üstünde de +3,86 ölçülmüştü).
+(branch tek başına P2e'nin üstünde de +3,86 ölçülmüştü).
 
 ---
 
 ## Deployments kaydı geri geldi — 14 Eylül 2026
 
-**Kapandı:** "Onay kapıları kaldırıldı — 2 Eylül 2026" bölümünde bilerek kabul
+**Kapandı:** "Approval gate'ler kaldırıldı — 2 Eylül 2026" bölümünde bilerek kabul
 edilen ikinci kayıp. Kullanıcı reponun Deployments sekmesini kullanmak istedi;
-son kayıt 2 Eylül'deydi, çünkü kaydı açan şey `yayinla` işinin ortam bağıydı.
+son kayıt 2 Eylül'deydi, çünkü kaydı açan şey `yayinla` job'ının environment bağıydı.
 
 ### `environment:` satırı değil, REST API
 
 Satırı geri koymak tek satırlık iş olurdu ve kaydı GitHub kendisi açardı. Ama
-`uretim` ortamının ayarında zorunlu inceleyici hâlâ duruyor, yani satır kapıyı
-da geri getirirdi. Kapıyı ayardan silmek de 2 Eylül'deki ilkeyi bozardı:
-kapının varlığı yine PR'da görünmeyen bir ayara bağlı kalırdı.
+`uretim` environment'ının ayarında zorunlu inceleyici hâlâ duruyor, yani satır gate'i
+da geri getirirdi. Gate'i ayardan silmek de 2 Eylül'deki ilkeyi bozardı:
+gate'in varlığı yine PR'da görünmeyen bir ayara bağlı kalırdı.
 
 Kayıt `POST /repos/{depo}/deployments` ve `.../statuses` ile açılıp kapatılıyor.
-GitHub'ın belgesinde koruma kurallarının API ile açılan dağıtıma işlediğine
-dair bir şey yok; kurallar ortama bağlı işler için tanımlı. Bir API çağrısı
-zaten bekleyemez: kural işleseydi kayıt adımı düşerdi, yayın değil.
+GitHub'ın belgesinde koruma kurallarının API ile açılan deployment'a işlediğine
+dair bir şey yok; kurallar environment'a bağlı işler için tanımlı. Bir API çağrısı
+zaten bekleyemez: kural işleseydi kayıt adımı düşerdi, deploy değil.
 
 ### Ayrıntılar
 
 - **`required_contexts[]` boş dizi.** Verilmezse GitHub commit'in bütün durum
-  kontrollerini yeşil istiyor. `yayinla` işinin kendisi o anda koştuğu için
-  istek 409 ile dönerdi.
+  kontrollerini yeşil istiyor. `yayinla` job'ının kendisi o anda koştuğu için
+  request 409 ile dönerdi.
 - **`auto_merge=false`.** Ref zaten main'deki SHA; varsayılan `true` main'i
   ref'e birleştirmeyi deniyor.
-- **Ortam adı `uretim`.** 1–2 Eylül'deki kayıtlar o adın altında, geçmiş
+- **Environment adı `uretim`.** 1–2 Eylül'deki kayıtlar o adın altında, geçmiş
   kesintisiz kalsın.
 - **`production_environment` verilmedi** (varsayılan `false`), eski kayıtlarla
-  aynı. `auto_inactive` yalnızca üretim olmayan ortamlarda önceki başarılı
+  aynı. `auto_inactive` yalnızca production olmayan environment'larda önceki başarılı
   kayıtları `inactive`e çeviriyor, sekmede tek bir aktif kayıt kalıyor.
-- **Açıklamada Worker sürüm kimliği.** `wrangler rollback <id>` için gereken
-  şey sekmede duruyor. Kimlik opak bir uuid, sır değil (Faz P2).
-- **Duman kırmızıysa `failure`, ama açıklama "CANLIDA" diyor.** Kırmızı duman
-  testi geri alma demek değil; otomatik geri alma bilerek yok.
-- **`continue-on-error`.** Kayıt bir gösterge, kapı değil.
-- **İzin.** Depo varsayılanı `read`. İş düzeyinde `contents: read` +
-  `deployments: write`; yeni sır yok.
+- **Açıklamada Worker version id.** `wrangler rollback <id>` için gereken
+  şey sekmede duruyor. Kimlik opak bir uuid, secret değil (Faz P2).
+- **Smoke test kırmızıysa `failure`, ama açıklama "CANLIDA" diyor.** Kırmızı smoke
+  test geri alma demek değil; otomatik geri alma bilerek yok.
+- **`continue-on-error`.** Kayıt bir gösterge, gate değil.
+- **İzin.** Repo varsayılanı `read`. İş düzeyinde `contents: read` +
+  `deployments: write`; yeni secret yok.
 
 ### Doğrulama
 
-- [x] `actionlint` (shellcheck dahil) üç iş akışında temiz
-- [x] `gh api` isteğinin gövdesi var olmayan bir adrese gönderilerek görüldü:
+- [x] `actionlint` (shellcheck dahil) üç workflow'da temiz
+- [x] `gh api` request'inin body'si var olmayan bir adrese gönderilerek görüldü:
       `required_contexts: []`, `auto_merge: false`
 - [x] `degismezler.test.ts` — 93 test (ci.yml'ın taranan bölümü `dogrula`)
 
@@ -4562,15 +4562,15 @@ merge sonrası.
 ### Merge sonrası bakılacak
 
 - [ ] Deployments → `uretim` altında merge commit'inin kaydı: `success`,
-      açıklamada sürüm kimliği
+      açıklamada version id
 - [ ] İki kayıt adımı log'da yeşil. `continue-on-error` bir hatayı yutmuş
       olmasın
-- [ ] "View deployment" bağlantısı siteyi açıyor
+- [ ] "View deployment" link'i siteyi açıyor
 
 ### Bilerek kapsam dışı
 
 - **`wrangler rollback`'in sekmeye yansıması.** Rollback elle yapılıyor; kaydı
   da elle güncellemek ikinci bir unutulacak adım olurdu. Kaynak Cloudflare'in
-  sürüm listesi (`docs/yayin.md > Deployments kaydı`).
-- **Yerelden elle yayının kaydı.**
-- **`uretim` ortamının ayarları.** Zorunlu inceleyici duruyor ve etkisiz.
+  version listesi (`docs/yayin.md > Deployments kaydı`).
+- **Local'den elle deploy'un kaydı.**
+- **`uretim` environment'ının ayarları.** Zorunlu inceleyici duruyor ve etkisiz.

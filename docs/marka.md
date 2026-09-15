@@ -14,7 +14,7 @@ kadar bu bölüm işletme sahibini koşulsuz birinci sayıyordu; ürün kimliği
 kararıyla (`TODOS.md > Ürün kimliği`) ön kapı müşteriye açıldı ve ayrım
 yerini aldı.
 
-**Halka açık yüzeyde birincil: randevu alan müşteri.** Kök sayfa, `/dizin`,
+**Public yüzeyde birincil: randevu alan müşteri.** Kök sayfa, `/dizin`,
 `/r/<slug>`. Bizi tanımıyor, tanımak da istemiyor. Telefondan giriyor ve 30
 saniyede işini bitirmek istiyor. Onun için biz bir ürün değil, o işletmeye
 ulaşmanın yoluyuz — ve artık işletmeyi **bulduğu** yer.
@@ -101,8 +101,8 @@ gerekmez ama sıra bu.
 | Ağ hatası | "Randevu kaydedilemedi. Bağlantı koptu, tekrar deneyin." | "Bir şeyler ters gitti" |
 | Yetkisiz | "Bu sayfaya erişiminiz yok" | "403 Forbidden" |
 
-Teknik ayrıntı (hata kodu, stack, bağlantı bilgisi) kullanıcıya **hiç**
-gösterilmez — bu aynı zamanda bir güvenlik değişmezidir (`CLAUDE.md` #5).
+Teknik ayrıntı (hata kodu, stack, connection bilgisi) kullanıcıya **hiç**
+gösterilmez — bu aynı zamanda bir güvenlik invariant'ıdır (`CLAUDE.md` #5).
 
 ## Boş durumlar
 
