@@ -22,7 +22,8 @@ Yorumlar "ne yaptigini" degil **"neden boyle yaptigini"** anlatir.
 filtresini enjekte eder. Yeni bir query tipi gerekiyorsa route'a ham Drizzle
 yazma, `scoped-db.ts`'e metot ekle. Muaf dosyalar: `src/lib/db.ts`,
 `src/lib/scoped-db.ts`, `src/lib/musteri-db.ts`, `src/lib/auth.ts`,
-`src/lib/kayit.ts`, `src/lib/saglik.ts`.
+`src/lib/kayit.ts`, `src/lib/saglik.ts`, `src/lib/dizin.ts` ve
+`src/lib/kuyruk-tarama.ts` (son ikisi INVARIANT 12).
 
 > **Ikinci eksen: `src/lib/musteri-db.ts` (Faz J).** Musterinin randevulari
 > tanimi geregi MULTI-TENANT - iki ayri salondan randevu almis biri ikisini de
@@ -56,6 +57,11 @@ yollari (Cron) muaftir.
 > helper kullaniliyorsa bu uyari beklenen bir sey. Gercek zorlama
 > `src/lib/degismezler.test.ts`'te: her route dosyasini okuyup gate'in
 > varligini ariyor.
+>
+> Makine yollarinin muafiyetinin karsiligi `src/lib/cron-kapisi.ts >
+> cronKapisi()` (Faz K): `Authorization: Bearer <CRON_SIRRI>`, sabit sureli
+> karsilastirma. Test muaf DOSYA listesi tutmuyor, `cronKapisi(` cagrisini
+> ariyor - listeye eklenen bir route kontrolsuz gecerdi.
 
 **3. Karar degistiren yollarda conditional UPDATE.** Once-oku-sonra-yaz yapma;
 beklenen durumu `where`'e koy ve etkilenen satir sayisi 0 ise 409 don. Ayni
@@ -124,9 +130,11 @@ e-posta sablonlari `src/lib/marka.ts`'ten okur.
 yalnizca `randevu.enesmemduhoglu.tech` host'una bagli kalir;
 `.enesmemduhoglu.tech` yazmak session'i kokteki baska projeyle paylasmak demektir.
 
-**12. Cross-tenant okuma yalnizca `src/lib/dizin.ts`'te ve dar.** Marketplace dizini
-tanimi geregi butun isletmeleri listeliyor, yani INVARIANT 1'in kapsamasi orada
-YOK. Karsiligi, sizabilecek yuzeyin daraltilmasi:
+**12. Cross-tenant okuma yalnizca `src/lib/dizin.ts` ve
+`src/lib/kuyruk-tarama.ts`'te, ve dar.** Marketplace dizini tanimi geregi butun
+isletmeleri listeliyor, yani INVARIANT 1'in kapsamasi orada YOK. Karsiligi,
+sizabilecek yuzeyin daraltilmasi (asagidaki maddeler `dizin.ts`in; ikinci
+dosya bolumun sonunda):
 
 - Yalnizca `isletme` ve `hizmet` okunuyor. `randevu`, `musteri`, `kullanici`,
   `bildirim_kuyrugu` bu dosyada GECMIYOR - kisisel veri buradan cikamaz.
@@ -145,6 +153,14 @@ YOK. Karsiligi, sizabilecek yuzeyin daraltilmasi:
 > kosulunun varligi, yazma metodu olmamasi. Yorumlar SOYULARAK taraniyor:
 > dosyanin kendi basligi yasakli tablolari kurali anlatmak icin aniyor ve ham
 > metin taransaydi test kendi gerekcesinin yazilmasini cezalandirirdi.
+
+> **Ikinci dosya: `src/lib/kuyruk-tarama.ts` (Faz K).** Hatirlatici kuyrugun
+> TAMAMINA bakmak zorunda - zamani gelen bir hatirlatmaya dokunan bir istek,
+> yani slug ya da oturum yok. Ayni disiplin, daha da dar: yalnizca
+> `bildirim_kuyrugu` + `isletme` okunuyor ve donen sey yalnizca `(slug,
+> randevuId)`. Gonderim (musteri adi, e-posta, iptal token'i) her cift icin
+> `getHalkaAcikDb(slug)` kapisindan yapiliyor; kisisel veri kiraci-ustu
+> dosyadan hic gecmiyor. Salt okunur; ayni test dosyasi ayni bicimde zorluyor.
 
 ## Komutlar
 

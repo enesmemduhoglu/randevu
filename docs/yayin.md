@@ -251,6 +251,7 @@ haberi yok:
 wrangler secret put TURNSTILE_SECRET
 wrangler secret put RESEND_API_KEY      # Faz I
 wrangler secret put GITHUB_NABIZ_TOKENI # health check scheduler
+wrangler secret put CRON_SIRRI          # hatırlatıcı (Faz K)
 ```
 
 ### Health check scheduler
@@ -268,6 +269,37 @@ GitHub'daki bir iş değil, Cloudflare'in trigger'ı.
 denemede gate'e `JETON_YOK` ya da `HTTP_401` yazılıyor. Fallback run'ın hata
 sayımı ve "zamanlayıcı canlı mı" adımı ikisini de kırmızıya çeviriyor. Süre
 dolduğunda yeni token aynı komutla giriliyor.
+
+### Hatırlatıcı (Faz K)
+
+Aynı Cron Trigger (`*/30`) ikinci bir iş koşuyor: `scheduled`,
+`POST /api/cron/hatirlatma`'yı **Worker'ın kendi `fetch`'ine** veriyor (request
+ağa çıkmıyor) ve route kuyruğun zamanı gelmiş e-posta satırlarını boşaltıyor.
+Route internete açık bir adres, gate'i `Authorization: Bearer <CRON_SIRRI>`
+(`src/lib/cron-kapisi.ts`).
+
+`CRON_SIRRI` herhangi bir uzun rastgele değer; iki taraf da (tetik ve route)
+aynı Worker'ın env'inden okuyor, yani tek bir yere giriliyor:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler secret put CRON_SIRRI
+```
+
+**Secret girilmezse hatırlatıcı sessizce durmuyor.** Tetik gate'e `SIR_YOK`
+yazıyor, health check'in hata sayımı son saatte hata görüp kırmızı yanıyor. Route
+dışarıdan gelen request'e 503 (`yapilandirma eksik`), yanlış secret'a 401 dönüyor.
+
+**Elle tetikleme** (örneğin bir kesintiden sonra biriken satırları hemen
+boşaltmak için):
+
+```bash
+curl -X POST -H "Authorization: Bearer <CRON_SIRRI>" https://randevu.enesmemduhoglu.tech/api/cron/hatirlatma
+# {"randevu":<işlenen>,"atlanan":<pasif işletme>}
+```
+
+Bir koşu en çok 20 randevu işliyor (`hatirlatici.ts > KOSUM_BASINA_RANDEVU`);
+kalanlar kaybolmuyor, sonraki koşuya kalıyor. Randevusu başlamış bir
+hatırlatma gönderilmiyor, `randevu-basladi` olarak işaretleniyor.
 
 **Faz L'ye kadar `TURNSTILE_MODU` production'da tanımsızdı** — `wrangler.jsonc`'de
 `vars` bloğu hiç yoktu, mod `sahte`ye düşüyordu ve bot gate'i canlıda koşulsuz

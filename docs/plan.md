@@ -108,7 +108,8 @@ Cloudflare Worker (OpenNext)  →  randevu.enesmemduhoglu.tech
         ├── /randevularim        müşteri hesabı            (Faz J)
         └── /api/*               route handler'lar
               ├── src/lib/scoped-db.ts   ← tenant'a bağlı TEK data access katmanı
-              └── src/lib/dizin.ts       ← cross-tenant TEK okuma (bkz. INVARIANT 12)
+              ├── src/lib/dizin.ts       ← cross-tenant okuma: dizin (bkz. INVARIANT 12)
+              └── src/lib/kuyruk-tarama.ts ← cross-tenant okuma: yalnızca (slug, randevuId)
                     └── Drizzle + postgres.js
                           └── Hyperdrive binding
                                 └── Supabase Postgres (Supavisor session mode)
@@ -122,7 +123,11 @@ Gate dışı dosyalar; ham `db` ve dış SDK çağrıları **yalnızca** burada:
 |---|---|
 | `src/lib/db.ts` | Connection'ı kurar. workerd'de Hyperdrive, local'de `DATABASE_URL` |
 | `src/lib/scoped-db.ts` | `getScopedDb(session)`, `getHalkaAcikDb(slug)` — her query'ye tenant filtresi enjekte eder |
-| `src/lib/dizin.ts` | **Repo'nun tek cross-tenant okuması.** Salt okunur, dar yüzeyli, testle zorlanıyor |
+| `src/lib/dizin.ts` | **Cross-tenant okuma (dizin).** Salt okunur, dar yüzeyli, testle zorlanıyor |
+| `src/lib/kuyruk-tarama.ts` | **Cross-tenant okuma (hatırlatıcı).** Yalnızca `(slug, randevuId)` döner; gönderim `getHalkaAcikDb(slug)` gate'inden |
+| `src/lib/hatirlatici.ts` | Tarama + tenant gate'i → `bildirimleriBosalt`. Koşu başına 20 randevu |
+| `src/lib/cron-kapisi.ts` | `cronKapisi(req)` — makine yollarının gate'i, `Bearer <CRON_SIRRI>` |
+| `src/lib/zamanlayici.ts` | Cron Trigger'ın iki işi: health check tetiği ve hatırlatıcı (Worker'ın kendi `fetch`'ine) |
 | `src/lib/auth.ts` | Supabase access token'ını doğrular, `Kullanici`'yı yükler, `session` üretir |
 | `src/lib/kayit.ts` | İşletme + kullanıcı + varsayılan personel tek transaction'da |
 | `src/lib/panel-kapisi.ts` | `checkOrigin` → session → body, bu sırayla. Panel route'larının tek girişi |
@@ -293,9 +298,12 @@ hatayı sarmalıyor ve `hata.code` wrapper'da yok.
     çağıran veremez. Muafiyet değil, gate'in ikinci ekseni *(`degismezler.test.ts`
     dosya metnini tarıyor)*
 
-12. **Cross-tenant okuma yalnızca `dizin.ts`'te ve dar.** Yalnızca `isletme` + `hizmet`;
-    hizmet yalnızca toplama; dönen tip elle yazılı ve kapalı; çağıran tablo/kolon adı
-    veremez; salt okunur *(`degismezler.test.ts` dosya metnini tarıyor)*
+12. **Cross-tenant okuma yalnızca `dizin.ts` ve `kuyruk-tarama.ts`'te, ve dar.** Dizin:
+    yalnızca `isletme` + `hizmet`; hizmet yalnızca toplama; dönen tip elle yazılı ve
+    kapalı; çağıran tablo/kolon adı veremez; salt okunur. Kuyruk taraması: yalnızca
+    `bildirim_kuyrugu` + `isletme`, dönen şey yalnızca `(slug, randevuId)`, kişisel veri
+    tenant gate'inden okunuyor *(ikisini de `degismezler.test.ts` dosya metnini tarayarak
+    zorluyor)*
 
 ## Fazlar
 
@@ -335,6 +343,7 @@ karar kaydı `TODOS.md`'de.
 | **Q** — kalkan 2 | `randevu-kotasi.ts`: numara başına 24 saatte 5 randevu (iptaller dahil), işletme başına 24 saatte 20 yeni çevrim içi müşteri (dolunca yeni numara reddediliyor), `/panel`de yoğunluk uyarısı. IP sınırı CGNAT yüzünden sıkılaştırılmadı |
 | **P2f** — health check scheduler | GitHub'ın `*/30`'u gerçekte 2–5,5 saatte bir koşuyordu. Saat Cloudflare Cron Trigger'a taşındı (`worker-girisi.ts`, `zamanlayici.ts` → `workflow_dispatch`); kontroller GitHub'da kaldı. Trigger başarısızsa gate'e yazıyor, 6 saatlik fallback run "scheduler canlı mı" diye yokluyor |
 | **P2g** — log'daki query parametreleri | P2e'nin bulgusu kapandı: `drizzle-orm` yamalı (`patches/drizzle-orm+0.45.2.patch`, `postinstall`'da `patch-package`), `DrizzleQueryError` mesajı parametre taşımıyor. Next'in log satırı `Failed query: <sql>` olarak kaldı. Zorlayan `drizzle-yamasi.test.ts` |
+| **K1** — hatırlatıcı | Kuyruk artık request beklemeden boşalıyor: mevcut `*/30` trigger'ı `POST /api/cron/hatirlatma`'yı Worker'ın kendi `fetch`'ine veriyor (`cronKapisi`, `CRON_SIRRI`). Cross-tenant tarama `kuyruk-tarama.ts`'te ve yalnızca adres dönüyor. Randevusu başlamış hatırlatma gönderilmiyor (`randevu-basladi`). Faz I'den beri **hiçbir hatırlatma gitmemişti** |
 
 ### Sıradakiler
 
@@ -368,15 +377,19 @@ sıkılaştırılması CGNAT gerekçesiyle reddedildi. İşletmeye özel ayarlan
 migration gerektirdiği için bekliyor. Gerekçeler `TODOS.md > Faz Q — kalkan 2`.
 
 **Faz K — SMS ve hatırlatma**
-`sms.ts > gonder()` adaptörü. **Faz J'nin bıraktığı iş burada kapanıyor:** telefon
-doğrulanmış bir kimlik olunca misafir randevularını numarayla toplu bağlamak güvenli
-hale geliyor (bugün yalnızca iptal link'iyle tek tek ekleniyor — gerekçe
-`TODOS.md > Faz J`). Hatırlatıcı bir Cron Trigger. **Ayrı Worker kararı P2f'de
-zayıfladı:** gerekçe "`scheduled`'ı OpenNext'in Worker'ına iliştirmek adaptörün iç
-yapısına bağımlılık yaratır" idi. OpenNext bu pattern'ı artık kendisi belgeliyor ve health check
-scheduler'ı tam bu şekilde kuruldu (`worker-girisi.ts`). Hatırlatma aynı `scheduled`'a
-ikinci trigger olarak eklenebilir. O zaman `POST /api/cron/hatirlatma` ve paylaşılan secret da
-gerekmeyebilir, çünkü `scheduled` iş mantığını doğrudan çağırabilir. Karar Faz K'de verilecek.
+İki PR'a bölündü. **K1 (hatırlatıcı) kapandı.** Plan burada "`scheduled` iş mantığını
+doğrudan çağırabilir, route ve secret gerekmeyebilir" diyordu. **Ölçüm bunu
+çürüttü:** `db.ts`, `email.ts` ve `hata.ts` env'i `getCloudflareContext` ile okuyor ve o
+context'i yalnızca OpenNext'in `fetch` sarmalayıcısı kuruyor. Bu yüzden `scheduled`
+request'i Worker'ın kendi `fetch`'ine veriyor ve route bir secret istiyor. Ayrı trigger da
+eklenmedi, mevcut `*/30` iki işi birden koşuyor. Gerekçeler `TODOS.md > Faz K — hatırlatıcı`.
+
+**K2 — SMS (açık).** `sms.ts > gonder()` adaptörü. Bir SMS sağlayıcısı (hesap,
+gönderici başlığı) gerektiriyor ve bu henüz seçilmedi. **Faz J'nin bıraktığı iş burada
+kapanıyor:** telefon doğrulanmış bir kimlik olunca misafir randevularını numarayla toplu
+bağlamak güvenli hale geliyor (bugün yalnızca iptal link'iyle tek tek ekleniyor — gerekçe
+`TODOS.md > Faz J`). Hatırlatıcının taraması SMS satırlarını bilerek almıyor; SMS
+boşaltması kendi filtresiyle aynı taramaya eklenecek.
 
 ## Doğrulama
 
