@@ -166,6 +166,32 @@ export async function iptalBildirimleriniPlanla(
   await kapi.bildirimKuyrugunaYaz(randevuIptalKayitlari({ randevuId, simdi }));
 }
 
+/// Randevudan ONCE gitmesi planlanmis bir mesaj, randevu basladiysa BAYAT.
+///
+/// Kuyruk Faz I'den Faz K'ye kadar hic bosaltilmadi: hatirlatma satirlari
+/// yazildi, zamanlari geldi ve bekledi. 19 Eylul 2026'da uretimdeki kuyrukta
+/// randevusu COKTAN gecmis iki `MUSTERI_HATIRLATMA` satiri `BEKLIYOR` duruyordu.
+/// Bu kural olmasaydi hatirlaticinin ilk kosumu gecmis randevular icin "Yarinki
+/// randevunuz" maili atardi. Ayni sey yarin da olabilir: hatirlatici bir gun
+/// kosmazsa ertesi gun biriken satirlar ayni durumda.
+///
+/// NEDEN "PLANLANAN < BASLANGIC" KOSULU DA VAR, neden yalnizca "randevu
+/// basladi mi" degil: panel gecmis bir saate de randevu yazabiliyor (Faz H2,
+/// serbest saat - yurume musteri sonradan giriliyor). Onun onay mesaji
+/// randevudan SONRA planlaniyor ve bugun oldugu gibi gitmeli; yalnizca
+/// baslangica bakan bir kural onu da yutardi. Iki kosul birlikte tam olarak
+/// "randevudan once soylenmesi gereken bir seyi gec soylemek" durumunu
+/// yakaliyor ve ayarlanacak bir tolerans sabiti gerektirmiyor.
+export function randevuOncesiMesajBayatMi(
+  b: { baslangic: Date; planlananZaman: Date },
+  simdi: Date,
+): boolean {
+  return (
+    b.planlananZaman.getTime() < b.baslangic.getTime() &&
+    b.baslangic.getTime() <= simdi.getTime()
+  );
+}
+
 /// Kuyrugun zamani gelmis satirlarini gonderir.
 ///
 /// HICBIR ZAMAN THROW ETMIYOR. Yanit gonderildikten sonra (`after`) kosuyor,
@@ -183,7 +209,7 @@ export async function bildirimleriBosalt(
     bekleyenler = await kapi.gonderilecekBildirimleriGetir(randevuId, simdi);
   } catch {
     // Veritabanina ulasilamadi. Satirlar kuyrukta BEKLIYOR olarak duruyor;
-    // Faz K'nin cron'u onlari bulacak.
+    // hatirlatici (`hatirlatici.ts`) onlari bir sonraki kosumunda buluyor.
     return;
   }
 
@@ -209,6 +235,14 @@ export async function bildirimleriBosalt(
       // ONCE USTLEN, sonra gonder (gerekcesi scoped-db > bildirimiUstlen).
       const ustlendi = await kapi.bildirimiUstlen(b.id, simdi);
       if (ustlendi === 0) continue;
+
+      // Bayat mesaj da SESSIZCE SILINMIYOR, ustlenilip hata olarak
+      // isaretleniyor: once ustlenmek, ayni satiri o anda gonderen ikinci bir
+      // kosumla yarismamak demek (adres-yok ile ayni desen).
+      if (randevuOncesiMesajBayatMi(b, simdi)) {
+        await kapi.bildirimiHataliIsaretle(b.id, "randevu-basladi");
+        continue;
+      }
 
       const alici = isletmeyeMi(b.sablon) ? sahipEpostasi : b.musteriEposta;
       if (!alici) {
