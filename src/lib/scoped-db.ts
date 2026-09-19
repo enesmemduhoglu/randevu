@@ -356,6 +356,10 @@ export type BekleyenBildirim = {
   hizmetAd: string;
   personelAd: string;
   baslangic: Date;
+  /// Bayat mesaj kurali icin (`bildirim.ts > randevuOncesiMesajBayatMi`):
+  /// randevudan ONCE gitmesi planlanan bir mesaj randevu basladiktan sonra
+  /// anlamini yitiriyor.
+  planlananZaman: Date;
 };
 
 /// BILDIRIM KAPISI - iki kapsamli kapida da AYNI kod.
@@ -395,11 +399,11 @@ function bildirimKapisi(db: Veritabani, kiraci: string) {
 
     /// Bir randevunun ZAMANI GELMIS, hala bekleyen e-posta satirlari.
     ///
-    /// `randevuId`e bagli olmasi bilincli: Faz I'de bosaltma istegin icinden
-    /// (`after`) tetikleniyor ve yalnizca o istegin dokundugu randevuyu
-    /// ilgilendiriyor. Kuyrugun TAMAMINI tarayan sorgu Faz K'nin cron
-    /// yolunda gelecek - orasi kiraci-ustu okuyacagi icin ayri bir tasarim
-    /// karari, bu kapiya ait degil.
+    /// `randevuId`e bagli olmasi bilincli: bosaltma istegin icinden (`after`)
+    /// tetiklendiginde yalnizca o istegin dokundugu randevuyu ilgilendiriyor.
+    /// Kuyrugun TAMAMINI tarayan sorgu (Faz K'nin hatirlaticisi)
+    /// `kuyruk-tarama.ts`te ve yalnizca `(slug, randevuId)` donuyor; kisisel
+    /// veriyi okuyan bu sorgu yine kiraciya kapsanmis kaliyor.
     async gonderilecekBildirimleriGetir(
       randevuId: string,
       simdi: Date,
@@ -420,6 +424,7 @@ function bildirimKapisi(db: Veritabani, kiraci: string) {
           hizmetAd: hizmet.ad,
           personelAd: personel.ad,
           baslangic: randevu.baslangic,
+          planlananZaman: bildirimKuyrugu.planlananZaman,
         })
         .from(bildirimKuyrugu)
         .innerJoin(randevu, eq(randevu.id, bildirimKuyrugu.randevuId))

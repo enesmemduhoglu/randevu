@@ -18,7 +18,11 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import openNext from "./.open-next/worker.js";
-import { nabziTetikle, type ZamanlayiciOrtami } from "./src/lib/zamanlayici";
+import {
+  hatirlaticiyiTetikle,
+  nabziTetikle,
+  type ZamanlayiciOrtami,
+} from "./src/lib/zamanlayici";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -27,10 +31,24 @@ export * from "./.open-next/worker.js";
 const giris = {
   fetch: openNext.fetch,
 
-  // Bugun tek tetik var (`wrangler.jsonc > triggers.crons`). Ikincisi eklenince
-  // (Faz K, hatirlatma) ayrim `controller.cron` ile yapilacak.
-  async scheduled(_controller: unknown, ortam: ZamanlayiciOrtami): Promise<void> {
-    await nabziTetikle(ortam);
+  // TEK TETIK, IKI IS (`wrangler.jsonc > triggers.crons`, 30 dakika). Faz K
+  // ikinci bir tetik eklemedi: ucretsiz planda hesap basina 5 tetik var ve
+  // hatirlatmanin 30 dakikalik cozunurlugu nabizinkiyle ayni ihtiyac - 24 saat
+  // onceden giden bir mesajda yarim saat sapma fark edilmiyor.
+  //
+  // Ikisi PARALEL ve ikisi de hicbir zaman firlatmiyor: biri takilirsa oteki
+  // beklemesin. Hatirlatici bu Worker'in kendi `fetch`ine gidiyor (aga
+  // cikmadan) ve `scheduled`in `ctx`'ini tasiyor: OpenNext istek baglamini o
+  // `ctx` ile kuruyor, `getCloudflareContext` route'ta bu yuzden calisiyor.
+  async scheduled(
+    _controller: unknown,
+    ortam: ZamanlayiciOrtami,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    await Promise.all([
+      nabziTetikle(ortam),
+      hatirlaticiyiTetikle(ortam, (istek) => openNext.fetch(istek, ortam, ctx)),
+    ]);
   },
 };
 

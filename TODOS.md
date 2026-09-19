@@ -4709,3 +4709,162 @@ yamayı `postinstall`'dan kendiliğinden uyguladı (`drizzle-orm@0.45.2 ✔`).
 
 `cf:kur` + `wrangler deploy --dry-run`: **gzip 1877,82 KiB** (bütçe 3 MiB).
 P2f sonundaki 1877,85 KiB'den **−0,03 KiB**.
+
+---
+
+## Faz K — hatırlatıcı
+
+**Kapandı:** kuyruk artık bir request'i beklemeden boşalıyor. Faz I hatırlatma
+satırlarını 24 saat öncesine yazıyordu ama onları gönderecek bir şey yoktu:
+kuyruk yalnızca o randevuya dokunan bir request'in `after`'ında boşalıyordu.
+Hatırlatmanın zamanı geldiğinde böyle bir request yok. Yani **Faz I'den bu yana
+hiçbir hatırlatma gitmedi.** Faz K iki PR'a bölündü, bu ilki. SMS (K2) bir
+sağlayıcı seçimi gerektiriyor ve ayrı iş.
+
+### Önce ölçüldü — prod kuyruğu, 19 Eylül 2026
+
+Salt okunur bir query: prod'da `BEKLIYOR` durumunda **2 `MUSTERI_HATIRLATMA`**
+satırı vardı ve ikisinin de randevusu **çoktan geçmişti**. Hatırlatıcı olduğu
+gibi açılsaydı ilk koşusu geçmiş randevulara "Yarınki randevunuz" maili
+atardı. Aşağıdaki bayat mesaj kuralını bu ölçüm doğurdu.
+
+### Karar — `scheduled` işi yapmıyor, Worker'ın kendi `fetch`'ine veriyor
+
+Plan "`scheduled` iş mantığını doğrudan çağırabilir, route ve secret
+gerekmeyebilir" diyordu. **Tutmadı:** `db.ts` (Hyperdrive), `email.ts` (mod ve
+key) ve `hata.ts` (Analytics Engine) env'i `getCloudflareContext` ile okuyor ve o
+context'i yalnızca OpenNext'in `fetch` sarmalayıcısı kuruyor
+(`runWithCloudflareRequestContext`). Cron Trigger oradan geçmiyor.
+
+Seçilen yol: `scheduled`, `POST /api/cron/hatirlatma`'yı
+`openNext.fetch(istek, env, ctx)`'e veriyor. Request ağa çıkmıyor, iş sitenin
+geri kalanıyla aynı context'te koşuyor.
+
+**Reddedilen:** üç dosyaya "env'i parametre olarak da al" dalı eklemek. Bu,
+production'da yalnızca bir yoldan koşan ve vitest'in hiç görmediği üç dal demekti
+(Faz I'de production variable'larının `next dev`e sızması tam bu sınıftandı).
+
+**Paylaşılan secret (`CRON_SIRRI`), `cronKapisi`.** Route internete açık bir
+adres. Alternatif, isolate içinde tek kullanımlık bir nonce'tu: secret yönetimi
+yoktu ama elle tetiklenemiyordu ve alışılmadık bir pattern'dı. Kullanıcıyla
+konuşulup secret seçildi. Karşılaştırma iki tarafın SHA-256 özeti üzerinden ve
+sabit süreli.
+
+**`degismezler.test.ts` muaf DOSYA listesi tutmuyor, `cronKapisi(` çağrısını
+arıyor.** Listeye eklenen bir route hiçbir kontrol olmadan geçerdi. Ayrı bir test
+gate'in gövdesinin gerçekten karşılaştırma yaptığına bakıyor, çünkü `return null`a
+indirgenmiş bir gate taramada yeşil kalırdı.
+
+**Ayrı trigger yok.** Mevcut `*/30` iki işi paralel koşuyor (ikisi de hiçbir
+zaman fırlatmıyor). Ücretsiz planda hesap başına 5 trigger var. 24 saat önceden
+giden bir mesajda yarım saatlik sapma fark edilmiyor.
+
+### Cross-tenant tarama: yalnızca adres (`kuyruk-tarama.ts`)
+
+INVARIANT 12'nin ikinci dosyası. Kuyruğun tamamına bakmak zorunlu, ama dosya
+**göndermiyor**, yalnızca `(slug, randevuId)` dönüyor. Gönderim her çift için
+`getHalkaAcikDb(slug)` gate'inden ve Faz I'deki `bildirimleriBosalt` ile
+yapılıyor. Yani request içi yol ile zamanlanmış yol aynı kodu koşuyor ve
+aralarındaki yarışı `bildirimiUstlen`'in conditional UPDATE'i çözüyor.
+
+**Reddedilen:** tek büyük JOIN'le bütün `BekleyenBildirim` satırlarını bu
+dosyada okumak (tek query, sıfır ek gidiş-dönüş). O zaman kapsamsız bir dosya
+müşteri e-postasını ve ham iptal token'ını taşırdı.
+
+- Yalnızca `bildirim_kuyrugu` + `isletme` okunuyor. `randevu`, `musteri`,
+  `kullanici`, `personel` kelime sınırıyla aranıyor (`randevuId` kuyruğun kendi
+  kolonu).
+- `aktif = true` filtresi var: pasif işletme `getHalkaAcikDb`'de bulunamıyor.
+  Taramaya girseydi her koşuda listenin başını işgal ederdi.
+- `tur = 'EPOSTA'`: K2'nin SMS satırları aynı sebeple.
+- En eski planlanan satır önce, `sinir` kadar. Kalanlar sonraki koşuya kalıyor.
+
+### Bayat mesaj kuralı (`randevuOncesiMesajBayatMi`)
+
+Randevudan **önce** planlanmış bir mesaj, randevu başladıysa gönderilmiyor,
+`randevu-basladi` olarak işaretleniyor. Silinmiyor, çünkü panelde "neden gitmedi"
+sorusunun cevabı görünür olmalı (`adres-yok` ile aynı pattern). İşaretlemeden
+önce satır üstleniliyor, yani aynı satırı o anda gönderen bir koşuyla yarış yok.
+
+**Neden iki koşul, neden yalnızca "randevu başladı mı" değil:** panel geçmiş bir
+saate de randevu yazabiliyor (Faz H2, serbest saat). Onun onay mesajının planlanan
+zamanı randevudan **sonra** ve bugünkü gibi gitmeli. Yalnızca başlangıca bakan bir
+kural onu da yutardı. İki koşul birlikte yalnızca "randevudan önce söylenecek
+şeyi geç söylemek" durumunu yakalıyor ve ayarlanacak bir tolerans sabiti
+gerektirmiyor.
+
+### Koşu başına sınır ve bekleme (`hatirlatici.ts`)
+
+- **20 randevu.** Ücretsiz planda request başına 50 subrequest var ve her
+  gönderim bir `fetch`. Hyperdrive query'lerinin bu sınıra sayılıp sayılmadığı
+  **ölçülmedi**, bu yüzden sınır cömert değil. Günde 48 koşu × 20.
+- **Randevular arası 500 ms.** Resend istek hızını sınırlıyor, `email.ts` 429'u
+  satıra yazıyor ama yeniden denemiyor. Değer ölçülmedi, bekleme ucuz bir sigorta.
+- Gate slug başına bir kez açılıyor (workerd'de her `getDb` yeni bir client).
+
+### `cf:onizle` ile ölçülenler — 19 Eylül 2026
+
+`wrangler dev --test-scheduled`, `randevu_dev`'de biri zamanı gelmiş, biri
+randevusu 30 saat önce başlamış iki hatırlatma, `/__scheduled` elle:
+
+- [x] Dışarıdan secret'sız ve yanlış secret'la `POST` → 401 `{"hata":"yetkisiz"}`
+- [x] Trigger → zamanı gelen satır **`anahtar-yok`**: request `openNext.fetch`
+      üzerinden route'a ulaştı, tarama, gate, template ve `gonder` koştu (local'de
+      mod `gercek`, key yok; gerçek mail gitmedi). Başlamış randevunun satırı
+      **`randevu-basladi`**. `randevu_dev`'deki 3 eski bayat satır da aynı kuralla
+      işaretlendi
+- [x] **Bulunan hata:** ilk denemede log'da `Uncaught TypeError: This
+      ReadableStream is closed`. Sebebi tetiğin yanıt gövdesini `cancel()` ile
+      kapatmasıydı: OpenNext'in Node yanıt stream'i o sırada hâlâ kapanıyordu.
+      Gövde artık sonuna kadar okunuyor. İkinci ölçümde hata yok, koşu 1128 ms
+- [x] Secret'sız Worker: route dışarıya 503 `yapilandirma eksik`, trigger gate'e
+      `{"kaynak":"cron hatirlatma","kod":"SIR_YOK"}`
+- [x] Ölçüm verisi `randevu_dev`'den silindi
+
+### Kasıtlı ihlalle test edildi
+
+Dört ihlal, hepsi kırmızı:
+
+- bayat kural kapatıldı → 2 kırmızı
+- `cronKapisi` her isteği geçiriyor → 401 testi kırmızı
+- taramadan `aktif` filtresi silindi → 2 kırmızı (entegrasyon + metin taraması)
+- `bildirimiUstlen`'in `durum = 'BEKLIYOR'` koşulu silindi → yarış testi
+  "5 gönderim yerine 7" ile kırmızı
+
+### Bilerek kapsam dışı
+
+- **SMS (K2).** Sağlayıcı seçilmedi. Telefonla toplu geçmiş bağlama da onunla.
+- **Yeniden deneme.** `HATA` satırları olduğu gibi kalıyor (Faz I'nin kararı).
+  Hatırlatıcı altyapısı artık var, ama hangi hatanın tekrar denenmeye değer
+  olduğu (429 evet, `adres-yok` hayır) ayrı bir karar.
+- **Worker ölürse "gönderildi" kalan satır.** Önce üstlen kararının bilinen bedeli,
+  değişmedi.
+- **Hatırlatma ayarı.** 24 saat sabit. İşletme ayarı migration demek.
+- **Onaylanmamış (`BEKLIYOR`) randevuya hatırlatma** bugünkü gibi gidiyor.
+  Metin "randevunuz var" diyor, "onaylandı" demiyor.
+
+### Doğrulama
+
+- [x] `npm run tip` temiz, `npm run lint` hata yok (iki uyarı bu işten önce de
+      vardı)
+- [x] `npm test` — **818 test, 58 dosya** (+24; `hatirlatici.test.ts` 9,
+      `zamanlayici.test.ts` +4, `bildirim.test.ts` +3, `degismezler.test.ts` +8)
+- [x] `cf:kur` (içinde `next build`), `/api/cron/hatirlatma` route listesinde
+
+### Merge öncesi elle iş
+
+- [ ] `wrangler secret put CRON_SIRRI` (`docs/yayin.md > Hatırlatıcı`). Girilmeden
+      merge edilirse deploy düşmez, ama trigger her 30 dakikada `SIR_YOK` yazar ve
+      health check kırmızı yanar
+
+### Merge sonrası bakılacak
+
+- [ ] İlk trigger'dan sonra Workers Logs'ta `cron hatirlatma` satırı yok,
+      health check yeşil
+- [ ] Prod'daki 2 bayat hatırlatma `HATA / randevu-basladi` oldu (mail gitmedi)
+- [ ] Bir sonraki gerçek hatırlatma satırı zamanında `GONDERILDI`
+
+### Bundle bütçesi
+
+`cf:kur` + `wrangler deploy --dry-run`: **gzip 1885,65 KiB** (bütçe 3 MiB).
+P2g sonundaki 1877,82 KiB'den **+7,83 KiB**.

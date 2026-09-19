@@ -8,6 +8,7 @@ import {
   iptalBildirimleriniPlanla,
   randevuIptalKayitlari,
   randevuOlustuKayitlari,
+  randevuOncesiMesajBayatMi,
 } from "@/lib/bildirim";
 import { isletmeKaydiOlustur } from "@/lib/kayit";
 import { getHalkaAcikDb, getScopedDb, type ScopedDb } from "@/lib/scoped-db";
@@ -381,4 +382,61 @@ test("zamani gelmemis satir bosaltmada alinmiyor", async () => {
   const [kayit] = await k.db.bildirimleriListele(10);
   expect(kayit.durum).toBe("BEKLIYOR");
   expect(kayit.gonderimZamani).toBeNull();
+});
+
+// ---- Bayat mesaj (Faz K) ---------------------------------------------------
+
+test("randevudan once planlanan mesaj, randevu basladiysa bayat", () => {
+  const baslangic = new Date("2026-09-05T09:00:00.000Z");
+  const dunden = new Date("2026-09-04T09:00:00.000Z");
+
+  // Hatirlatma: randevudan bir gun once planlandi.
+  const hatirlatma = { baslangic, planlananZaman: dunden };
+  // Randevudan bir dakika once: henuz bayat degil, gitmeli.
+  expect(
+    randevuOncesiMesajBayatMi(hatirlatma, new Date("2026-09-05T08:59:00.000Z")),
+  ).toBe(false);
+  // Baslangic aninda ve sonrasinda bayat - `[)` araligiyla ayni sinir.
+  expect(randevuOncesiMesajBayatMi(hatirlatma, baslangic)).toBe(true);
+  expect(
+    randevuOncesiMesajBayatMi(hatirlatma, new Date("2026-09-06T09:00:00.000Z")),
+  ).toBe(true);
+});
+
+test("gecmis saate elle girilen randevunun onayi bayat SAYILMIYOR", () => {
+  // Faz H2: panel yurume musteriyi sonradan, gecmis bir saate yazabiliyor.
+  // Onayin planlanan zamani randevudan SONRA ve o mesaj bugun oldugu gibi
+  // gitmeli.
+  const baslangic = new Date("2026-09-05T09:00:00.000Z");
+  const simdi = new Date("2026-09-05T11:00:00.000Z");
+  expect(
+    randevuOncesiMesajBayatMi({ baslangic, planlananZaman: simdi }, simdi),
+  ).toBe(false);
+});
+
+test("basladigi halde bekleyen hatirlatma gonderilmiyor, isaretleniyor", async () => {
+  // 19 Eylul 2026'da uretim kuyrugunda tam bu durumda iki satir vardi:
+  // kuyrugu bosaltan bir sey olmadigi icin randevu gunu gecmis, hatirlatma
+  // hala BEKLIYOR. Hatirlaticinin ilk kosumu onlara "yarinki randevunuz"
+  // demeyecek.
+  const k = await isletmeKur("A Salonu");
+  const randevu = await randevuYaz(k, { saatSonra: -48 });
+  const db = await halkaAcik(k.slug);
+
+  await db.bildirimKuyrugunaYaz([
+    {
+      randevuId: randevu.id,
+      sablon: "MUSTERI_HATIRLATMA",
+      planlananZaman: new Date(
+        randevu.baslangic.getTime() - HATIRLATMA_ONCE_SAAT * 60 * 60 * 1000,
+      ),
+    },
+  ]);
+  await bildirimleriBosalt(db, randevu.id, new Date());
+
+  const [kayit] = await k.db.bildirimleriListele(10);
+  expect(kayit.durum).toBe("HATA");
+  expect(kayit.hataMetni).toBe("randevu-basladi");
+  // Gonderilmedi: sahte mod onizlemeyi yalnizca gonderilen mesaja yaziyor.
+  expect(kayit.onizlemeHtml).toBeNull();
 });

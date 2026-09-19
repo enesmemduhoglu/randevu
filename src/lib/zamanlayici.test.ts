@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-import { nabziTetikle } from "@/lib/zamanlayici";
+import { HATIRLATICI_YOLU, hatirlaticiyiTetikle, nabziTetikle } from "@/lib/zamanlayici";
 
 // Zamanlayicinin tek sozu: basarisizlik SESSIZ kalmiyor. Testlerin cogu mutlu
 // yolu degil, tetik kosamadiginda kapiya bir sey dustugunu kanitliyor - nabiz
@@ -105,4 +105,79 @@ test("istek duserse firlatmiyor, kapiya hatanin turu dusuyor", async () => {
   expect(noktalar).toHaveLength(1);
   expect(noktalar[0].blobs?.[1]).toBe("TypeError");
   expect(JSON.stringify(noktalar)).not.toContain(JETON);
+});
+
+// ---- Hatirlatici (Faz K) ----------------------------------------------------
+
+const SIR = "cron_sirri_sizmamali";
+const KOK = "https://randevu.test";
+
+/// Nabizin `sahteOrtam`inin aynisi, anahtar `CRON_SIRRI`.
+function sirliOrtam(sir?: { deger: unknown }) {
+  const { ortam, noktalar } = sahteOrtam();
+  if (sir) ortam.CRON_SIRRI = sir.deger;
+  return { ortam, noktalar };
+}
+
+test("hatirlatici: Worker'in kendi fetch'ine sirli POST gidiyor", async () => {
+  const { ortam, noktalar } = sirliOrtam({ deger: SIR });
+  const log = logSatirlari();
+  const isleyici = vi.fn<(istek: Request) => Promise<Response>>(async () =>
+    Response.json({ randevu: 0, atlanan: 0 }),
+  );
+
+  expect(await hatirlaticiyiTetikle(ortam, isleyici, KOK)).toBe(true);
+
+  expect(isleyici).toHaveBeenCalledOnce();
+  const istek = isleyici.mock.calls[0][0];
+  expect(istek.url).toBe(`${KOK}${HATIRLATICI_YOLU}`);
+  expect(istek.method).toBe("POST");
+  expect(istek.headers.get("authorization")).toBe(`Bearer ${SIR}`);
+  expect(noktalar).toHaveLength(0);
+  expect(log).toHaveLength(0);
+});
+
+test("hatirlatici: sir yoksa istek atilmiyor ama sessizce de gecilmiyor", async () => {
+  for (const sir of [undefined, { deger: "" }]) {
+    const { ortam, noktalar } = sirliOrtam(sir);
+    logSatirlari();
+    const isleyici = vi.fn(async () => new Response(null));
+
+    expect(await hatirlaticiyiTetikle(ortam, isleyici, KOK)).toBe(false);
+
+    expect(isleyici).not.toHaveBeenCalled();
+    expect(noktalar).toHaveLength(1);
+    expect(noktalar[0].blobs).toEqual(["cron hatirlatma", "ZamanlayiciHatasi", "SIR_YOK", ""]);
+  }
+});
+
+test("hatirlatici: route basarisizsa durum kodu kapiya dusuyor, sir dusmuyor", async () => {
+  // 503 = route tarafinda sir girilmemis; 401 = iki taraftaki sir ayrismis;
+  // 500 = veritabani. Ucu de ayri kodla gorunmeli.
+  for (const durum of [401, 500, 503]) {
+    const { ortam, noktalar } = sirliOrtam({ deger: SIR });
+    const log = logSatirlari();
+    const isleyici = vi.fn(async () => new Response(`{"hata":"${SIR}"}`, { status: durum }));
+
+    expect(await hatirlaticiyiTetikle(ortam, isleyici, KOK)).toBe(false);
+
+    expect(noktalar).toHaveLength(1);
+    expect(noktalar[0].blobs).toEqual(["cron hatirlatma", "ZamanlayiciHatasi", `HTTP_${durum}`, ""]);
+    expect(log.join("\n")).not.toContain(SIR);
+    expect(JSON.stringify(noktalar)).not.toContain(SIR);
+  }
+});
+
+test("hatirlatici: isleyici firlatirsa firlatmiyor, kapiya turu dusuyor", async () => {
+  const { ortam, noktalar } = sirliOrtam({ deger: SIR });
+  logSatirlari();
+  const isleyici = vi.fn(async () => {
+    throw new RangeError(`bozuk (Bearer ${SIR})`);
+  });
+
+  expect(await hatirlaticiyiTetikle(ortam, isleyici, KOK)).toBe(false);
+
+  expect(noktalar).toHaveLength(1);
+  expect(noktalar[0].blobs?.[1]).toBe("RangeError");
+  expect(JSON.stringify(noktalar)).not.toContain(SIR);
 });
