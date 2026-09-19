@@ -25,7 +25,17 @@ const MUTASYONLAR = ["POST", "PUT", "PATCH", "DELETE"];
 /// Kapiyi saglayan cagrilardan EN AZ BIRI dosyada gorunmeli. panelKapisi ve
 /// panelKapisiGovdesiz ilk satirinda checkOrigin cagiriyor - bunu asagidaki
 /// ayri bir test dogruluyor, yani zincir kopuk kalmiyor.
-const KAPI_ISARETLERI = ["checkOrigin(", "panelKapisi(", "panelKapisiGovdesiz("];
+///
+/// `cronKapisi` makine yollarinin kapisi (Faz K): DEGISMEZ 2 onlari
+/// `checkOrigin`den muaf tutuyor, karsiligi paylasilan sir. Muaf DOSYA listesi
+/// yerine kapi CAGRISI araniyor - listeye eklenen bir route kontrolsuz
+/// gecerdi.
+const KAPI_ISARETLERI = [
+  "checkOrigin(",
+  "panelKapisi(",
+  "panelKapisiGovdesiz(",
+  "cronKapisi(",
+];
 
 function routeDosyalari(dizin: string): string[] {
   const bulunan: string[] = [];
@@ -75,6 +85,19 @@ describe("DEGISMEZ 2 - kapi yardimcisinin kendisi", () => {
       "utf-8",
     );
     expect(metin).toContain("checkOrigin(istek)");
+  });
+
+  test("cronKapisi siri gercekten karsilastiriyor", () => {
+    // Yukaridaki tarama yalnizca cagrinin VARLIGINA bakiyor. Kapinin govdesi
+    // bir gun `return null`a indirgenirse tarama yesil kalir ve makine yolu
+    // herkese acilir.
+    const metin = readFileSync(
+      join(process.cwd(), "src", "lib", "cron-kapisi.ts"),
+      "utf-8",
+    ).replace(/^[ \t]*\/\/.*$/gm, "");
+    expect(metin).toContain('headers.get("authorization")');
+    expect(metin).toContain("esitMi(verilen, beklenen)");
+    expect(metin).toContain("status: 401");
   });
 });
 
@@ -292,6 +315,58 @@ describe("DEGISMEZ 12 - dizin kapsamsiz okuyor, karsiligi dar olmasi", () => {
 
   test("yazma metodu yok - salt okunur", () => {
     // Kapsamsiz bir yazma yolu, yanlis kiraciya yazmanin en kisa yolu olurdu.
+    for (const yazma of [".insert(", ".update(", ".delete(", "transaction("]) {
+      expect(kod.includes(yazma)).toBe(false);
+    }
+  });
+});
+
+describe("DEGISMEZ 12 - kuyruk taramasi kapsamsiz, yalnizca adres veriyor", () => {
+  // `src/lib/kuyruk-tarama.ts` depodaki ikinci kiraci-ustu okuma (Faz K).
+  // Hatirlatici butun kuyruga bakmak zorunda; karsiligi, bu dosyanin kisisel
+  // veriye HIC dokunmamasi - yalnizca `(slug, randevuId)` donuyor ve gonderim
+  // kiraciya kapsanmis kapidan yapiliyor. Biri yarin "tek sorguda hallolsun"
+  // diye buraya musteri e-postasini eklerse bu blok kirmizi.
+  const kod = readFileSync(
+    join(process.cwd(), "src", "lib", "kuyruk-tarama.ts"),
+    "utf-8",
+  )
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+
+  test("yalnizca kuyruk ve isletme tablosunu import ediyor", () => {
+    const eslesme = /import\s*\{([^}]*)\}\s*from\s*["']@\/db\/sema["']/.exec(kod);
+    const importlar = (eslesme?.[1] ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    expect(importlar.sort()).toEqual(["bildirimKuyrugu", "isletme"]);
+  });
+
+  test("kisisel veri tasiyan tablolara hic dokunmuyor", () => {
+    // Kelime siniriyla: `randevuId` kuyrugun kendi kolonu ve donen adresin
+    // yarisi; yasak olan `randevu` TABLOSU.
+    for (const yasak of ["musteri", "randevu", "kullanici", "personel"]) {
+      expect(new RegExp(`\\b${yasak}\\b`).test(kod)).toBe(false);
+    }
+  });
+
+  test("donen tip iki alanli ve kapali", () => {
+    const tip = /export type BosaltilacakRandevu = \{([^}]*)\}/.exec(kod)?.[1];
+    const alanlar = (tip ?? "")
+      .split(";")
+      .map((s) => s.trim().split(":")[0])
+      .filter(Boolean);
+    expect(alanlar.sort()).toEqual(["randevuId", "slug"]);
+  });
+
+  test("yalnizca bekleyen, e-posta ve aktif isletme satirlari", () => {
+    expect(kod).toContain('eq(bildirimKuyrugu.durum, "BEKLIYOR")');
+    expect(kod).toContain('eq(bildirimKuyrugu.tur, "EPOSTA")');
+    expect(kod).toContain("eq(isletme.aktif, true)");
+  });
+
+  test("yazma metodu yok - salt okunur", () => {
     for (const yazma of [".insert(", ".update(", ".delete(", "transaction("]) {
       expect(kod.includes(yazma)).toBe(false);
     }
@@ -674,6 +749,22 @@ describe("Nabiz zamanlayicisi - saat Cloudflare'de, kontrol GitHub'da", () => {
     // `fetch` aynen gecmezse site duser; `scheduled` yoksa tetik bos kosar.
     expect(giris).toContain("fetch: openNext.fetch");
     expect(giris).toMatch(/async scheduled\([^)]*\)[^{]*\{[^}]*nabziTetikle\(/);
+  });
+
+  test("ayni tetik hatirlaticiyi Worker'in kendi fetch'ine veriyor (Faz K)", async () => {
+    // Bu halka koparsa hicbir sey patlamiyor: hatirlatmalar kuyrukta
+    // BEKLIYOR olarak birikiyor ve randevu gunu geciyor. Faz I'den Faz K'ye
+    // kadar tam olarak bu oldu.
+    const giris = oku("worker-girisi.ts");
+    expect(giris).toMatch(
+      /async scheduled\([^)]*\)[^{]*\{[^}]*hatirlaticiyiTetikle\(ortam, \(istek\) => openNext\.fetch\(istek, ortam, ctx\)\)/,
+    );
+
+    // Tetigin cagirdigi adreste gercekten bir route var.
+    const { HATIRLATICI_YOLU } = await import("@/lib/zamanlayici");
+    const route = oku("src", "app", ...HATIRLATICI_YOLU.split("/").filter(Boolean), "route.ts");
+    expect(route).toContain("export async function POST");
+    expect(route).toContain("kuyruguBosalt(");
   });
 
   test("tetiklenen is akisi var ve elle tetiklenebiliyor", async () => {
