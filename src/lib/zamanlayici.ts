@@ -1,5 +1,7 @@
-// Cloudflare Cron Trigger'in isi: GitHub'daki nabiz is akisini tetiklemek.
-// Cagiran `worker-girisi.ts > scheduled`.
+// Cloudflare Cron Trigger'in isleri. Cagiran `worker-girisi.ts > scheduled`.
+// Iki is var: GitHub'daki nabiz is akisini tetiklemek (asagida) ve
+// hatirlaticiyi kosturmak (Faz K, dosyanin sonunda). Asagidaki gerekceler
+// nabizin.
 //
 // NEDEN: GitHub'in zamanlanmis is akislari "mumkun oldugunda" kosuyor. Nabiz
 // `*/30` ile yazilmisti, 10-13 Eylul 2026'da olculen gercek aralik 2 ile 5,5
@@ -23,6 +25,7 @@
 //      eskiyse kirmizi yaniyor.
 
 import { hataBildir, type HataOrtami } from "./hata";
+import { siteKoku } from "./site";
 
 const DEPO = "enesmemduhoglu/randevu";
 
@@ -41,13 +44,16 @@ export type ZamanlayiciOrtami = HataOrtami & {
   /// Ince taneli GitHub jetonu: yalnizca bu depo, yalnizca Actions yazma.
   /// `wrangler secret put` ile giriliyor (docs/yayin.md).
   GITHUB_NABIZ_TOKENI?: unknown;
+  /// Makine yollarinin paylasilan siri (`cron-kapisi.ts`). O da `wrangler
+  /// secret put` ile.
+  CRON_SIRRI?: unknown;
 };
 
 /// Kapi mesaji hic almiyor; ayirt edici bilgi `code` alaninda tasiniyor ve
 /// kapinin `kod` sutununa dusuyor. Jeton ya da GitHub'in yanit govdesi hicbir
 /// yere konmuyor (DEGISMEZ 5).
 function tetikHatasi(kod: string): Error {
-  return Object.assign(new Error("nabiz tetiklenemedi"), {
+  return Object.assign(new Error("zamanlanmis is tetiklenemedi"), {
     name: "ZamanlayiciHatasi",
     code: kod,
   });
@@ -92,6 +98,68 @@ export async function nabziTetikle(
   // saglam bir tetik hata sayilmasin.
   if (!yanit.ok) {
     await hataBildir(KAYNAK, tetikHatasi(`HTTP_${yanit.status}`), ortam);
+    return false;
+  }
+  return true;
+}
+
+// ---- Hatirlatici (Faz K) ----------------------------------------------------
+
+/// Kaynak etiketi `hata.ts`'teki bicimde: "<tur> <ad>".
+const HATIRLATICI_KAYNAK = "cron hatirlatma";
+
+/// Worker'in icinden cagrilan yol. Adresin ALAN ADI yonlendirmede
+/// kullanilmiyor - istek aga cikmiyor, dogrudan OpenNext'in `fetch`ine
+/// veriliyor. Yine de uretim adresi: Next'in gorecegi `host` gercek olsun.
+export const HATIRLATICI_YOLU = "/api/cron/hatirlatma";
+
+/// Worker'in kendi `fetch` isleyicisi (`openNext.fetch`, env ve ctx
+/// baglanmis). Parametre olmasinin sebebi test: gercek isleyici
+/// `.open-next/worker.js`te ve yalnizca `cf:kur`dan sonra var.
+export type IcIsleyici = (istek: Request) => Promise<Response>;
+
+/// ASLA firlatmaz. Basariliysa true.
+///
+/// NEDEN ICERDEN, neden hatirlaticinin isi burada degil: gerekcesi route
+/// dosyasinda (`src/app/api/cron/hatirlatma/route.ts`). Kisaca veritabani,
+/// e-posta ve hata kapisi ortami OpenNext'in istek baglamindan okuyor ve o
+/// baglam yalnizca `fetch`ten gecen isteklerde kuruluyor.
+///
+/// Nabizla ayni sessizce-olemez sozu: sir yoksa ya da route basarisizsa
+/// kapiya yaziliyor ve nabiz son saatteki hatayi gorup kirmizi yaniyor.
+export async function hatirlaticiyiTetikle(
+  ortam: ZamanlayiciOrtami,
+  isleyici: IcIsleyici,
+  kok: string = siteKoku(),
+): Promise<boolean> {
+  const sir = ortam.CRON_SIRRI;
+  if (typeof sir !== "string" || sir === "") {
+    await hataBildir(HATIRLATICI_KAYNAK, tetikHatasi("SIR_YOK"), ortam);
+    return false;
+  }
+
+  let yanit: Response;
+  try {
+    yanit = await isleyici(
+      new Request(`${kok}${HATIRLATICI_YOLU}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sir}` },
+      }),
+    );
+  } catch (hata) {
+    await hataBildir(HATIRLATICI_KAYNAK, hata, ortam);
+    return false;
+  }
+
+  // Govde SONUNA KADAR OKUNUYOR ve atiliyor. Icerigi (ozet sayilari) yalnizca
+  // elle tetiklemede ise yariyor, ama okunmadan birakilamiyor: `cancel()` ile
+  // kapatmak `cf:onizle`de olculdu ve OpenNext'in Node yanit akisi hala
+  // kapanirken "Uncaught TypeError: This ReadableStream is closed" dusurdu -
+  // yakalanamayan, kosumun izine istisna olarak yazilan bir hata.
+  await yanit.text().catch(() => "");
+
+  if (!yanit.ok) {
+    await hataBildir(HATIRLATICI_KAYNAK, tetikHatasi(`HTTP_${yanit.status}`), ortam);
     return false;
   }
   return true;
